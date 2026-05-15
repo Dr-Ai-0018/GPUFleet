@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.db import Database, utc_now_iso
-from app.routers import admin_auth, admin_nodes, node_api
+from app.routers import admin_auth, admin_nodes, admin_tasks, node_api
 from app.security import hash_password
 
 
@@ -45,6 +45,7 @@ app = FastAPI(title="GPUFleet Control Plane", version="0.1.0", lifespan=lifespan
 
 app.include_router(admin_auth.router)
 app.include_router(admin_nodes.router)
+app.include_router(admin_tasks.router)
 app.include_router(node_api.router)
 
 

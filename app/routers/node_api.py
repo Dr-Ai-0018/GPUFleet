@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -9,8 +10,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_db, get_settings_dep
-from app.schemas import HeartbeatRequest, HeartbeatResponse, TaskEnvelope
+from app.schemas import (
+    HeartbeatRequest,
+    HeartbeatResponse,
+    NodeTaskEventRequest,
+    NodeTaskLogChunkRequest,
+    NodeTaskResultRequest,
+    TaskEnvelope,
+)
 from app.security import hash_request_body, verify_node_request_signature
+from app.task_utils import RESULT_ACCEPTING_TASK_STATUSES, TASK_EVENT_TRANSITIONS, TERMINAL_TASK_STATUSES
 
 router = APIRouter(prefix="/api/node", tags=["node"])
 
@@ -101,6 +110,94 @@ def _authenticate_node(
     return node_id, node
 
 
+def _load_task_for_node(conn: object, node_id: str, task_id: str) -> object:
+    row = conn.execute(
+        "SELECT * FROM tasks WHERE task_id = ? AND node_id = ?",
+        (task_id, node_id),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found for node")
+    return row
+
+
+def _upsert_task_attempt(
+    conn: object,
+    task_id: str,
+    node_id: str,
+    status_value: str,
+    *,
+    boot_id: str | None = None,
+    pid: int | None = None,
+    pgid_or_job_id: str | None = None,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    exit_code: int | None = None,
+    summary: dict[str, object] | None = None,
+) -> None:
+    summary_json = dumps_json(summary or {}) if summary is not None else None
+    existing = conn.execute(
+        "SELECT * FROM task_attempts WHERE task_id = ? ORDER BY id DESC LIMIT 1",
+        (task_id,),
+    ).fetchone()
+    if existing is None:
+        conn.execute(
+            """
+            INSERT INTO task_attempts (
+                task_id, node_id, agent_boot_id, pid, pgid_or_job_id, status,
+                started_at, finished_at, exit_code, result_summary_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                task_id,
+                node_id,
+                boot_id,
+                pid,
+                pgid_or_job_id,
+                status_value,
+                started_at,
+                finished_at,
+                exit_code,
+                summary_json or "{}",
+            ),
+        )
+        return
+
+    conn.execute(
+        """
+        UPDATE task_attempts
+        SET agent_boot_id = COALESCE(?, agent_boot_id),
+            pid = COALESCE(?, pid),
+            pgid_or_job_id = COALESCE(?, pgid_or_job_id),
+            status = ?,
+            started_at = COALESCE(?, started_at),
+            finished_at = COALESCE(?, finished_at),
+            exit_code = COALESCE(?, exit_code),
+            result_summary_json = COALESCE(?, result_summary_json)
+        WHERE id = ?
+        """,
+        (
+            boot_id,
+            pid,
+            pgid_or_job_id,
+            status_value,
+            started_at,
+            finished_at,
+            exit_code,
+            summary_json,
+            existing["id"],
+        ),
+    )
+
+
+def _append_log_chunk(storage_root: Path, task_id: str, stream: str, text: str) -> str:
+    log_dir = storage_root / "logs" / task_id
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{stream}.log"
+    with log_path.open("a", encoding="utf-8") as fh:
+        fh.write(text)
+    return str(log_path)
+
+
 @router.post("/heartbeat", response_model=HeartbeatResponse)
 async def heartbeat(
     request: Request,
@@ -180,3 +277,178 @@ async def heartbeat(
         node_id=node_id,
         tasks=tasks,
     )
+
+
+@router.post("/task-events")
+async def task_events(
+    request: Request,
+    db: Annotated[Database, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> dict[str, object]:
+    body = await request.body()
+    node_id, _ = _authenticate_node(request, db, settings, body)
+    try:
+        payload = NodeTaskEventRequest.model_validate_json(body)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task event payload") from exc
+
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        row = _load_task_for_node(conn, node_id, payload.task_id)
+        if row["status"] not in TASK_EVENT_TRANSITIONS[payload.event]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Invalid task state transition: {row['status']} -> {payload.event}",
+            )
+
+        started_at = row["started_at"]
+        finished_at = row["finished_at"]
+        if payload.event == "running" and started_at is None:
+            started_at = now_iso
+        if payload.event in TERMINAL_TASK_STATUSES and finished_at is None:
+            finished_at = now_iso
+
+        conn.execute(
+            "UPDATE tasks SET status = ?, started_at = ?, finished_at = ? WHERE task_id = ?",
+            (payload.event, started_at, finished_at, payload.task_id),
+        )
+        _upsert_task_attempt(
+            conn,
+            payload.task_id,
+            node_id,
+            payload.event,
+            boot_id=payload.boot_id,
+            pid=payload.pid,
+            pgid_or_job_id=payload.pgid_or_job_id,
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+    return {"ok": True, "task_id": payload.task_id, "status": payload.event}
+
+
+@router.post("/task-log-chunk")
+async def task_log_chunk(
+    request: Request,
+    db: Annotated[Database, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> dict[str, object]:
+    body = await request.body()
+    node_id, _ = _authenticate_node(request, db, settings, body)
+    try:
+        payload = NodeTaskLogChunkRequest.model_validate_json(body)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task log chunk payload") from exc
+
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        _load_task_for_node(conn, node_id, payload.task_id)
+        existing = conn.execute(
+            "SELECT id, preview_text, last_offset FROM task_logs WHERE task_id = ? AND stream = ?",
+            (payload.task_id, payload.stream),
+        ).fetchone()
+        append_text = payload.text
+        if existing is None and payload.offset_start != 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Initial log chunk must start at offset 0 for {payload.stream}",
+            )
+        if existing is not None:
+            last_offset = existing["last_offset"]
+            if payload.offset_start < last_offset:
+                overlap = last_offset - payload.offset_start
+                if overlap >= len(payload.text):
+                    append_text = ""
+                else:
+                    append_text = payload.text[overlap:]
+            elif payload.offset_start > last_offset:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Log offset gap detected for {payload.stream}",
+                )
+
+        log_path = _append_log_chunk(settings.storage_path, payload.task_id, payload.stream, append_text)
+        preview = append_text[-4000:]
+        if existing is None:
+            conn.execute(
+                """
+                INSERT INTO task_logs (task_id, stream, last_offset, preview_text, center_log_path, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload.task_id,
+                    payload.stream,
+                    payload.offset_start + len(payload.text),
+                    preview,
+                    log_path,
+                    now_iso,
+                ),
+            )
+        else:
+            merged_preview = (existing["preview_text"] + append_text)[-4000:]
+            conn.execute(
+                """
+                UPDATE task_logs
+                SET last_offset = ?, preview_text = ?, center_log_path = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    max(existing["last_offset"], payload.offset_start + len(payload.text)),
+                    merged_preview,
+                    log_path,
+                    now_iso,
+                    existing["id"],
+                ),
+            )
+    return {
+        "ok": True,
+        "task_id": payload.task_id,
+        "stream": payload.stream,
+        "stored_bytes": len(append_text),
+        "is_final": payload.is_final,
+    }
+
+
+@router.post("/task-result")
+async def task_result(
+    request: Request,
+    db: Annotated[Database, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> dict[str, object]:
+    body = await request.body()
+    node_id, _ = _authenticate_node(request, db, settings, body)
+    try:
+        payload = NodeTaskResultRequest.model_validate_json(body)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task result payload") from exc
+
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        row = _load_task_for_node(conn, node_id, payload.task_id)
+        if row["status"] in TERMINAL_TASK_STATUSES:
+            return {"ok": True, "task_id": payload.task_id, "status": row["status"], "duplicate": True}
+        if row["status"] not in RESULT_ACCEPTING_TASK_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Task in status {row['status']} cannot accept final result yet",
+            )
+
+        finished_at = payload.finished_at or now_iso
+        started_at = payload.started_at or row["started_at"] or now_iso
+        conn.execute(
+            "UPDATE tasks SET status = ?, started_at = ?, finished_at = ? WHERE task_id = ?",
+            (payload.final_status, started_at, finished_at, payload.task_id),
+        )
+        _upsert_task_attempt(
+            conn,
+            payload.task_id,
+            node_id,
+            payload.final_status,
+            boot_id=payload.boot_id,
+            pid=payload.pid,
+            pgid_or_job_id=payload.pgid_or_job_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            exit_code=payload.exit_code,
+            summary=payload.summary,
+        )
+    return {"ok": True, "task_id": payload.task_id, "status": payload.final_status}

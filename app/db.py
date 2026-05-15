@@ -103,6 +103,47 @@ class Database:
                     FOREIGN KEY(created_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS task_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    node_id TEXT NOT NULL,
+                    agent_boot_id TEXT,
+                    pid INTEGER,
+                    pgid_or_job_id TEXT,
+                    status TEXT NOT NULL,
+                    started_at TEXT,
+                    finished_at TEXT,
+                    exit_code INTEGER,
+                    result_summary_json TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
+                    FOREIGN KEY(node_id) REFERENCES nodes(node_id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS task_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    stream TEXT NOT NULL,
+                    last_offset INTEGER NOT NULL DEFAULT 0,
+                    preview_text TEXT NOT NULL DEFAULT '',
+                    center_log_path TEXT,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(task_id, stream),
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS artifacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    artifact_name TEXT NOT NULL,
+                    artifact_type TEXT NOT NULL,
+                    content_type TEXT,
+                    size_bytes INTEGER NOT NULL DEFAULT 0,
+                    storage_path TEXT NOT NULL,
+                    preview_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS audit_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     actor_type TEXT NOT NULL,
@@ -138,6 +179,7 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_nodes_last_seen_at ON nodes(last_seen_at);
                 CREATE INDEX IF NOT EXISTS idx_snapshots_node_id_reported_at ON node_status_snapshots(node_id, reported_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_tasks_node_status_created_at ON tasks(node_id, status, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_task_attempts_task_id_id ON task_attempts(task_id, id DESC);
                 CREATE INDEX IF NOT EXISTS idx_nonces_node_id_expires_at ON nonces(node_id, expires_at);
                 """
             )

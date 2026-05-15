@@ -137,6 +137,60 @@ class TaskEnvelope(BaseModel):
     danger_level: str = "normal"
 
 
+class AdminTaskCreateRequest(BaseModel):
+    node_id: str
+    type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    task_id: str | None = None
+    revision: int = 1
+    idempotency_key: str | None = None
+    workdir: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)
+    requested_gpu_ids: list[int] = Field(default_factory=list)
+    timeout_sec: int | None = Field(default=None, ge=1, le=60 * 60 * 24 * 14)
+    kill_grace_sec: int = Field(default=15, ge=1, le=600)
+    danger_level: str = "normal"
+
+
+class AdminTaskListItem(BaseModel):
+    task_id: str
+    revision: int
+    node_id: str
+    type: str
+    status: str
+    workdir: str | None
+    requested_gpu_ids: list[int]
+    timeout_sec: int
+    danger_level: str
+    created_at: str
+    claimed_at: str | None
+    started_at: str | None
+    finished_at: str | None
+
+
+class AdminTaskLogView(BaseModel):
+    stream: Literal["stdout", "stderr"]
+    last_offset: int
+    preview_text: str
+    center_log_path: str | None
+    updated_at: str
+
+
+class AdminTaskResultSummary(BaseModel):
+    exit_code: int | None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    finished_at: str | None
+
+
+class AdminTaskDetail(AdminTaskListItem):
+    idempotency_key: str
+    payload: dict[str, Any]
+    env: dict[str, str]
+    kill_grace_sec: int
+    logs: list[AdminTaskLogView] = Field(default_factory=list)
+    result: AdminTaskResultSummary | None = None
+
+
 class HeartbeatResponse(BaseModel):
     server_time: str
     accepted: bool = True
@@ -152,3 +206,32 @@ class NodeStatusPreview(BaseModel):
     gpus: list[dict[str, Any]]
     python_env: dict[str, Any]
     task_runtime: dict[str, Any]
+
+
+class NodeTaskEventRequest(BaseModel):
+    task_id: str
+    event: Literal["claimed", "running", "cancelled", "failed", "timeout", "succeeded", "lost"]
+    boot_id: str | None = None
+    pid: int | None = None
+    pgid_or_job_id: str | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class NodeTaskLogChunkRequest(BaseModel):
+    task_id: str
+    stream: Literal["stdout", "stderr"]
+    offset_start: int = Field(ge=0)
+    text: str
+    is_final: bool = False
+
+
+class NodeTaskResultRequest(BaseModel):
+    task_id: str
+    final_status: Literal["succeeded", "failed", "timeout", "cancelled", "lost"]
+    exit_code: int | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    boot_id: str | None = None
+    pid: int | None = None
+    pgid_or_job_id: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None

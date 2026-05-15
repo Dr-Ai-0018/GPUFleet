@@ -2,6 +2,11 @@
 
 GPUFleet is a lightweight control plane for heterogeneous GPU nodes in trusted personal environments.
 
+Repository layout rule:
+
+- The repository root is for the control plane.
+- All node deployment files must live under [node_agent/README.md](E:/Project/GPUFleet/node_agent/README.md).
+
 The MVP targets one thing first: a stable closed loop for:
 
 - heartbeat
@@ -25,6 +30,7 @@ The first backend skeleton is now in place for:
 - manual node registration
 - signed node heartbeat
 - SQLite persistence for node and status data
+- manual task creation, cancellation, status lookup, log preview, and task result ingestion
 
 ## MVP Principles
 
@@ -88,4 +94,12 @@ Build a control console that the owner can reliably use for:
 - `POST /api/admin/nodes/{node_id}/enable`
 - `POST /api/admin/nodes/{node_id}/disable`
 - `GET /api/admin/nodes/{node_id}/status/latest`
+- `POST /api/admin/tasks`
+- `GET /api/admin/tasks`
+- `GET /api/admin/tasks/{task_id}`
+- `POST /api/admin/tasks/{task_id}/cancel`
+- `GET /api/admin/tasks/{task_id}/logs`
 - `POST /api/node/heartbeat`
+- `POST /api/node/task-events`
+- `POST /api/node/task-log-chunk`
+- `POST /api/node/task-result`
