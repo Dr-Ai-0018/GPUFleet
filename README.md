@@ -5,7 +5,8 @@ GPUFleet is a lightweight control plane for heterogeneous GPU nodes in trusted p
 Repository layout rule:
 
 - The repository root is for the control plane.
-- All node deployment files must live under [node_agent/README.md](E:/Project/GPUFleet/node_agent/README.md).
+- All node deployment files must live under [node_agent/README.md](node_agent/README.md).
+- The React console lives under `frontend/`.
 
 The MVP targets one thing first: a stable closed loop for:
 
@@ -32,6 +33,7 @@ The first backend skeleton is now in place for:
 - SQLite persistence for node and status data
 - manual task creation, cancellation, status lookup, log preview, and task result ingestion
 - task artifact upload and artifact listing
+- React console dashboard for login, node overview, task submission, task detail, log preview, and artifact summary
 
 ## MVP Principles
 
@@ -79,8 +81,17 @@ Build a control console that the owner can reliably use for:
    uv run uvicorn app.main:app --reload
    ```
 
-5. Open Swagger UI:
+5. Install and build the React console:
 
+   ```bash
+   cd frontend
+   pnpm install
+   pnpm build
+   ```
+
+6. Open the console or Swagger UI:
+
+   - [http://127.0.0.1:8000/console](http://127.0.0.1:8000/console)
    - [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ## Implemented API Surface

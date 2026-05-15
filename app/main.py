@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.db import Database, utc_now_iso
@@ -61,14 +61,9 @@ app.include_router(node_api.router)
 
 
 @app.get("/")
-def root() -> dict[str, str]:
+def root():
     if (get_settings().frontend_dist_path / "index.html").exists():
-        return {
-            "name": "GPUFleet Control Plane",
-            "status": "ok",
-            "console": "/console",
-            "docs": "/docs",
-        }
+        return RedirectResponse(url="/console")
     return {
         "name": "GPUFleet Control Plane",
         "status": "ok",

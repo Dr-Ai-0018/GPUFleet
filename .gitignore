@@ -6,6 +6,7 @@ vendor/
 dist/
 build/
 out/
+*.tsbuildinfo
 
 # Environment files
 .env
@@ -37,6 +38,7 @@ data/
 node_agent/.venv-py/
 node_agent/runtime/
 node_agent/src/*.egg-info/
+frontend/.pnpm-store/
 
 # Docs
 docs/
