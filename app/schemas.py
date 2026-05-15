@@ -33,7 +33,7 @@ class NodeCreateRequest(BaseModel):
     node_type: Literal["physical", "modal_runner", "control_plane"] = "physical"
     os_type: Literal["windows", "linux"] | None = None
     hostname: str | None = None
-    heartbeat_interval_sec: int = Field(default=10, ge=3, le=3600)
+    heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
     allowed_workdirs: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
@@ -113,7 +113,7 @@ class HeartbeatRequest(BaseModel):
     boot_id: str = Field(min_length=3, max_length=200)
     agent_version: str | None = None
     hostname: str | None = None
-    heartbeat_interval_sec: int = Field(default=10, ge=3, le=3600)
+    heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
     cpu: HeartbeatCpu = Field(default_factory=HeartbeatCpu)
     memory: HeartbeatMemory = Field(default_factory=HeartbeatMemory)
     disks: list[HeartbeatDisk] = Field(default_factory=list)
@@ -217,6 +217,40 @@ class NodeStatusPreview(BaseModel):
     gpus: list[dict[str, Any]]
     python_env: dict[str, Any]
     task_runtime: dict[str, Any]
+
+
+class DashboardNodeCard(BaseModel):
+    node_id: str
+    display_name: str
+    node_type: str
+    os_type: str | None
+    hostname: str | None
+    tags: list[str]
+    is_enabled: bool
+    heartbeat_interval_sec: int
+    last_seen_at: str | None
+    online_status: Literal["online", "offline", "never_seen", "disabled"]
+    latest_status: NodeStatusPreview | None = None
+    active_task: dict[str, Any] | None = None
+
+
+class DashboardTaskSummary(BaseModel):
+    task_id: str
+    node_id: str
+    type: str
+    status: str
+    created_at: str
+    claimed_at: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class DashboardOverview(BaseModel):
+    server_time: str
+    node_counts: dict[str, int]
+    task_counts: dict[str, int]
+    nodes: list[DashboardNodeCard]
+    recent_tasks: list[DashboardTaskSummary]
 
 
 class NodeTaskEventRequest(BaseModel):

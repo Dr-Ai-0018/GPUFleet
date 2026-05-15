@@ -500,7 +500,7 @@ async def artifact_upload(
             FROM artifacts
             WHERE task_id = ? AND artifact_name = ?
             """,
-            (payload.task_id, payload.artifact_name),
+            (payload.task_id, artifact_name),
         ).fetchone()
         if existing is None:
             conn.execute(

@@ -58,6 +58,7 @@ def create_node(
     derived_key = derive_node_signing_key(node_secret)
 
     with db.connect() as conn:
+        node_columns = db.get_table_columns(conn, "nodes")
         existing = conn.execute(
             "SELECT 1 FROM nodes WHERE node_id = ?",
             (payload.node_id,),
@@ -68,28 +69,53 @@ def create_node(
                 detail="node_id already exists",
             )
 
-        conn.execute(
-            """
-            INSERT INTO nodes (
-                node_id, display_name, node_signing_key, node_type, os_type, hostname,
-                heartbeat_interval_sec, allowed_workdirs_json, tags_json,
-                is_enabled, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-            """,
-            (
-                payload.node_id,
-                payload.display_name,
-                derived_key,
-                payload.node_type,
-                payload.os_type,
-                payload.hostname,
-                payload.heartbeat_interval_sec,
-                dumps_json(payload.allowed_workdirs),
-                dumps_json(payload.tags),
-                now_iso,
-                now_iso,
-            ),
-        )
+        if "node_secret_hash" in node_columns:
+            conn.execute(
+                """
+                INSERT INTO nodes (
+                    node_id, display_name, node_secret_hash, node_signing_key, node_type, os_type, hostname,
+                    heartbeat_interval_sec, allowed_workdirs_json, tags_json,
+                    is_enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                """,
+                (
+                    payload.node_id,
+                    payload.display_name,
+                    derived_key,
+                    derived_key,
+                    payload.node_type,
+                    payload.os_type,
+                    payload.hostname,
+                    payload.heartbeat_interval_sec,
+                    dumps_json(payload.allowed_workdirs),
+                    dumps_json(payload.tags),
+                    now_iso,
+                    now_iso,
+                ),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO nodes (
+                    node_id, display_name, node_signing_key, node_type, os_type, hostname,
+                    heartbeat_interval_sec, allowed_workdirs_json, tags_json,
+                    is_enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                """,
+                (
+                    payload.node_id,
+                    payload.display_name,
+                    derived_key,
+                    payload.node_type,
+                    payload.os_type,
+                    payload.hostname,
+                    payload.heartbeat_interval_sec,
+                    dumps_json(payload.allowed_workdirs),
+                    dumps_json(payload.tags),
+                    now_iso,
+                    now_iso,
+                ),
+            )
         conn.execute(
             """
             INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)

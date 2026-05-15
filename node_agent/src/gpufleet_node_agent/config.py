@@ -10,7 +10,7 @@ class AgentSettings(BaseSettings):
     control_plane_url: str = "http://127.0.0.1:8000"
     node_id: str = "node-example"
     node_secret: str = "replace-me"
-    heartbeat_interval_sec: int = Field(default=10, ge=3, le=3600)
+    heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
 
     agent_root: Path = Field(default=Path("./runtime"))
     repos_dir: Path = Field(default=Path("./runtime/repos"))

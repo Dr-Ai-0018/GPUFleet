@@ -33,6 +33,8 @@ This is intentionally minimal and currently focuses on:
 - node signing logic
 - heartbeat payload construction
 - signed heartbeat POST to the control plane
+- minimal task execution for `health_check`, `shell`, and `python_script`
+- result/log/artifact upload back to the control plane
 
 ## Tonight's Goal
 
@@ -77,6 +79,14 @@ The immediate target is the first local chain:
 
 - CPU model / logical cores / basic usage estimate
 - memory total / used / usage
-- disk usage for agent root volume
+- disk usage for all visible local Windows drive letters or current Linux root
 - Python executable / version / pip availability
 - NVIDIA GPU list through `nvidia-smi` when available
+
+## Current Task Coverage
+
+- `health_check`
+- `shell`
+- `python_script`
+
+The MVP task runner currently executes one returned task at a time, writes local logs under `runtime/runs/`, uploads stdout/stderr in chunks after process completion, and then uploads a `result_summary.json` artifact.

@@ -56,7 +56,7 @@ class Database:
                     node_type TEXT NOT NULL,
                     os_type TEXT,
                     hostname TEXT,
-                    heartbeat_interval_sec INTEGER NOT NULL DEFAULT 10,
+                    heartbeat_interval_sec INTEGER NOT NULL DEFAULT 5,
                     allowed_workdirs_json TEXT NOT NULL DEFAULT '[]',
                     tags_json TEXT NOT NULL DEFAULT '[]',
                     is_enabled INTEGER NOT NULL DEFAULT 1,
@@ -232,6 +232,13 @@ class Database:
         with self.connect() as conn:
             conn.execute("DELETE FROM nonces WHERE expires_at < ?", (now_iso,))
 
+    @staticmethod
+    def get_table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+        return {
+            row["name"]
+            for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+
     def claim_next_task_for_node(self, conn: sqlite3.Connection, node_id: str, claimed_at: str) -> sqlite3.Row | None:
         active_task = conn.execute(
             """
@@ -250,7 +257,7 @@ class Database:
             SELECT task_id
             FROM tasks
             WHERE node_id = ? AND status = 'pending'
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, id ASC
             LIMIT 1
             """,
             (node_id,),

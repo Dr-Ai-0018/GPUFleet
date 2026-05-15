@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ctypes
 import os
 import platform
 import shutil
@@ -60,17 +61,49 @@ def collect_cpu() -> dict[str, Any]:
     model = platform.processor() or None
 
     if os.name == "nt":
-        cpu_json = _run_powershell(
-            "[pscustomobject]@{Name=(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name); "
-            "Load=(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty LoadPercentage)} | ConvertTo-Json -Compress"
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+            ) as key:
+                registry_model, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+                model = registry_model or model
+        except Exception:
+            pass
+
+        model = (
+            os.environ.get("PROCESSOR_IDENTIFIER")
+            or os.environ.get("PROCESSOR_ARCHITECTURE")
+            or model
         )
-        if cpu_json:
+        counter_output = _run_powershell(
+            "(Get-Counter '\\Processor(_Total)\\% Processor Time').CounterSamples | "
+            "Select-Object -First 1 -ExpandProperty CookedValue"
+        )
+        if counter_output:
             try:
-                parsed = json.loads(cpu_json)
-                model = parsed.get("Name") or model
-                usage_percent = float(parsed["Load"]) if parsed.get("Load") is not None else None
-            except Exception:
-                pass
+                usage_percent = round(float(counter_output.strip()), 2)
+            except ValueError:
+                usage_percent = None
+
+        typeperf_output = _run_command(
+            [
+                "typeperf",
+                r"\Processor(_Total)\% Processor Time",
+                "-sc",
+                "1",
+            ]
+        )
+        if usage_percent is None and typeperf_output:
+            lines = [line.strip() for line in typeperf_output.splitlines() if line.strip()]
+            if len(lines) >= 2:
+                try:
+                    last_value = lines[-1].split(",")[-1].strip().strip('"')
+                    usage_percent = round(float(last_value), 2)
+                except ValueError:
+                    usage_percent = None
     else:
         loadavg = os.getloadavg()[0] if hasattr(os, "getloadavg") else None
         cores = os.cpu_count() or 1
@@ -86,24 +119,31 @@ def collect_cpu() -> dict[str, Any]:
 
 def collect_memory() -> dict[str, Any]:
     if os.name == "nt":
-        output = _run_powershell(
-            "[pscustomobject]@{Total=(Get-CimInstance Win32_OperatingSystem).TotalVisibleMemorySize; "
-            "Free=(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory} | ConvertTo-Json -Compress"
-        )
-        if output:
-            try:
-                parsed = json.loads(output)
-                total_bytes = int(parsed["Total"]) * 1024
-                free_bytes = int(parsed["Free"]) * 1024
-                used_bytes = max(total_bytes - free_bytes, 0)
-                usage_percent = round((used_bytes / total_bytes) * 100, 2) if total_bytes else None
-                return {
-                    "total_bytes": total_bytes,
-                    "used_bytes": used_bytes,
-                    "usage_percent": usage_percent,
-                }
-            except Exception:
-                pass
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        memory_status = MEMORYSTATUSEX()
+        memory_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memory_status)):
+            total_bytes = int(memory_status.ullTotalPhys)
+            free_bytes = int(memory_status.ullAvailPhys)
+            used_bytes = max(total_bytes - free_bytes, 0)
+            usage_percent = round((used_bytes / total_bytes) * 100, 2) if total_bytes else None
+            return {
+                "total_bytes": total_bytes,
+                "used_bytes": used_bytes,
+                "usage_percent": usage_percent,
+            }
 
     if Path("/proc/meminfo").exists():
         data: dict[str, int] = {}
@@ -129,14 +169,19 @@ def collect_memory() -> dict[str, Any]:
 
 
 def collect_disks(settings: AgentSettings) -> list[dict[str, Any]]:
-    candidates = [settings.agent_root]
-    seen: set[str] = set()
     disks: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    if os.name == "nt":
+        candidates = [Path(f"{letter}:\\") for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+    else:
+        candidates = [settings.agent_root]
+
     for candidate in candidates:
         try:
             resolved = candidate.resolve()
             root = resolved.anchor or str(resolved)
-            if root in seen:
+            if root in seen or not resolved.exists():
                 continue
             seen.add(root)
             usage = shutil.disk_usage(resolved)
@@ -203,6 +248,9 @@ def collect_gpus() -> list[dict[str, Any]]:
 
 def collect_python_env(settings: AgentSettings) -> dict[str, Any]:
     pip_available = False
+    detected_venv = settings.venv_path
+    if not detected_venv and sys.prefix != getattr(sys, "base_prefix", sys.prefix):
+        detected_venv = sys.prefix
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pip", "--version"],
@@ -216,7 +264,7 @@ def collect_python_env(settings: AgentSettings) -> dict[str, Any]:
 
     return {
         "python_executable": settings.python_executable or sys.executable,
-        "venv_path": settings.venv_path,
+        "venv_path": detected_venv,
         "pip_available": pip_available,
         "python_version": platform.python_version(),
     }

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 import platform
 from pathlib import Path
 from typing import Any
 
-import requests
-
+from gpufleet_node_agent.api_client import post_signed_json
 from gpufleet_node_agent.collect import (
     collect_cpu,
     collect_disks,
@@ -17,7 +15,6 @@ from gpufleet_node_agent.collect import (
     get_boot_id,
 )
 from gpufleet_node_agent.config import AgentSettings
-from gpufleet_node_agent.security import build_headers
 
 
 def build_heartbeat_payload(settings: AgentSettings) -> dict[str, Any]:
@@ -41,12 +38,4 @@ def build_heartbeat_payload(settings: AgentSettings) -> dict[str, Any]:
 
 def send_heartbeat(settings: AgentSettings) -> dict[str, Any]:
     payload = build_heartbeat_payload(settings)
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    response = requests.post(
-        f"{settings.control_plane_url.rstrip('/')}/api/node/heartbeat",
-        data=body,
-        headers=build_headers(settings.node_id, settings.node_secret, body),
-        timeout=30,
-    )
-    response.raise_for_status()
-    return response.json()
+    return post_signed_json(settings, "/api/node/heartbeat", payload, timeout=30)

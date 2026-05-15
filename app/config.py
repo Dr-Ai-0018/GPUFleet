@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     database_path: Path = Field(default=Path("data/gpufleet.db"))
     storage_path: Path = Field(default=Path("data/storage"))
 
-    jwt_secret: str = "change-this-in-production"
+    jwt_secret: str = "change-this-in-production-min-32-bytes-please"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = 60 * 24 * 7
@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     node_allowed_clock_skew_sec: int = 300
     nonce_ttl_sec: int = 600
     max_status_history_per_node: int = 200
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            "http://127.0.0.1:4173",
+            "http://localhost:4173",
+        ]
+    )
+    frontend_dist_path: Path = Field(default=Path("frontend/dist"))
 
     model_config = SettingsConfigDict(
         env_file=".env",
