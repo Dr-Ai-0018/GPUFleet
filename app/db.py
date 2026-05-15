@@ -52,7 +52,7 @@ class Database:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     node_id TEXT NOT NULL UNIQUE,
                     display_name TEXT NOT NULL,
-                    node_secret_hash TEXT NOT NULL,
+                    node_signing_key TEXT,
                     node_type TEXT NOT NULL,
                     os_type TEXT,
                     hostname TEXT,
@@ -141,6 +141,33 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_nonces_node_id_expires_at ON nonces(node_id, expires_at);
                 """
             )
+            self._migrate_schema(conn)
+
+    def _migrate_schema(self, conn: sqlite3.Connection) -> None:
+        node_columns = {
+            row["name"]: row
+            for row in conn.execute("PRAGMA table_info(nodes)").fetchall()
+        }
+
+        if "node_signing_key" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN node_signing_key TEXT")
+
+        if "node_secret_hash" in node_columns:
+            conn.execute(
+                """
+                UPDATE nodes
+                SET node_signing_key = COALESCE(node_signing_key, node_secret_hash)
+                WHERE node_signing_key IS NULL OR node_signing_key = ''
+                """
+            )
+
+        conn.execute(
+            """
+            UPDATE nodes
+            SET node_signing_key = ''
+            WHERE node_signing_key IS NULL
+            """
+        )
 
     def trim_node_status_history(self, node_id: str, keep: int) -> None:
         with self.connect() as conn:
@@ -162,3 +189,45 @@ class Database:
     def prune_expired_nonces(self, now_iso: str) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM nonces WHERE expires_at < ?", (now_iso,))
+
+    def claim_next_task_for_node(self, conn: sqlite3.Connection, node_id: str, claimed_at: str) -> sqlite3.Row | None:
+        active_task = conn.execute(
+            """
+            SELECT 1
+            FROM tasks
+            WHERE node_id = ? AND status IN ('claimed', 'running', 'cancel_requested')
+            LIMIT 1
+            """,
+            (node_id,),
+        ).fetchone()
+        if active_task:
+            return None
+
+        pending = conn.execute(
+            """
+            SELECT task_id
+            FROM tasks
+            WHERE node_id = ? AND status = 'pending'
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (node_id,),
+        ).fetchone()
+        if pending is None:
+            return None
+
+        updated = conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'claimed', claimed_at = ?
+            WHERE task_id = ? AND status = 'pending'
+            """,
+            (claimed_at, pending["task_id"]),
+        )
+        if updated.rowcount != 1:
+            return None
+
+        return conn.execute(
+            "SELECT * FROM tasks WHERE task_id = ?",
+            (pending["task_id"],),
+        ).fetchone()

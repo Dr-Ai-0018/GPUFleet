@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -79,7 +80,7 @@ def _authenticate_node(
             )
 
         if not verify_node_request_signature(
-            node["node_secret_hash"],
+            node["node_signing_key"],
             node_id,
             timestamp,
             nonce,
@@ -153,31 +154,24 @@ async def heartbeat(
                 dumps_json(payload.model_dump()),
             ),
         )
-        pending_rows = conn.execute(
-            """
-            SELECT * FROM tasks
-            WHERE node_id = ? AND status = 'pending'
-            ORDER BY created_at ASC
-            LIMIT 1
-            """,
-            (node_id,),
-        ).fetchall()
-        tasks = [
-            TaskEnvelope(
-                task_id=row["task_id"],
-                revision=row["revision"],
-                idempotency_key=row["idempotency_key"],
-                type=row["type"],
-                payload=__import__("json").loads(row["payload_json"]),
-                workdir=row["workdir"],
-                env=__import__("json").loads(row["env_json"]),
-                requested_gpu_ids=__import__("json").loads(row["requested_gpu_ids_json"]),
-                timeout_sec=row["timeout_sec"],
-                kill_grace_sec=row["kill_grace_sec"],
-                danger_level=row["danger_level"],
+        claimed_task = db.claim_next_task_for_node(conn, node_id, now_iso)
+        tasks = []
+        if claimed_task is not None:
+            tasks.append(
+                TaskEnvelope(
+                    task_id=claimed_task["task_id"],
+                    revision=claimed_task["revision"],
+                    idempotency_key=claimed_task["idempotency_key"],
+                    type=claimed_task["type"],
+                    payload=json.loads(claimed_task["payload_json"]),
+                    workdir=claimed_task["workdir"],
+                    env=json.loads(claimed_task["env_json"]),
+                    requested_gpu_ids=json.loads(claimed_task["requested_gpu_ids_json"]),
+                    timeout_sec=claimed_task["timeout_sec"],
+                    kill_grace_sec=claimed_task["kill_grace_sec"],
+                    danger_level=claimed_task["danger_level"],
+                )
             )
-            for row in pending_rows
-        ]
 
     db.trim_node_status_history(node_id, settings.max_status_history_per_node)
 

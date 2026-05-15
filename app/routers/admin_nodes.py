@@ -71,7 +71,7 @@ def create_node(
         conn.execute(
             """
             INSERT INTO nodes (
-                node_id, display_name, node_secret_hash, node_type, os_type, hostname,
+                node_id, display_name, node_signing_key, node_type, os_type, hostname,
                 heartbeat_interval_sec, allowed_workdirs_json, tags_json,
                 is_enabled, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
