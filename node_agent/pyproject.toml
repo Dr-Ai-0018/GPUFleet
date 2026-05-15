@@ -1,0 +1,21 @@
+[project]
+name = "gpufleet-node-agent"
+version = "0.1.0"
+description = "GPUFleet node-side agent scaffold."
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic-settings>=2.3,<3.0",
+  "PyJWT>=2.8,<3.0",
+  "requests>=2.32,<3.0",
+]
+
+[project.scripts]
+gpufleet-agent = "gpufleet_node_agent.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["gpufleet_node_agent"]

@@ -31,6 +31,7 @@ The first backend skeleton is now in place for:
 - signed node heartbeat
 - SQLite persistence for node and status data
 - manual task creation, cancellation, status lookup, log preview, and task result ingestion
+- task artifact upload and artifact listing
 
 ## MVP Principles
 
@@ -99,7 +100,9 @@ Build a control console that the owner can reliably use for:
 - `GET /api/admin/tasks/{task_id}`
 - `POST /api/admin/tasks/{task_id}/cancel`
 - `GET /api/admin/tasks/{task_id}/logs`
+- `GET /api/admin/tasks/{task_id}/artifacts`
 - `POST /api/node/heartbeat`
 - `POST /api/node/task-events`
 - `POST /api/node/task-log-chunk`
 - `POST /api/node/task-result`
+- `POST /api/node/artifact-upload`

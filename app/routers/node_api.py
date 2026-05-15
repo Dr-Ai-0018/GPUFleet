@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from base64 import b64decode
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -14,6 +15,7 @@ from app.schemas import (
     HeartbeatRequest,
     HeartbeatResponse,
     NodeTaskEventRequest,
+    NodeArtifactUploadRequest,
     NodeTaskLogChunkRequest,
     NodeTaskResultRequest,
     TaskEnvelope,
@@ -196,6 +198,17 @@ def _append_log_chunk(storage_root: Path, task_id: str, stream: str, text: str) 
     with log_path.open("a", encoding="utf-8") as fh:
         fh.write(text)
     return str(log_path)
+
+
+def _sanitize_artifact_name(name: str) -> str:
+    candidate = Path(name)
+    sanitized = candidate.name
+    if not sanitized or sanitized in {".", ".."} or sanitized != name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid artifact_name",
+        )
+    return sanitized
 
 
 @router.post("/heartbeat", response_model=HeartbeatResponse)
@@ -452,3 +465,81 @@ async def task_result(
             summary=payload.summary,
         )
     return {"ok": True, "task_id": payload.task_id, "status": payload.final_status}
+
+
+@router.post("/artifact-upload")
+async def artifact_upload(
+    request: Request,
+    db: Annotated[Database, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> dict[str, object]:
+    body = await request.body()
+    node_id, _ = _authenticate_node(request, db, settings, body)
+    try:
+        payload = NodeArtifactUploadRequest.model_validate_json(body)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid artifact upload payload") from exc
+
+    try:
+        content = b64decode(payload.content_base64.encode("utf-8"), validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 artifact content") from exc
+
+    now_iso = utc_now_iso()
+    artifact_dir = settings.storage_path / "artifacts" / payload.task_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_name = _sanitize_artifact_name(payload.artifact_name)
+    artifact_path = artifact_dir / artifact_name
+    artifact_path.write_bytes(content)
+
+    with db.connect() as conn:
+        _load_task_for_node(conn, node_id, payload.task_id)
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM artifacts
+            WHERE task_id = ? AND artifact_name = ?
+            """,
+            (payload.task_id, payload.artifact_name),
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                """
+                INSERT INTO artifacts (
+                    task_id, artifact_name, artifact_type, content_type, size_bytes,
+                    storage_path, preview_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload.task_id,
+                    artifact_name,
+                    payload.artifact_type,
+                    payload.content_type,
+                    len(content),
+                    str(artifact_path),
+                    dumps_json(payload.preview),
+                    now_iso,
+                ),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE artifacts
+                SET artifact_type = ?, content_type = ?, size_bytes = ?, storage_path = ?, preview_json = ?
+                WHERE id = ?
+                """,
+                (
+                    payload.artifact_type,
+                    payload.content_type,
+                    len(content),
+                    str(artifact_path),
+                    dumps_json(payload.preview),
+                    existing["id"],
+                ),
+            )
+    return {
+        "ok": True,
+        "task_id": payload.task_id,
+        "artifact_name": artifact_name,
+        "size_bytes": len(content),
+    }

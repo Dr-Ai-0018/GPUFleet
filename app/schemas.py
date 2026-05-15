@@ -182,12 +182,23 @@ class AdminTaskResultSummary(BaseModel):
     finished_at: str | None
 
 
+class AdminTaskArtifactView(BaseModel):
+    artifact_name: str
+    artifact_type: str
+    content_type: str | None
+    size_bytes: int
+    storage_path: str
+    preview: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
 class AdminTaskDetail(AdminTaskListItem):
     idempotency_key: str
     payload: dict[str, Any]
     env: dict[str, str]
     kill_grace_sec: int
     logs: list[AdminTaskLogView] = Field(default_factory=list)
+    artifacts: list[AdminTaskArtifactView] = Field(default_factory=list)
     result: AdminTaskResultSummary | None = None
 
 
@@ -235,3 +246,12 @@ class NodeTaskResultRequest(BaseModel):
     pgid_or_job_id: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
+
+
+class NodeArtifactUploadRequest(BaseModel):
+    task_id: str
+    artifact_name: str
+    artifact_type: str
+    content_base64: str
+    content_type: str | None = None
+    preview: dict[str, Any] = Field(default_factory=dict)

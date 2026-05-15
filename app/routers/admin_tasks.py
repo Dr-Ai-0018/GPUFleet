@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_current_admin, get_db
 from app.schemas import (
+    AdminTaskArtifactView,
     AdminTaskCreateRequest,
     AdminTaskDetail,
     AdminTaskListItem,
@@ -84,6 +85,30 @@ def _load_result_summary(conn: object, task_id: str) -> AdminTaskResultSummary |
         summary=json.loads(row["result_summary_json"]) if row["result_summary_json"] else {},
         finished_at=row["finished_at"],
     )
+
+
+def _load_artifacts(conn: object, task_id: str) -> list[AdminTaskArtifactView]:
+    rows = conn.execute(
+        """
+        SELECT artifact_name, artifact_type, content_type, size_bytes, storage_path, preview_json, created_at
+        FROM artifacts
+        WHERE task_id = ?
+        ORDER BY created_at ASC, id ASC
+        """,
+        (task_id,),
+    ).fetchall()
+    return [
+        AdminTaskArtifactView(
+            artifact_name=row["artifact_name"],
+            artifact_type=row["artifact_type"],
+            content_type=row["content_type"],
+            size_bytes=row["size_bytes"],
+            storage_path=row["storage_path"],
+            preview=json.loads(row["preview_json"]) if row["preview_json"] else {},
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
 
 
 @router.post("", response_model=AdminTaskDetail, status_code=status.HTTP_201_CREATED)
@@ -187,6 +212,7 @@ def create_task(
         env=json.loads(row["env_json"]),
         kill_grace_sec=row["kill_grace_sec"],
         logs=[],
+        artifacts=[],
         result=None,
     )
 
@@ -215,6 +241,7 @@ def get_task(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
         logs = _load_log_views(conn, task_id)
+        artifacts = _load_artifacts(conn, task_id)
         result = _load_result_summary(conn, task_id)
 
     return AdminTaskDetail(
@@ -224,6 +251,7 @@ def get_task(
         env=json.loads(row["env_json"]),
         kill_grace_sec=row["kill_grace_sec"],
         logs=logs,
+        artifacts=artifacts,
         result=result,
     )
 
@@ -276,6 +304,7 @@ def cancel_task(
         )
         saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         logs = _load_log_views(conn, task_id)
+        artifacts = _load_artifacts(conn, task_id)
         result = _load_result_summary(conn, task_id)
 
     return AdminTaskDetail(
@@ -285,6 +314,7 @@ def cancel_task(
         env=json.loads(saved["env_json"]),
         kill_grace_sec=saved["kill_grace_sec"],
         logs=logs,
+        artifacts=artifacts,
         result=result,
     )
 
@@ -300,3 +330,16 @@ def get_task_logs(
         if exists is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         return _load_log_views(conn, task_id)
+
+
+@router.get("/{task_id}/artifacts", response_model=list[AdminTaskArtifactView])
+def get_task_artifacts(
+    task_id: str,
+    _: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> list[AdminTaskArtifactView]:
+    with db.connect() as conn:
+        exists = conn.execute("SELECT 1 FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        if exists is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        return _load_artifacts(conn, task_id)
