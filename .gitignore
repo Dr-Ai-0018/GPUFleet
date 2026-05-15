@@ -10,6 +10,7 @@ out/
 # Environment files
 .env
 .env.*
+!.env.example
 
 # OS files
 Thumbs.db
@@ -24,6 +25,15 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+data/
+*.egg-info/
 
 # Docs
 docs/

@@ -19,6 +19,13 @@ See the detailed architecture and frozen decisions here:
 
 - [docs/GPUFleet_MVP_v0.1_Architecture.md](docs/GPUFleet_MVP_v0.1_Architecture.md)
 
+The first backend skeleton is now in place for:
+
+- admin login
+- manual node registration
+- signed node heartbeat
+- SQLite persistence for node and status data
+
 ## MVP Principles
 
 - Heterogeneous node support: Windows, Linux, multi-GPU, and Modal runner
@@ -38,3 +45,47 @@ Build a control console that the owner can reliably use for:
 - incremental log viewing
 - task cancellation and real process cleanup
 - state recovery after node restart or temporary disconnect
+
+## Quick Start
+
+1. Create a virtual environment:
+
+   ```bash
+   uv venv
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   uv sync
+   ```
+
+3. Optionally override defaults with environment variables:
+
+   ```bash
+   copy .env.example .env
+   ```
+
+4. Start the control plane:
+
+   ```bash
+   uv run uvicorn app.main:app --reload
+   ```
+
+5. Open Swagger UI:
+
+   - [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+## Implemented API Surface
+
+- `POST /api/admin/login`
+- `POST /api/admin/refresh`
+- `GET /api/admin/me`
+- `GET /api/admin/nodes`
+- `POST /api/admin/nodes`
+- `GET /api/admin/nodes/{node_id}`
+- `PATCH /api/admin/nodes/{node_id}`
+- `POST /api/admin/nodes/{node_id}/enable`
+- `POST /api/admin/nodes/{node_id}/disable`
+- `GET /api/admin/nodes/{node_id}/status/latest`
+- `POST /api/node/heartbeat`
