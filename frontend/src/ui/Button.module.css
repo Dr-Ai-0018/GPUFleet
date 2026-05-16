@@ -1,4 +1,4 @@
-/* Buttons: 28 / 32 / 36 height system */
+/* Buttons: 28 / 32 / 36 height system — refined transitions */
 
 .btn {
   display: inline-flex;
@@ -8,13 +8,15 @@
   border-radius: var(--r-sm);
   font-weight: 500;
   white-space: nowrap;
-  transition:
-    background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
   user-select: none;
   border: 1px solid transparent;
   position: relative;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform 80ms var(--ease-out);
 }
 
 .btn:disabled { cursor: not-allowed; opacity: 0.4; }
@@ -22,39 +24,49 @@
 
 /* Sizes */
 .size_sm { padding: 0 10px; font-size: var(--fs-12); height: 28px; }
-.size_md { padding: 0 12px; font-size: var(--fs-13); height: 32px; }
-.size_lg { padding: 0 16px; font-size: var(--fs-14); height: 36px; font-weight: 600; }
+.size_md { padding: 0 14px; font-size: var(--fs-13); height: 32px; }
+.size_lg { padding: 0 18px; font-size: var(--fs-14); height: 36px; font-weight: 600; }
 
-/* Primary */
+/* Primary — white, authoritative */
 .variant_primary {
   background: var(--text);
   color: var(--bg-app);
   border-color: var(--text);
   font-weight: 600;
+  box-shadow: var(--shadow-xs);
 }
-.variant_primary:hover:not(:disabled) { background: #ffffff; }
+.variant_primary:hover:not(:disabled) {
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
 
-/* Accent */
+/* Accent — blue, for primary actions */
 .variant_accent {
   background: var(--accent);
   color: var(--accent-fg);
   border-color: var(--accent);
   font-weight: 600;
+  box-shadow: var(--shadow-xs), var(--accent-glow);
 }
-.variant_accent:hover:not(:disabled) { background: var(--accent-hover); }
+.variant_accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: var(--shadow-sm), 0 0 16px rgba(91, 141, 239, 0.2);
+}
 
-/* Ghost */
+/* Ghost — secondary, bordered */
 .variant_ghost {
   background: var(--bg-surface);
   color: var(--text);
   border-color: var(--border);
+  box-shadow: var(--inset-highlight);
 }
 .variant_ghost:hover:not(:disabled) {
   background: var(--bg-elev);
   border-color: var(--border-strong);
 }
 
-/* Quiet */
+/* Quiet — minimal, text-like */
 .variant_quiet {
   background: transparent;
   color: var(--text-mute);
@@ -73,4 +85,5 @@
 .variant_danger:hover:not(:disabled) {
   background: var(--c-danger-soft);
   color: var(--c-danger-fg);
+  border-color: var(--c-danger);
 }

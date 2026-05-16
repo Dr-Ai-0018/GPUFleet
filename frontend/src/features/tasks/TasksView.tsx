@@ -27,6 +27,13 @@ export function TasksView(): JSX.Element {
   const [nodeFilter, setNodeFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
 
+  const connectedNodes = store.nodes.filter(
+    (node) =>
+      node.is_enabled &&
+      node.connection_status === "online" &&
+      node.onboarding_status === "connected",
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return store.tasks.filter((task) => {
@@ -45,7 +52,39 @@ export function TasksView(): JSX.Element {
     <div className={styles.page}>
       <header className={styles.header}>
         <h1 className={styles.title}>任务中心</h1>
+        <div className={styles.headerRight}>
+          <span className={styles.readyBadge}>
+            <span className={styles.readyDot} />
+            {connectedNodes.length} 可下发
+          </span>
+        </div>
       </header>
+
+      {/* Dispatch-ready nodes strip */}
+      {connectedNodes.length === 0 ? (
+        <div className={styles.gateNotice}>
+          <LockIcon />
+          <span>当前无在线已接入节点，任务下发不可用</span>
+          <Button size="sm" variant="ghost" onClick={() => navigate({ name: "onboarding" })}>
+            去节点接入
+          </Button>
+        </div>
+      ) : (
+        <div className={styles.nodeStrip}>
+          {connectedNodes.map((node) => (
+            <button
+              key={node.node_id}
+              type="button"
+              className={styles.nodeChip}
+              onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
+            >
+              <span className={styles.nodeChipDot} />
+              <span className={styles.nodeChipName}>{node.display_name}</span>
+              <span className={styles.nodeChipMeta}>{node.node_type}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Filter strip */}
       <div className={styles.filterBar}>
@@ -88,9 +127,7 @@ export function TasksView(): JSX.Element {
 
       {/* Table */}
       {filtered.length === 0 ? (
-        <div className={styles.empty}>
-          <span>无匹配任务</span>
-        </div>
+        <div className={styles.empty}>无匹配任务</div>
       ) : (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -142,6 +179,15 @@ function SearchIcon(): JSX.Element {
     <svg className={styles.searchIcon} width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <circle cx="7" cy="7" r="4.5" />
       <path d="M11 11l3 3" />
+    </svg>
+  );
+}
+
+function LockIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="7" width="10" height="6.5" rx="1.5" />
+      <path d="M5 7V5a3 3 0 0 1 6 0v2" />
     </svg>
   );
 }

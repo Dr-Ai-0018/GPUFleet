@@ -19,6 +19,16 @@ export function OnboardingView(): JSX.Element {
     [store.nodes],
   );
 
+  const total = store.nodes.length;
+  const online = store.nodes.filter((n) => n.connection_status === "online").length;
+
+  // Stage logic for the process indicator
+  const stage: 1 | 2 | 3 = !pkg
+    ? 1
+    : awaiting.some((n) => n.node_id === pkg.node_id)
+      ? 2
+      : 3;
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -26,11 +36,11 @@ export function OnboardingView(): JSX.Element {
         <div className={styles.headerMeta}>
           <span className={styles.metaItem}>
             <span className={styles.metaDot} data-tone="total" />
-            {store.nodes.length} 节点
+            {total} 节点
           </span>
           <span className={styles.metaItem}>
             <span className={styles.metaDot} data-tone="online" />
-            {store.nodes.filter((n) => n.connection_status === "online").length} 在线
+            {online} 在线
           </span>
           <span className={styles.metaItem}>
             <span className={styles.metaDot} data-tone="waiting" />
@@ -38,6 +48,15 @@ export function OnboardingView(): JSX.Element {
           </span>
         </div>
       </header>
+
+      {/* Process stage indicator */}
+      <div className={styles.stageBar}>
+        <StageStep num={1} label="登记节点" active={stage === 1} done={stage > 1} />
+        <span className={styles.stageConnector} data-done={stage > 1 ? "" : undefined} />
+        <StageStep num={2} label="部署接入包" active={stage === 2} done={stage > 2} />
+        <span className={styles.stageConnector} data-done={stage > 2 ? "" : undefined} />
+        <StageStep num={3} label="首次心跳上线" active={stage === 3} done={false} />
+      </div>
 
       {/* Two-column workspace: form + package */}
       <section className={styles.workspace}>
@@ -107,5 +126,34 @@ export function OnboardingView(): JSX.Element {
         )}
       </section>
     </div>
+  );
+}
+
+function StageStep({ num, label, active, done }: {
+  num: number;
+  label: string;
+  active: boolean;
+  done: boolean;
+}): JSX.Element {
+  const cls = [
+    styles.stageStep,
+    active ? styles.stageStepActive : "",
+    done ? styles.stageStepDone : "",
+  ].filter(Boolean).join(" ");
+  return (
+    <div className={cls}>
+      <span className={styles.stageBadge}>
+        {done ? <CheckIcon /> : num}
+      </span>
+      <span className={styles.stageLabel}>{label}</span>
+    </div>
+  );
+}
+
+function CheckIcon(): JSX.Element {
+  return (
+    <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.5 8.5l3 3 6-6" />
+    </svg>
   );
 }

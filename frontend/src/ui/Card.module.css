@@ -1,10 +1,11 @@
-/* Card — used sparingly, only when content needs a container */
+/* Card — refined surface with subtle depth */
 
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   overflow: hidden;
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
 }
 
 .head {
@@ -12,9 +13,9 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 11px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  min-height: 42px;
+  min-height: 44px;
 }
 
 .head h2 {
@@ -49,7 +50,7 @@
 .titleTag {
   font-family: var(--font-mono);
   font-size: var(--fs-11);
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: var(--r-xs);
   background: var(--bg-elev);
   color: var(--text-mute);
@@ -77,9 +78,12 @@
 .field {
   display: grid;
   gap: 3px;
-  padding: 10px 12px;
+  padding: 11px 13px;
   background: var(--bg-canvas);
+  transition: background var(--dur-fast) var(--ease-out);
 }
+
+.field:hover { background: var(--bg-surface); }
 
 .fieldLabel {
   font-size: var(--fs-10);

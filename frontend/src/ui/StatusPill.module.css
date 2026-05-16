@@ -1,10 +1,10 @@
-/* Status pill — compact, scannable */
+/* Status pill — compact, scannable, refined */
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0 7px;
+  padding: 0 8px;
   height: 20px;
   border-radius: var(--r-pill);
   font-size: var(--fs-11);
@@ -13,6 +13,7 @@
   background: var(--bg-surface-2);
   color: var(--text-soft);
   white-space: nowrap;
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
 
 .dot {

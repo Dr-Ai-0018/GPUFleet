@@ -1,5 +1,5 @@
 /* ============================================================
- * Onboarding — node provisioning flow
+ * Onboarding — node provisioning flow with stage indicator
  * ============================================================ */
 
 .page {
@@ -20,7 +20,7 @@
 .title {
   font-size: var(--fs-20);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .headerMeta {
@@ -44,7 +44,76 @@
 }
 
 .metaDot[data-tone="online"] { background: var(--c-online); }
-.metaDot[data-tone="waiting"] { background: var(--c-waiting); }
+.metaDot[data-tone="waiting"] { background: var(--c-waiting); animation: breathe 2.4s var(--ease-in-out) infinite; }
+
+/* ─── Stage bar ─── */
+
+.stageBar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 14px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
+}
+
+.stageStep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stageBadge {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  color: var(--text-mute);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: all var(--dur-base) var(--ease-out);
+}
+
+.stageStepActive .stageBadge {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+
+.stageStepDone .stageBadge {
+  background: var(--c-online-soft);
+  border-color: var(--c-online-border);
+  color: var(--c-online-fg);
+}
+
+.stageLabel {
+  font-size: var(--fs-12);
+  color: var(--text-mute);
+  font-weight: 500;
+  transition: color var(--dur-base) var(--ease-out);
+}
+
+.stageStepActive .stageLabel { color: var(--text); }
+.stageStepDone .stageLabel { color: var(--c-online-fg); }
+
+.stageConnector {
+  flex: 1;
+  height: 1px;
+  margin: 0 12px;
+  background: var(--border-strong);
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+.stageConnector[data-done] {
+  background: var(--c-online-border);
+}
 
 /* Workspace */
 
@@ -66,6 +135,7 @@
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
 
 .sectionHead {
@@ -86,6 +156,9 @@
   font-size: var(--fs-11);
   color: var(--text-mute);
   font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  background: var(--bg-elev);
 }
 
 .sectionEmpty {
@@ -95,9 +168,7 @@
   font-size: var(--fs-12);
 }
 
-.awaitingTable {
-  overflow-x: auto;
-}
+.awaitingTable { overflow-x: auto; }
 
 .table {
   width: 100%;
@@ -118,16 +189,13 @@
 
 .table tbody td {
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-muted);
   vertical-align: middle;
 }
 
 .table tbody tr:last-child td { border-bottom: 0; }
 
-.row {
-  transition: background var(--dur-fast) var(--ease-out);
-}
-
+.row { transition: background var(--dur-fast) var(--ease-out); }
 .row:hover { background: var(--bg-hover); }
 
 .cellNode {

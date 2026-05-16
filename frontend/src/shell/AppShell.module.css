@@ -1,5 +1,5 @@
 /* ============================================================
- * AppShell — stable two-column layout
+ * AppShell — stable two-column layout, refined surfaces
  * ============================================================ */
 
 .shell {
@@ -16,9 +16,10 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 16px 12px 12px;
+  padding: 16px 12px 14px;
   border-right: 1px solid var(--border);
-  background: var(--bg-canvas);
+  background:
+    linear-gradient(180deg, var(--bg-canvas) 0%, rgba(8, 9, 13, 0.98) 100%);
   overflow-y: auto;
 }
 
@@ -26,22 +27,23 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 8px 16px;
+  padding: 2px 8px 18px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .brandMark {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--r-sm);
-  background: var(--text);
+  background: linear-gradient(135deg, #ffffff 0%, #c8cdd6 100%);
   color: var(--bg-app);
   display: grid;
   place-items: center;
   font-weight: 800;
   font-size: var(--fs-12);
   flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .brandName {
@@ -64,13 +66,15 @@
   align-items: center;
   gap: 10px;
   padding: 0 10px;
-  height: 32px;
+  height: 33px;
   border-radius: var(--r-sm);
   color: var(--text-mute);
   font-size: var(--fs-13);
   font-weight: 500;
   text-decoration: none;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
 .navItem:hover {
@@ -90,7 +94,8 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  opacity: 0.7;
+  opacity: 0.65;
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
 
 .navActive .navIcon { opacity: 1; }
@@ -131,14 +136,14 @@
 
 .sidebarFoot {
   margin-top: auto;
-  padding-top: 12px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
 .stats {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   padding: 4px 8px;
 }
 
@@ -176,9 +181,9 @@
   gap: 12px;
   padding: 0 var(--content-pad);
   height: var(--topbar-h);
-  background: rgba(9, 11, 15, 0.82);
-  backdrop-filter: blur(12px) saturate(130%);
-  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  background: rgba(8, 9, 13, 0.78);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--border);
 }
 
@@ -200,6 +205,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
+  box-shadow: var(--inset-highlight);
 }
 
 .syncDot {
@@ -207,6 +213,7 @@
   height: 5px;
   border-radius: 50%;
   background: var(--c-online);
+  animation: breathe 3s var(--ease-in-out) infinite;
 }
 
 /* Breadcrumb */
@@ -214,7 +221,6 @@
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: 0;
   font-size: var(--fs-13);
   color: var(--text-mute);
   font-weight: 500;
@@ -249,7 +255,7 @@
 /* Error banner */
 
 .errorBanner {
-  margin: 12px var(--content-pad) 0;
+  margin: 14px var(--content-pad) 0;
   padding: 10px 14px;
   border-radius: var(--r-md);
   font-size: var(--fs-12);
@@ -263,7 +269,6 @@
 
 .errorBanner code {
   font-size: var(--fs-11);
-  color: var(--c-danger-fg);
   opacity: 0.8;
 }
 
@@ -292,6 +297,7 @@
     flex-wrap: wrap;
     padding: 10px 16px;
     gap: 8px;
+    background: var(--bg-canvas);
   }
   .brand { padding: 0 8px 0 0; border-bottom: 0; margin-bottom: 0; }
   .nav { flex-direction: row; flex-wrap: wrap; gap: 2px; }

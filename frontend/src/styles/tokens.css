@@ -2,85 +2,89 @@
  * GPUFleet · Design Tokens
  *
  * Infrastructure control plane. Dark, calm, dense.
- * Hierarchy from weight, spacing, surface layering.
- * No ornament. No glow. No left-border accents.
+ * Subtle gradients, refined shadows, breathing space.
  * ========================================================= */
 
 :root {
   color-scheme: dark;
 
   /* ---------- Surfaces ---------- */
-  --bg-app: #090b0f;
-  --bg-canvas: #0c0e13;
-  --bg-surface: #111318;
-  --bg-surface-2: #16181f;
-  --bg-elev: #1c1f27;
-  --bg-elev-2: #24272f;
-  --bg-input: #0e1015;
-  --bg-terminal: #08090c;
+  --bg-app: #08090d;
+  --bg-canvas: #0b0d12;
+  --bg-surface: #101318;
+  --bg-surface-2: #14171d;
+  --bg-elev: #1a1d24;
+  --bg-elev-2: #21252d;
+  --bg-input: #0d0f14;
+  --bg-terminal: #070810;
 
-  --bg-hover: rgba(255, 255, 255, 0.028);
-  --bg-active: rgba(255, 255, 255, 0.05);
-  --bg-selected: rgba(99, 152, 255, 0.08);
+  --bg-hover: rgba(255, 255, 255, 0.025);
+  --bg-active: rgba(255, 255, 255, 0.045);
+  --bg-selected: rgba(99, 152, 255, 0.07);
 
   /* ---------- Borders ---------- */
-  --border: #1e2128;
-  --border-strong: #2c3039;
-  --border-muted: #171a20;
-  --border-focus: #6398ff;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.10);
+  --border-muted: rgba(255, 255, 255, 0.035);
+  --border-focus: rgba(99, 152, 255, 0.6);
 
   /* ---------- Text ---------- */
-  --text: #eef0f5;
-  --text-soft: #b8bcc6;
-  --text-mute: #7c818c;
-  --text-faint: #4e535e;
-  --text-disabled: #363940;
+  --text: #edf0f7;
+  --text-soft: #b4b9c5;
+  --text-mute: #737882;
+  --text-faint: #4a4f59;
+  --text-disabled: #33363d;
 
   /* ---------- Accent ---------- */
-  --accent: #6398ff;
-  --accent-hover: #7aa9ff;
-  --accent-active: #4f86ee;
+  --accent: #5b8def;
+  --accent-hover: #6d9cf5;
+  --accent-active: #4a7de0;
   --accent-fg: #ffffff;
-  --accent-soft: rgba(99, 152, 255, 0.10);
-  --accent-border: rgba(99, 152, 255, 0.30);
+  --accent-soft: rgba(91, 141, 239, 0.10);
+  --accent-border: rgba(91, 141, 239, 0.28);
+  --accent-glow: 0 0 12px rgba(91, 141, 239, 0.15);
 
   /* ---------- Status semantics ---------- */
-  --c-online: #3ed598;
-  --c-online-fg: #8fe8c0;
-  --c-online-soft: rgba(62, 213, 152, 0.08);
-  --c-online-border: rgba(62, 213, 152, 0.26);
+  --c-online: #34c88a;
+  --c-online-fg: #7ee4b8;
+  --c-online-soft: rgba(52, 200, 138, 0.08);
+  --c-online-border: rgba(52, 200, 138, 0.22);
 
-  --c-waiting: #f5b94a;
-  --c-waiting-fg: #f7d089;
-  --c-waiting-soft: rgba(245, 185, 74, 0.08);
-  --c-waiting-border: rgba(245, 185, 74, 0.26);
+  --c-waiting: #e8a832;
+  --c-waiting-fg: #f0c96e;
+  --c-waiting-soft: rgba(232, 168, 50, 0.08);
+  --c-waiting-border: rgba(232, 168, 50, 0.22);
 
-  --c-offline: #7c818c;
-  --c-offline-soft: rgba(124, 129, 140, 0.08);
-  --c-offline-border: rgba(124, 129, 140, 0.24);
+  --c-offline: #6b7080;
+  --c-offline-soft: rgba(107, 112, 128, 0.08);
+  --c-offline-border: rgba(107, 112, 128, 0.20);
 
-  --c-danger: #ff6b6b;
-  --c-danger-fg: #ffa5a5;
-  --c-danger-soft: rgba(255, 107, 107, 0.08);
-  --c-danger-border: rgba(255, 107, 107, 0.28);
+  --c-danger: #ef5f5f;
+  --c-danger-fg: #f9a0a0;
+  --c-danger-soft: rgba(239, 95, 95, 0.08);
+  --c-danger-border: rgba(239, 95, 95, 0.24);
 
-  --c-running: #6398ff;
-  --c-running-soft: rgba(99, 152, 255, 0.10);
-  --c-running-border: rgba(99, 152, 255, 0.28);
+  --c-running: #5b8def;
+  --c-running-soft: rgba(91, 141, 239, 0.08);
+  --c-running-border: rgba(91, 141, 239, 0.24);
 
   /* ---------- Radii ---------- */
-  --r-xs: 3px;
-  --r-sm: 5px;
-  --r-md: 7px;
-  --r-lg: 10px;
-  --r-xl: 14px;
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
   --r-pill: 999px;
 
   /* ---------- Elevation ---------- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.36);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
-  --shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.40);
-  --shadow-overlay: 0 20px 48px rgba(0, 0, 0, 0.50), 0 0 0 1px var(--border-strong);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.36);
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.50), 0 0 0 1px var(--border-strong);
+
+  /* Inset highlight for glass-like surfaces */
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 
   /* ---------- Typography ---------- */
   --font-sans:
@@ -105,16 +109,17 @@
   --fs-32: 32px;
 
   /* ---------- Layout ---------- */
-  --sidebar-w: 220px;
+  --sidebar-w: 224px;
   --topbar-h: 52px;
-  --content-max: 1320px;
-  --content-pad: 28px;
-  --page-gap: 20px;
+  --content-max: 1360px;
+  --content-pad: 32px;
+  --page-gap: 22px;
 
   /* ---------- Motion ---------- */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-fast: 100ms;
-  --dur-base: 180ms;
-  --dur-slow: 300ms;
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
 }

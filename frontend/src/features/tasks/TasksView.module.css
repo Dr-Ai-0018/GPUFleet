@@ -1,5 +1,5 @@
 /* ============================================================
- * Tasks — operational task list
+ * Tasks — operational task list with dispatch awareness
  * ============================================================ */
 
 .page {
@@ -18,7 +18,98 @@
 .title {
   font-size: var(--fs-20);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.readyBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-12);
+  color: var(--c-online-fg);
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: var(--c-online-soft);
+  border: 1px solid var(--c-online-border);
+  font-weight: 500;
+}
+
+.readyDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--c-online);
+  animation: breathe 2.4s var(--ease-in-out) infinite;
+}
+
+/* ─── Dispatch node strip ─── */
+
+.nodeStrip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0;
+}
+
+.nodeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.nodeChip:hover {
+  background: var(--bg-surface-2);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.nodeChipDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--c-online);
+  flex-shrink: 0;
+}
+
+.nodeChipName {
+  font-weight: 600;
+  font-size: var(--fs-12);
+}
+
+.nodeChipMeta {
+  color: var(--text-faint);
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+}
+
+.gateNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--c-waiting-soft);
+  border: 1px solid var(--c-waiting-border);
+  color: var(--c-waiting-fg);
+  font-size: var(--fs-12);
 }
 
 /* ─── Filter bar ─── */
@@ -38,6 +129,7 @@
   height: 32px;
   padding: 3px;
   gap: 2px;
+  box-shadow: var(--inset-highlight);
 }
 
 .filterChip {
@@ -46,37 +138,48 @@
   font-weight: 500;
   color: var(--text-mute);
   border-radius: var(--r-xs);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
-.filterChip:hover { color: var(--text); }
+.filterChip:hover { color: var(--text-soft); }
 
 .filterChipActive {
   background: var(--bg-elev);
   color: var(--text);
+  box-shadow: var(--shadow-xs);
 }
 
 .filterSelect {
   height: 32px;
-  padding: 0 28px 0 10px;
+  padding: 0 32px 0 10px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: var(--text-soft);
   font-size: var(--fs-12);
   appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
-    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
-  background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%;
-  background-size: 4px 4px, 4px 4px;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23737882' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
   cursor: pointer;
   max-width: 200px;
+  box-shadow: var(--inset-highlight);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out);
 }
 
 .filterSelect:hover { border-color: var(--border-strong); }
-.filterSelect:focus { border-color: var(--accent); outline: none; }
+.filterSelect:focus { border-color: var(--accent); box-shadow: var(--inset-highlight), 0 0 0 3px rgba(91, 141, 239, 0.08); }
+
+.filterSelect option {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
 
 .searchWrap {
   position: relative;
@@ -87,22 +190,24 @@
 .searchInput {
   width: 100%;
   height: 32px;
-  padding: 0 10px 0 30px;
+  padding: 0 10px 0 32px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: var(--text);
   font-size: var(--fs-12);
   outline: none;
+  box-shadow: var(--inset-highlight);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .searchInput::placeholder { color: var(--text-faint); }
 .searchInput:hover { border-color: var(--border-strong); }
-.searchInput:focus { border-color: var(--accent); }
+.searchInput:focus { border-color: var(--accent); box-shadow: var(--inset-highlight), 0 0 0 3px rgba(91, 141, 239, 0.08); }
 
 .searchIcon {
   position: absolute;
-  left: 9px;
+  left: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-faint);
@@ -125,6 +230,7 @@
   border-radius: var(--r-md);
   overflow: hidden;
   overflow-x: auto;
+  box-shadow: var(--shadow-xs);
 }
 
 .table {
@@ -146,7 +252,7 @@
 
 .table tbody td {
   padding: 11px 14px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-muted);
   vertical-align: middle;
   color: var(--text-soft);
 }

@@ -1,16 +1,16 @@
-/* Form primitives */
+/* Form primitives — refined, no focus stacking */
 
-.stack { display: grid; gap: 14px; }
+.stack { display: grid; gap: 16px; }
 
 .row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .field {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -18,52 +18,78 @@
   font-size: var(--fs-12);
   color: var(--text-soft);
   font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .input,
 .textarea,
 .select {
   width: 100%;
-  height: 34px;
-  padding: 0 10px;
+  height: 36px;
+  padding: 0 12px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: var(--text);
   outline: none;
-  transition: border-color var(--dur-fast) var(--ease-out);
   font-size: var(--fs-13);
   font-variant-numeric: tabular-nums;
+  box-shadow: var(--inset-highlight);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .input::placeholder,
-.textarea::placeholder { color: var(--text-faint); }
+.textarea::placeholder {
+  color: var(--text-faint);
+}
 
-.input:hover, .textarea:hover, .select:hover { border-color: var(--border-strong); }
-.input:focus, .textarea:focus, .select:focus { border-color: var(--accent); }
+.input:hover, .textarea:hover, .select:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-canvas);
+}
+
+/* Single clean focus state — just border color shift + subtle glow */
+.input:focus, .textarea:focus, .select:focus {
+  border-color: var(--accent);
+  background: var(--bg-canvas);
+  box-shadow: var(--inset-highlight), 0 0 0 3px rgba(91, 141, 239, 0.08);
+}
+
 .input:disabled, .textarea:disabled, .select:disabled {
   background: var(--bg-app);
   color: var(--text-mute);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
+/* Select — custom chevron, dark dropdown */
 .select {
   appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--text-mute) 50%),
-    linear-gradient(135deg, var(--text-mute) 50%, transparent 50%);
-  background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%;
-  background-size: 4px 4px, 4px 4px;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23737882' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  padding-right: 28px;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+}
+
+/* Override browser's ugly white dropdown on dark theme */
+.select option {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  padding: 8px 12px;
 }
 
 .textarea {
   resize: vertical;
-  min-height: 72px;
+  min-height: 80px;
   height: auto;
-  padding: 8px 10px;
-  line-height: 1.5;
+  padding: 10px 12px;
+  line-height: 1.55;
   font-family: var(--font-mono);
   font-size: var(--fs-12);
 }
@@ -73,10 +99,11 @@
 .hint {
   font-size: var(--fs-11);
   color: var(--text-faint);
+  line-height: 1.4;
 }
 
 .error {
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: var(--r-sm);
   background: var(--c-danger-soft);
   border: 1px solid var(--c-danger-border);
@@ -84,6 +111,7 @@
   font-size: var(--fs-12);
   white-space: pre-wrap;
   font-family: var(--font-mono);
+  line-height: 1.5;
 }
 
 .actions {
@@ -91,7 +119,7 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  padding-top: 2px;
+  padding-top: 4px;
 }
 
 /* Segmented control */
@@ -104,20 +132,25 @@
   height: 32px;
   padding: 3px;
   gap: 2px;
+  box-shadow: var(--inset-highlight);
 }
 
 .segItem {
-  padding: 0 10px;
+  padding: 0 11px;
   font-size: var(--fs-12);
   font-weight: 500;
   color: var(--text-mute);
   border-radius: var(--r-xs);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
-.segItem:hover { color: var(--text); }
+.segItem:hover { color: var(--text-soft); }
 
 .segItemActive {
   background: var(--bg-elev);
   color: var(--text);
+  box-shadow: var(--shadow-xs);
 }
