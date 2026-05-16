@@ -137,6 +137,12 @@ class TaskEnvelope(BaseModel):
     danger_level: str = "normal"
 
 
+class TaskControlCommand(BaseModel):
+    task_id: str
+    action: Literal["cancel"]
+    kill_grace_sec: int = 15
+
+
 class AdminTaskCreateRequest(BaseModel):
     node_id: str
     type: str
@@ -207,6 +213,7 @@ class HeartbeatResponse(BaseModel):
     accepted: bool = True
     node_id: str
     tasks: list[TaskEnvelope] = Field(default_factory=list)
+    task_controls: list[TaskControlCommand] = Field(default_factory=list)
 
 
 class NodeStatusPreview(BaseModel):
@@ -251,6 +258,28 @@ class DashboardOverview(BaseModel):
     task_counts: dict[str, int]
     nodes: list[DashboardNodeCard]
     recent_tasks: list[DashboardTaskSummary]
+
+
+class AuditEventView(BaseModel):
+    id: int
+    actor_type: str
+    actor_id: str | None
+    action: str
+    target_type: str
+    target_id: str | None
+    request_ip: str | None
+    detail: dict[str, Any]
+    created_at: str
+
+
+class SecurityWarningView(BaseModel):
+    id: int
+    source_type: str
+    source_id: str | None
+    warning_type: str
+    command_excerpt: str | None
+    detail: dict[str, Any]
+    created_at: str
 
 
 class NodeTaskEventRequest(BaseModel):

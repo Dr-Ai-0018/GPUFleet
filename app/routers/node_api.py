@@ -18,6 +18,7 @@ from app.schemas import (
     NodeArtifactUploadRequest,
     NodeTaskLogChunkRequest,
     NodeTaskResultRequest,
+    TaskControlCommand,
     TaskEnvelope,
 )
 from app.security import hash_request_body, verify_node_request_signature
@@ -264,8 +265,15 @@ async def heartbeat(
                 dumps_json(payload.model_dump()),
             ),
         )
-        claimed_task = db.claim_next_task_for_node(conn, node_id, now_iso)
+        active_task_row = db.sync_reported_active_task(
+            conn,
+            node_id,
+            payload.task_runtime.active_task_id,
+            now_iso,
+        )
+        claimed_task = None if active_task_row is not None else db.claim_next_task_for_node(conn, node_id, now_iso)
         tasks = []
+        task_controls = []
         if claimed_task is not None:
             tasks.append(
                 TaskEnvelope(
@@ -282,6 +290,23 @@ async def heartbeat(
                     danger_level=claimed_task["danger_level"],
                 )
             )
+        cancelling_rows = conn.execute(
+            """
+            SELECT task_id, kill_grace_sec
+            FROM tasks
+            WHERE node_id = ? AND status = 'cancel_requested'
+            ORDER BY claimed_at DESC, id DESC
+            """,
+            (node_id,),
+        ).fetchall()
+        for cancel_row in cancelling_rows:
+            task_controls.append(
+                TaskControlCommand(
+                    task_id=cancel_row["task_id"],
+                    action="cancel",
+                    kill_grace_sec=cancel_row["kill_grace_sec"],
+                )
+            )
 
     db.trim_node_status_history(node_id, settings.max_status_history_per_node)
 
@@ -289,6 +314,7 @@ async def heartbeat(
         server_time=now_iso,
         node_id=node_id,
         tasks=tasks,
+        task_controls=task_controls,
     )
 
 

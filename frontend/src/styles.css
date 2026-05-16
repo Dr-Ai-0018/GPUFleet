@@ -53,6 +53,52 @@ button {
   backdrop-filter: blur(14px);
 }
 
+.observability-grid {
+  align-items: start;
+}
+
+.event-list {
+  display: grid;
+  gap: 12px;
+}
+
+.event-card {
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(140, 166, 196, 0.12);
+}
+
+.warning-card {
+  background: rgba(127, 29, 29, 0.16);
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.event-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.event-card p,
+.event-card code {
+  display: block;
+  margin-top: 8px;
+  color: #93a8c6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.event-card pre {
+  margin: 10px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Cascadia Code", "Consolas", monospace;
+}
+
 .login-card {
   width: min(520px, 100%);
   padding: 32px;
@@ -98,6 +144,16 @@ button {
 .detail-grid label {
   color: #89a1c2;
   font-size: 13px;
+}
+
+.meta-note {
+  margin: -2px 0 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(140, 166, 196, 0.14);
+  background: rgba(255, 255, 255, 0.035);
+  color: #a8b9d4;
+  line-height: 1.6;
 }
 
 .form-stack input,
@@ -233,6 +289,18 @@ button {
   margin: 0;
 }
 
+.quick-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.small {
+  padding: 10px 12px;
+  border-radius: 999px;
+}
+
 .node-list,
 .task-list,
 .detail-stack,
@@ -249,6 +317,22 @@ button {
 
 .node-card {
   padding: 18px;
+  position: relative;
+}
+
+.node-select-hit {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #dce9ff;
+}
+
+.node-select-hit.selected {
+  background: linear-gradient(90deg, #0ea5a4, #22c55e);
+  color: #04111b;
 }
 
 .node-card p,

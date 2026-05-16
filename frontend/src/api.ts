@@ -1,7 +1,9 @@
 import type {
   AdminTaskDetail,
+  AuditEventView,
   DashboardOverview,
   NodeResponse,
+  SecurityWarningView,
   TokenPair,
 } from "./types";
 
@@ -77,4 +79,12 @@ export function cancelTask(token: string, taskId: string): Promise<AdminTaskDeta
     },
     token,
   );
+}
+
+export function getAuditEvents(token: string, limit = 50): Promise<AuditEventView[]> {
+  return request<AuditEventView[]>(`/api/admin/audit-events?limit=${limit}`, {}, token);
+}
+
+export function getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {
+  return request<SecurityWarningView[]>(`/api/admin/security-warnings?limit=${limit}`, {}, token);
 }

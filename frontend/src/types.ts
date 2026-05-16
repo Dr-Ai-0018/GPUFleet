@@ -115,3 +115,25 @@ export type AdminTaskDetail = {
   artifacts: AdminTaskArtifactView[];
   result: AdminTaskResultSummary | null;
 };
+
+export type AuditEventView = {
+  id: number;
+  actor_type: string;
+  actor_id: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  request_ip: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+};
+
+export type SecurityWarningView = {
+  id: number;
+  source_type: string;
+  source_id: string | null;
+  warning_type: string;
+  command_excerpt: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+};

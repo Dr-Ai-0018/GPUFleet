@@ -26,6 +26,9 @@ from app.task_utils import (
 
 router = APIRouter(prefix="/api/admin/tasks", tags=["admin-tasks"])
 
+MODAL_ONLY_TASK_TYPES = {"modal_command"}
+MODAL_RUNNER_ALLOWED_TASK_TYPES = {"modal_command", "health_check"}
+
 
 def _task_row_to_list_item(row: object) -> AdminTaskListItem:
     return AdminTaskListItem(
@@ -119,12 +122,25 @@ def create_task(
     db: Annotated[Database, Depends(get_db)],
 ) -> AdminTaskDetail:
     now_iso = utc_now_iso()
+    warning_detail_json = dumps_json(payload.model_dump())
     with db.connect() as conn:
         node = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (payload.node_id,)).fetchone()
         if node is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target node not found")
         if not bool(node["is_enabled"]):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target node is disabled")
+
+        node_type = node["node_type"]
+        if payload.type in MODAL_ONLY_TASK_TYPES and node_type != "modal_runner":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="modal_command can only target nodes of type modal_runner",
+            )
+        if node_type == "modal_runner" and payload.type not in MODAL_RUNNER_ALLOWED_TASK_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="modal_runner nodes only accept modal_command or health_check in phase 1",
+            )
 
         allowed_workdirs = json.loads(node["allowed_workdirs_json"])
         if not ensure_workdir_allowed(payload.workdir, allowed_workdirs):
@@ -135,6 +151,15 @@ def create_task(
 
         dangerous_match = detect_dangerous_command(payload.type, payload.payload)
         if dangerous_match:
+            warning_excerpt = dangerous_match
+            warning_source_id = str(admin["id"])
+            warning_type = "blocked_dangerous_task_command"
+        else:
+            warning_excerpt = None
+            warning_source_id = None
+            warning_type = None
+
+        if warning_excerpt is not None:
             conn.execute(
                 """
                 INSERT INTO security_warnings (source_type, source_id, warning_type, command_excerpt, detail_json, created_at)
@@ -142,16 +167,17 @@ def create_task(
                 """,
                 (
                     "admin",
-                    str(admin["id"]),
-                    "blocked_dangerous_task_command",
-                    dangerous_match,
-                    dumps_json(payload.model_dump()),
+                    warning_source_id,
+                    warning_type,
+                    warning_excerpt,
+                    warning_detail_json,
                     now_iso,
                 ),
             )
+            conn.commit()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Blocked dangerous command snippet: {dangerous_match}",
+                detail=f"Blocked dangerous command snippet: {warning_excerpt}",
             )
 
         task_id = payload.task_id or f"tsk_{secrets.token_hex(8)}"

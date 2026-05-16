@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.db import Database, utc_now_iso
-from app.routers import admin_auth, admin_dashboard, admin_nodes, admin_tasks, node_api
+from app.routers import admin_auth, admin_dashboard, admin_nodes, admin_observability, admin_tasks, node_api
 from app.security import hash_password
 
 
@@ -56,6 +56,7 @@ app.add_middleware(
 app.include_router(admin_auth.router)
 app.include_router(admin_dashboard.router)
 app.include_router(admin_nodes.router)
+app.include_router(admin_observability.router)
 app.include_router(admin_tasks.router)
 app.include_router(node_api.router)
 
@@ -63,7 +64,7 @@ app.include_router(node_api.router)
 @app.get("/")
 def root():
     if (get_settings().frontend_dist_path / "index.html").exists():
-        return RedirectResponse(url="/console")
+        return RedirectResponse(url="/console/")
     return {
         "name": "GPUFleet Control Plane",
         "status": "ok",
@@ -77,6 +78,7 @@ def healthz() -> dict[str, str]:
 
 
 @app.get("/console")
+@app.get("/console/")
 @app.get("/console/{path:path}")
 def console_index(path: str = ""):
     frontend_dist = get_settings().frontend_dist_path

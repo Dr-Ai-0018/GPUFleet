@@ -1,6 +1,22 @@
 import { FormEvent, useEffect, useState } from "react";
-import { cancelTask, createTask, getOverview, getTaskDetail, getNodes, login } from "./api";
-import type { AdminTaskDetail, DashboardOverview, DashboardTaskSummary, NodeResponse } from "./types";
+import {
+  cancelTask,
+  createTask,
+  getAuditEvents,
+  getOverview,
+  getSecurityWarnings,
+  getTaskDetail,
+  getNodes,
+  login,
+} from "./api";
+import type {
+  AdminTaskDetail,
+  AuditEventView,
+  DashboardOverview,
+  DashboardTaskSummary,
+  NodeResponse,
+  SecurityWarningView,
+} from "./types";
 
 const tokenStorageKey = "gpufleet-console-token";
 
@@ -32,6 +48,28 @@ function statusTone(status: string): string {
   }
 }
 
+const PHYSICAL_TASK_TYPES = [
+  "shell",
+  "python_script",
+  "health_check",
+  "download_file",
+  "git_pull",
+  "pip_install",
+  "file_preview",
+  "file_mkdir",
+  "file_write",
+  "file_patch_text",
+  "file_move",
+  "file_delete",
+  "file_extract",
+] as const;
+
+const MODAL_TASK_TYPES = ["health_check", "modal_command"] as const;
+
+function getAllowedTaskTypes(nodeType: string | null | undefined): readonly string[] {
+  return nodeType === "modal_runner" ? MODAL_TASK_TYPES : PHYSICAL_TASK_TYPES;
+}
+
 export default function App() {
   const [token, setToken] = useState<string>(() => localStorage.getItem(tokenStorageKey) ?? "");
   const [username, setUsername] = useState("admin");
@@ -42,6 +80,9 @@ export default function App() {
   const [nodes, setNodes] = useState<NodeResponse[]>([]);
   const [selectedTask, setSelectedTask] = useState<AdminTaskDetail | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
+  const [auditEvents, setAuditEvents] = useState<AuditEventView[]>([]);
+  const [securityWarnings, setSecurityWarnings] = useState<SecurityWarningView[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
 
   const [taskNodeId, setTaskNodeId] = useState("");
@@ -56,10 +97,20 @@ export default function App() {
     let cancelled = false;
     async function load() {
       try {
-        const [overviewData, nodeData] = await Promise.all([getOverview(token), getNodes(token)]);
+        const [overviewData, nodeData, auditData, warningData] = await Promise.all([
+          getOverview(token),
+          getNodes(token),
+          getAuditEvents(token, 30),
+          getSecurityWarnings(token, 30),
+        ]);
         if (cancelled) return;
         setOverview(overviewData);
         setNodes(nodeData);
+        setAuditEvents(auditData);
+        setSecurityWarnings(warningData);
+        if (!selectedNodeId && overviewData.nodes.length > 0) {
+          setSelectedNodeId(overviewData.nodes[0].node_id);
+        }
         if (!taskNodeId && nodeData.length > 0) {
           setTaskNodeId(nodeData[0].node_id);
           setTaskWorkdir(nodeData[0].allowed_workdirs[0] ?? "");
@@ -76,7 +127,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [token, taskNodeId]);
+  }, [token, taskNodeId, selectedNodeId]);
 
   useEffect(() => {
     const current = nodes.find((node) => node.node_id === taskNodeId);
@@ -85,13 +136,38 @@ export default function App() {
     }
   }, [nodes, taskNodeId, taskWorkdir]);
 
+  const taskTargetNode = nodes.find((node) => node.node_id === taskNodeId) ?? null;
+  const selectedNode = overview?.nodes.find((node) => node.node_id === selectedNodeId) ?? null;
+  const selectedNodeRecord = nodes.find((node) => node.node_id === selectedNodeId) ?? null;
+  const allowedTaskTypes = getAllowedTaskTypes(taskTargetNode?.node_type);
+
+  useEffect(() => {
+    if (!allowedTaskTypes.includes(taskType)) {
+      setTaskType(allowedTaskTypes[0] ?? "shell");
+      setTaskCommand(
+        taskTargetNode?.node_type === "modal_runner"
+          ? "modal run app.py"
+          : "Write-Output 'hello from GPUFleet'",
+      );
+      setTaskEnv("{}");
+    }
+  }, [allowedTaskTypes, taskTargetNode?.node_type, taskType]);
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
     async function refresh() {
       try {
-        const data = await getOverview(token);
-        if (!cancelled) setOverview(data);
+        const [overviewData, auditData, warningData] = await Promise.all([
+          getOverview(token),
+          getAuditEvents(token, 30),
+          getSecurityWarnings(token, 30),
+        ]);
+        if (!cancelled) {
+          setOverview(overviewData);
+          setAuditEvents(auditData);
+          setSecurityWarnings(warningData);
+        }
         if (selectedTaskId) {
           const detail = await getTaskDetail(token, selectedTaskId);
           if (!cancelled) setSelectedTask(detail);
@@ -142,9 +218,11 @@ export default function App() {
       const payload =
         taskType === "python_script"
           ? { script: taskCommand }
-          : taskType === "shell"
+          : taskType === "shell" || taskType === "modal_command"
             ? { command: taskCommand }
-            : {};
+            : taskType === "health_check"
+              ? {}
+              : (JSON.parse(taskCommand) as Record<string, unknown>);
       const created = await createTask(token, {
         node_id: taskNodeId,
         type: taskType,
@@ -183,6 +261,48 @@ export default function App() {
     setOverview(null);
     setSelectedTask(null);
     setSelectedTaskId("");
+  }
+
+  function selectNode(nodeId: string) {
+    setSelectedNodeId(nodeId);
+    setTaskNodeId(nodeId);
+    const matched = nodes.find((node) => node.node_id === nodeId);
+    if (matched) {
+      setTaskWorkdir(matched.allowed_workdirs[0] ?? "");
+    }
+  }
+
+  function applyTaskPreset(kind: "file_preview" | "download_file") {
+    if (!selectedNode) return;
+    selectNode(selectedNode.node_id);
+    if (kind === "file_preview") {
+      setTaskType("file_preview");
+      setTaskCommand(
+        JSON.stringify(
+          {
+            path: taskWorkdir || `${selectedNode.node_id}`,
+            max_chars: 4000,
+          },
+          null,
+          2,
+        ),
+      );
+      setTaskEnv("{}");
+      return;
+    }
+
+    setTaskType("download_file");
+    setTaskCommand(
+      JSON.stringify(
+        {
+          url: "http://127.0.0.1:8000/example.txt",
+          target_path: `${taskWorkdir || ""}\\example.txt`,
+        },
+        null,
+        2,
+      ),
+    );
+    setTaskEnv("{}");
   }
 
   if (!token) {
@@ -264,6 +384,13 @@ export default function App() {
               const cpu = node.latest_status?.cpu ?? {};
               return (
                 <article key={node.node_id} className="node-card">
+                  <button
+                    type="button"
+                    className={`node-select-hit ${selectedNodeId === node.node_id ? "selected" : ""}`}
+                    onClick={() => selectNode(node.node_id)}
+                  >
+                    {selectedNodeId === node.node_id ? "当前节点" : "选中节点"}
+                  </button>
                   <div className="node-title-row">
                     <div>
                       <h3>{node.display_name}</h3>
@@ -328,6 +455,16 @@ export default function App() {
             <h2>手工发任务</h2>
             <span>MVP</span>
           </div>
+          {selectedNode ? (
+            <div className="quick-actions">
+              <button className="ghost small" type="button" onClick={() => applyTaskPreset("file_preview")}>
+                预填文件预览
+              </button>
+              <button className="ghost small" type="button" onClick={() => applyTaskPreset("download_file")}>
+                预填下载文件
+              </button>
+            </div>
+          ) : null}
           <form className="form-stack" onSubmit={handleCreateTask}>
             <label>
               <span>目标节点</span>
@@ -342,11 +479,21 @@ export default function App() {
             <label>
               <span>任务类型</span>
               <select value={taskType} onChange={(event) => setTaskType(event.target.value)}>
-                <option value="shell">shell</option>
-                <option value="python_script">python_script</option>
-                <option value="health_check">health_check</option>
+                {allowedTaskTypes.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kind}
+                  </option>
+                ))}
               </select>
             </label>
+            {taskTargetNode ? (
+              <div className="meta-note">
+                当前目标节点类型：<strong>{taskTargetNode.node_type}</strong>
+                {taskTargetNode.node_type === "modal_runner"
+                  ? "，第一阶段只允许 health_check 与 modal_command。"
+                  : "，允许文件、Git、pip 与脚本类任务。"}
+              </div>
+            ) : null}
             <label>
               <span>工作目录</span>
               <input value={taskWorkdir} onChange={(event) => setTaskWorkdir(event.target.value)} />
@@ -356,7 +503,15 @@ export default function App() {
               <input value={taskTimeout} onChange={(event) => setTaskTimeout(event.target.value)} />
             </label>
             <label>
-              <span>{taskType === "python_script" ? "脚本文本" : "命令文本"}</span>
+              <span>
+                {taskType === "python_script"
+                  ? "脚本文本"
+                  : taskType === "shell" || taskType === "modal_command"
+                    ? "命令文本"
+                    : taskType === "health_check"
+                      ? "该任务无需 payload，可留空 {}"
+                      : "payload JSON"}
+              </span>
               <textarea rows={9} value={taskCommand} onChange={(event) => setTaskCommand(event.target.value)} />
             </label>
             <label>
@@ -371,6 +526,53 @@ export default function App() {
       </section>
 
       <section className="content-grid">
+        <div className="panel">
+          <div className="panel-header">
+            <h2>节点详情</h2>
+            <span>{selectedNode ? selectedNode.node_id : "未选中"}</span>
+          </div>
+          {selectedNode ? (
+            <div className="detail-stack">
+              <div className="detail-grid">
+                <div>
+                  <label>节点类型</label>
+                  <strong>{selectedNode.node_type}</strong>
+                </div>
+                <div>
+                  <label>系统</label>
+                  <strong>{selectedNode.os_type ?? "unknown"}</strong>
+                </div>
+                <div>
+                  <label>主机名</label>
+                  <strong>{selectedNode.hostname ?? "unknown"}</strong>
+                </div>
+                <div>
+                  <label>最近心跳</label>
+                  <strong>{formatTime(selectedNode.last_seen_at)}</strong>
+                </div>
+              </div>
+              {selectedNodeRecord ? (
+                <div className="code-box">
+                  <span>allowed_workdirs</span>
+                  <pre>{prettyJson(selectedNodeRecord.allowed_workdirs)}</pre>
+                </div>
+              ) : null}
+              <div className="code-box">
+                <span>latest_status</span>
+                <pre>{prettyJson(selectedNode.latest_status)}</pre>
+              </div>
+              <div className="code-box">
+                <span>active_task</span>
+                <pre>{prettyJson(selectedNode.active_task)}</pre>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <p>点击左侧节点卡片后，这里会显示它的最新状态、工作负载和原始快照。</p>
+            </div>
+          )}
+        </div>
+
         <div className="panel">
           <div className="panel-header">
             <h2>最近任务</h2>
@@ -462,6 +664,58 @@ export default function App() {
               <p>从左侧点开一条任务，就能看日志、结果和产物摘要。</p>
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="content-grid observability-grid">
+        <div className="panel">
+          <div className="panel-header">
+            <h2>安全警告池</h2>
+            <span>{securityWarnings.length} 条</span>
+          </div>
+          <div className="event-list">
+            {securityWarnings.length > 0 ? (
+              securityWarnings.map((warning) => (
+                <article key={warning.id} className="event-card warning-card">
+                  <div className="event-head">
+                    <strong>{warning.warning_type}</strong>
+                    <span className="pill tone-bad">{warning.command_excerpt ?? "warning"}</span>
+                  </div>
+                  <p>
+                    {warning.source_type} · {warning.source_id ?? "unknown"} · {formatTime(warning.created_at)}
+                  </p>
+                  <pre>{prettyJson(warning.detail)}</pre>
+                </article>
+              ))
+            ) : (
+              <div className="empty-state">
+                <p>当前没有被拦截的危险操作。</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h2>审计事件</h2>
+            <span>{auditEvents.length} 条</span>
+          </div>
+          <div className="event-list">
+            {auditEvents.map((event) => (
+              <article key={event.id} className="event-card">
+                <div className="event-head">
+                  <strong>{event.action}</strong>
+                  <span className="pill tone-idle">{event.target_type}</span>
+                </div>
+                <p>
+                  {event.actor_type} · {event.actor_id ?? "unknown"} · {formatTime(event.created_at)}
+                </p>
+                <code>
+                  {event.target_type}/{event.target_id ?? "unknown"} · {event.request_ip ?? "no-ip"}
+                </code>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
     </main>

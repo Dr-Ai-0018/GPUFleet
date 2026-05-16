@@ -280,3 +280,33 @@ class Database:
             "SELECT * FROM tasks WHERE task_id = ?",
             (pending["task_id"],),
         ).fetchone()
+
+    def sync_reported_active_task(
+        self,
+        conn: sqlite3.Connection,
+        node_id: str,
+        active_task_id: str | None,
+        claimed_at: str,
+    ) -> sqlite3.Row | None:
+        if not active_task_id:
+            return None
+        row = conn.execute(
+            "SELECT * FROM tasks WHERE node_id = ? AND task_id = ?",
+            (node_id, active_task_id),
+        ).fetchone()
+        if row is None:
+            return None
+        if row["status"] == "pending":
+            conn.execute(
+                """
+                UPDATE tasks
+                SET status = 'claimed', claimed_at = COALESCE(claimed_at, ?)
+                WHERE task_id = ?
+                """,
+                (claimed_at, active_task_id),
+            )
+            row = conn.execute(
+                "SELECT * FROM tasks WHERE node_id = ? AND task_id = ?",
+                (node_id, active_task_id),
+            ).fetchone()
+        return row
