@@ -36,20 +36,29 @@ def _parse_iso_or_none(raw: str | None) -> datetime | None:
 def _compute_online_status(
     *,
     is_enabled: bool,
+    first_seen_at: str | None,
     last_seen_at: str | None,
     heartbeat_interval_sec: int,
     now_utc: datetime,
 ) -> str:
     if not is_enabled:
         return "disabled"
-    if not last_seen_at:
+    if not first_seen_at:
         return "never_seen"
     seen_at = _parse_iso_or_none(last_seen_at)
     if seen_at is None:
-        return "never_seen"
+        return "offline"
     if seen_at >= now_utc - timedelta(seconds=heartbeat_interval_sec * 3):
         return "online"
     return "offline"
+
+
+def _compute_onboarding_status(*, is_enabled: bool, first_seen_at: str | None) -> str:
+    if not is_enabled:
+        return "disabled"
+    if not first_seen_at:
+        return "awaiting_first_heartbeat"
+    return "connected"
 
 
 @router.get("/overview", response_model=DashboardOverview)
@@ -130,12 +139,18 @@ def get_overview(
                     tags=json.loads(row["tags_json"]),
                     is_enabled=bool(row["is_enabled"]),
                     heartbeat_interval_sec=row["heartbeat_interval_sec"],
+                    first_seen_at=row["first_seen_at"],
                     last_seen_at=row["last_seen_at"],
                     online_status=_compute_online_status(
                         is_enabled=bool(row["is_enabled"]),
+                        first_seen_at=row["first_seen_at"],
                         last_seen_at=row["last_seen_at"],
                         heartbeat_interval_sec=row["heartbeat_interval_sec"],
                         now_utc=now_utc,
+                    ),
+                    onboarding_status=_compute_onboarding_status(
+                        is_enabled=bool(row["is_enabled"]),
+                        first_seen_at=row["first_seen_at"],
                     ),
                     latest_status=latest_status,
                     active_task=(

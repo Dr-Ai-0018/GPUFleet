@@ -235,13 +235,20 @@ async def heartbeat(
         conn.execute(
             """
             UPDATE nodes
-            SET hostname = ?, heartbeat_interval_sec = ?, last_seen_at = ?, updated_at = ?
+            SET hostname = ?,
+                heartbeat_interval_sec = ?,
+                first_seen_at = COALESCE(first_seen_at, ?),
+                last_seen_at = ?,
+                last_boot_id = ?,
+                updated_at = ?
             WHERE node_id = ?
             """,
             (
                 payload.hostname or node["hostname"],
                 payload.heartbeat_interval_sec,
                 now_iso,
+                now_iso,
+                payload.boot_id,
                 now_iso,
                 node_id,
             ),

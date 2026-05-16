@@ -58,14 +58,25 @@ class NodeResponse(BaseModel):
     allowed_workdirs: list[str]
     tags: list[str]
     is_enabled: bool
+    first_seen_at: str | None
     last_seen_at: str | None
+    connection_status: Literal["online", "offline", "disabled", "never_seen"]
+    onboarding_status: Literal["awaiting_first_heartbeat", "connected", "disabled"]
     created_at: str
     updated_at: str
+
+
+class NodeOnboardingPackage(BaseModel):
+    control_plane_url: str
+    env_template: str
+    startup_command: str
+    onboarding_steps: list[str] = Field(default_factory=list)
 
 
 class NodeCreateResponse(NodeResponse):
     node_secret: str
     signing_hint: str = "Agent should locally derive sha256(node_secret) and use it as the HMAC signing key."
+    onboarding: NodeOnboardingPackage
 
 
 class HeartbeatCpu(BaseModel):
@@ -244,8 +255,10 @@ class DashboardNodeCard(BaseModel):
     tags: list[str]
     is_enabled: bool
     heartbeat_interval_sec: int
+    first_seen_at: str | None
     last_seen_at: str | None
     online_status: Literal["online", "offline", "never_seen", "disabled"]
+    onboarding_status: Literal["awaiting_first_heartbeat", "connected", "disabled"]
     latest_status: NodeStatusPreview | None = None
     active_task: dict[str, Any] | None = None
 

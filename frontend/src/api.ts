@@ -2,6 +2,7 @@ import type {
   AdminTaskDetail,
   AuditEventView,
   DashboardOverview,
+  NodeCreateResponse,
   NodeResponse,
   SecurityWarningView,
   TokenPair,
@@ -41,6 +42,29 @@ export function getOverview(token: string): Promise<DashboardOverview> {
 
 export function getNodes(token: string): Promise<NodeResponse[]> {
   return request<NodeResponse[]>("/api/admin/nodes", {}, token);
+}
+
+export function createNode(
+  token: string,
+  payload: {
+    node_id: string;
+    display_name: string;
+    node_type: "physical" | "modal_runner" | "control_plane";
+    os_type?: "windows" | "linux" | null;
+    hostname?: string | null;
+    heartbeat_interval_sec?: number;
+    allowed_workdirs?: string[];
+    tags?: string[];
+  },
+): Promise<NodeCreateResponse> {
+  return request<NodeCreateResponse>(
+    "/api/admin/nodes",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
 }
 
 export function getTaskDetail(token: string, taskId: string): Promise<AdminTaskDetail> {

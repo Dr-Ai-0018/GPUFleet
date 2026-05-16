@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 from typing import Annotated
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_current_admin, get_db
 from app.schemas import (
+    NodeOnboardingPackage,
     NodeCreateRequest,
     NodeCreateResponse,
     NodeResponse,
@@ -30,7 +33,95 @@ def _decode_gpu_snapshot(raw_gpu_json: str) -> tuple[list[dict[str, object]], di
     return [], {}
 
 
-def _row_to_node_response(row: object) -> NodeResponse:
+def _parse_iso_or_none(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _compute_connection_status(
+    *,
+    is_enabled: bool,
+    first_seen_at: str | None,
+    last_seen_at: str | None,
+    heartbeat_interval_sec: int,
+    now_utc: datetime,
+) -> str:
+    if not is_enabled:
+        return "disabled"
+    if not first_seen_at:
+        return "never_seen"
+    seen_at = _parse_iso_or_none(last_seen_at)
+    if seen_at is None:
+        return "offline"
+    if seen_at >= now_utc - timedelta(seconds=heartbeat_interval_sec * 3):
+        return "online"
+    return "offline"
+
+
+def _compute_onboarding_status(*, is_enabled: bool, first_seen_at: str | None) -> str:
+    if not is_enabled:
+        return "disabled"
+    if not first_seen_at:
+        return "awaiting_first_heartbeat"
+    return "connected"
+
+
+def _build_onboarding_package(request: Request, payload: NodeCreateRequest, node_secret: str) -> NodeOnboardingPackage:
+    control_plane_url = str(request.base_url).rstrip("/")
+    mode = "cloud_gpu_runner" if payload.node_type == "modal_runner" else (f"{payload.os_type}_server" if payload.os_type else "auto")
+    workdir_lines = "\n".join(payload.allowed_workdirs) if payload.allowed_workdirs else ""
+    env_lines = [
+        f"GPUFLEET_AGENT_CONTROL_PLANE_URL={control_plane_url}",
+        f"GPUFLEET_AGENT_NODE_ID={payload.node_id}",
+        f"GPUFLEET_AGENT_NODE_SECRET={node_secret}",
+        f"GPUFLEET_AGENT_HEARTBEAT_INTERVAL_SEC={payload.heartbeat_interval_sec}",
+        f"GPUFLEET_AGENT_DEPLOYMENT_MODE={mode}",
+    ]
+    if payload.node_type == "modal_runner":
+        env_lines.extend(
+            [
+                "",
+                "GPUFLEET_AGENT_MODAL_CREDENTIALS_PATH=/opt/gpufleet-modal-runner/secrets/modal_credentials.json",
+                "GPUFLEET_AGENT_MODAL_DEFAULT_CREDENTIAL_NAME=",
+                "GPUFLEET_AGENT_MODAL_DEFAULT_ENVIRONMENT=main",
+                "GPUFLEET_AGENT_MODAL_DEFAULT_WORKSPACE=",
+            ]
+        )
+    if workdir_lines:
+        env_lines.extend(["", "# Allowed workdirs configured on control plane:", workdir_lines])
+
+    startup_command = (
+        "uv run gpufleet-agent heartbeat-loop"
+        if payload.os_type == "linux" or payload.node_type == "modal_runner"
+        else "uv run gpufleet-agent heartbeat-loop"
+    )
+    steps = [
+        "1. Copy the env template into the child node host-local .env file.",
+        "2. Run uv sync in node_agent/ on the child node host.",
+        "3. Start the agent with the startup command below.",
+        "4. Wait for the first signed heartbeat so the node flips from awaiting_first_heartbeat to online.",
+    ]
+    if payload.node_type == "modal_runner":
+        steps.insert(
+            2,
+            "3. Keep real Modal token pairs only in the host-local credential pool JSON, not in this repository.",
+        )
+    return NodeOnboardingPackage(
+        control_plane_url=control_plane_url,
+        env_template="\n".join(env_lines).strip(),
+        startup_command=startup_command,
+        onboarding_steps=steps,
+    )
+
+
+def _row_to_node_response(row: object, *, now_utc: datetime | None = None) -> NodeResponse:
+    now = now_utc or datetime.now(UTC)
+    is_enabled = bool(row["is_enabled"])
+    first_seen_at = row["first_seen_at"] if "first_seen_at" in row.keys() else None
     return NodeResponse(
         node_id=row["node_id"],
         display_name=row["display_name"],
@@ -40,8 +131,17 @@ def _row_to_node_response(row: object) -> NodeResponse:
         heartbeat_interval_sec=row["heartbeat_interval_sec"],
         allowed_workdirs=json.loads(row["allowed_workdirs_json"]),
         tags=json.loads(row["tags_json"]),
-        is_enabled=bool(row["is_enabled"]),
+        is_enabled=is_enabled,
+        first_seen_at=first_seen_at,
         last_seen_at=row["last_seen_at"],
+        connection_status=_compute_connection_status(
+            is_enabled=is_enabled,
+            first_seen_at=first_seen_at,
+            last_seen_at=row["last_seen_at"],
+            heartbeat_interval_sec=row["heartbeat_interval_sec"],
+            now_utc=now,
+        ),
+        onboarding_status=_compute_onboarding_status(is_enabled=is_enabled, first_seen_at=first_seen_at),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -52,9 +152,10 @@ def list_nodes(
     _: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
 ) -> list[NodeResponse]:
+    now_utc = datetime.now(UTC)
     with db.connect() as conn:
         rows = conn.execute("SELECT * FROM nodes ORDER BY created_at ASC").fetchall()
-    return [_row_to_node_response(row) for row in rows]
+    return [_row_to_node_response(row, now_utc=now_utc) for row in rows]
 
 
 @router.post("", response_model=NodeCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -149,7 +250,11 @@ def create_node(
         ).fetchone()
 
     base = _row_to_node_response(row)
-    return NodeCreateResponse(**base.model_dump(), node_secret=node_secret)
+    return NodeCreateResponse(
+        **base.model_dump(),
+        node_secret=node_secret,
+        onboarding=_build_onboarding_package(request, payload, node_secret),
+    )
 
 
 @router.get("/{node_id}", response_model=NodeResponse)

@@ -60,7 +60,9 @@ class Database:
                     allowed_workdirs_json TEXT NOT NULL DEFAULT '[]',
                     tags_json TEXT NOT NULL DEFAULT '[]',
                     is_enabled INTEGER NOT NULL DEFAULT 1,
+                    first_seen_at TEXT,
                     last_seen_at TEXT,
+                    last_boot_id TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -193,6 +195,10 @@ class Database:
 
         if "node_signing_key" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN node_signing_key TEXT")
+        if "first_seen_at" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN first_seen_at TEXT")
+        if "last_boot_id" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN last_boot_id TEXT")
 
         if "node_secret_hash" in node_columns:
             conn.execute(

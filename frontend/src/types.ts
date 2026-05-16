@@ -4,12 +4,20 @@ export type TokenPair = {
   token_type: "bearer";
 };
 
+export type NodeOnboardingPackage = {
+  control_plane_url: string;
+  env_template: string;
+  startup_command: string;
+  onboarding_steps: string[];
+};
+
 export type NodeStatusPreview = {
   reported_at: string;
   cpu: Record<string, unknown>;
   memory: Record<string, unknown>;
   disks: Array<Record<string, unknown>>;
   gpus: Array<Record<string, unknown>>;
+  nvidia: Record<string, unknown>;
   python_env: Record<string, unknown>;
   task_runtime: Record<string, unknown>;
 };
@@ -23,7 +31,9 @@ export type DashboardNodeCard = {
   tags: string[];
   is_enabled: boolean;
   heartbeat_interval_sec: number;
+  first_seen_at: string | null;
   last_seen_at: string | null;
+  onboarding_status: "awaiting_first_heartbeat" | "connected" | "disabled";
   online_status: "online" | "offline" | "never_seen" | "disabled";
   latest_status: NodeStatusPreview | null;
   active_task: {
@@ -64,9 +74,18 @@ export type NodeResponse = {
   allowed_workdirs: string[];
   tags: string[];
   is_enabled: boolean;
+  first_seen_at: string | null;
   last_seen_at: string | null;
+  connection_status: "online" | "offline" | "disabled" | "never_seen";
+  onboarding_status: "awaiting_first_heartbeat" | "connected" | "disabled";
   created_at: string;
   updated_at: string;
+};
+
+export type NodeCreateResponse = NodeResponse & {
+  node_secret: string;
+  signing_hint: string;
+  onboarding: NodeOnboardingPackage;
 };
 
 export type AdminTaskLogView = {
