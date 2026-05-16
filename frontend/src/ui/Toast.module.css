@@ -1,9 +1,9 @@
-/* Toast notifications */
+/* Toast — with slide + glow entrance */
 
 .stack {
   position: fixed;
-  bottom: 16px;
-  right: 16px;
+  bottom: 20px;
+  right: 20px;
   z-index: 9999;
   display: flex;
   flex-direction: column;
@@ -14,22 +14,24 @@
 .toast {
   display: flex;
   align-items: stretch;
-  min-width: 260px;
-  max-width: 380px;
+  min-width: 280px;
+  max-width: 400px;
   background: var(--bg-elev-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.1);
   pointer-events: auto;
   opacity: 0;
-  transform: translateY(6px);
-  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+  transform: translateX(20px) scale(0.96);
+  transition:
+    opacity 0.3s var(--ease-out),
+    transform 0.3s var(--ease-spring);
   overflow: hidden;
 }
 
 .open {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(0) scale(1);
 }
 
 .bar {
@@ -38,10 +40,10 @@
   background: var(--text-faint);
 }
 
-.tone_success .bar { background: var(--c-online); }
-.tone_warning .bar { background: var(--c-waiting); }
-.tone_error .bar   { background: var(--c-danger); }
-.tone_info .bar    { background: var(--accent); }
+.tone_success .bar { background: var(--c-online); box-shadow: 0 0 8px rgba(52, 200, 138, 0.3); }
+.tone_warning .bar { background: var(--c-waiting); box-shadow: 0 0 8px rgba(232, 168, 50, 0.3); }
+.tone_error .bar   { background: var(--c-danger); box-shadow: 0 0 8px rgba(239, 95, 95, 0.3); }
+.tone_info .bar    { background: var(--accent); box-shadow: 0 0 8px rgba(91, 141, 239, 0.3); }
 
 .body {
   flex: 1;
@@ -67,7 +69,7 @@
   font-size: var(--fs-16);
   display: grid;
   place-items: center;
-  transition: color var(--dur-fast) var(--ease-out);
+  transition: color 0.15s var(--ease-out);
 }
 
 .close:hover { color: var(--text); }

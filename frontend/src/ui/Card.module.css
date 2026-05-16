@@ -1,11 +1,33 @@
-/* Card — refined surface with subtle depth */
+/* Card — with subtle top glow and hover depth */
 
 .card {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   overflow: hidden;
   box-shadow: var(--inset-highlight), var(--shadow-xs);
+  transition: border-color 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
+}
+
+/* Top edge glow line */
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(91, 141, 239, 0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.4s var(--ease-out);
+}
+
+.card:hover::before { opacity: 1; }
+
+.card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--inset-highlight), var(--shadow-sm);
 }
 
 .head {
@@ -80,7 +102,7 @@
   gap: 3px;
   padding: 11px 13px;
   background: var(--bg-canvas);
-  transition: background var(--dur-fast) var(--ease-out);
+  transition: background 0.2s var(--ease-out);
 }
 
 .field:hover { background: var(--bg-surface); }

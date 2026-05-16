@@ -1,4 +1,4 @@
-/* Status pill — compact, scannable, refined */
+/* Status pill — with breathing glow for active states */
 
 .pill {
   display: inline-flex;
@@ -13,7 +13,7 @@
   background: var(--bg-surface-2);
   color: var(--text-soft);
   white-space: nowrap;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  transition: box-shadow 0.3s var(--ease-out);
 }
 
 .dot {
@@ -22,10 +22,22 @@
   border-radius: 50%;
   background: currentColor;
   flex-shrink: 0;
+  position: relative;
 }
 
 .pulse {
   animation: status-blink 2.4s var(--ease-in-out) infinite;
+}
+
+/* Glow ring around pulsing dots */
+.pulse::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  animation: breathe 2.4s var(--ease-in-out) infinite;
 }
 
 .subtle {
@@ -40,6 +52,11 @@
   border-color: var(--c-online-border);
 }
 .tone_online .dot { background: var(--c-online); }
+
+/* Online pill gets ambient glow */
+.tone_online.pill {
+  box-shadow: 0 0 8px rgba(52, 200, 138, 0.08);
+}
 
 .tone_waiting {
   color: var(--c-waiting-fg);

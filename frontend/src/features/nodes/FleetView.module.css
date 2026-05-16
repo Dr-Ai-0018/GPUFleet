@@ -147,12 +147,25 @@
 /* ─── Table ─── */
 
 .tableWrap {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   overflow: hidden;
   overflow-x: auto;
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
+}
+
+/* Top glow line */
+.tableWrap::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(91, 141, 239, 0.15), transparent);
+  z-index: 1;
 }
 
 .table {
@@ -184,9 +197,24 @@
 .row {
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
+  position: relative;
+}
+
+.row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleY(0);
+  transition: opacity 0.2s, transform 0.2s var(--ease-spring);
 }
 
 .row:hover { background: var(--bg-hover); }
+.row:hover::before { opacity: 1; transform: scaleY(1); }
 
 .cellNode {
   display: flex;
@@ -268,19 +296,36 @@
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
   box-shadow: var(--inset-highlight);
   transition:
-    border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+    border-color 0.25s var(--ease-out),
+    background 0.2s var(--ease-out),
+    transform 0.25s var(--ease-out),
+    box-shadow 0.25s var(--ease-out);
 }
+
+/* Top glow on hover */
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(91, 141, 239, 0.25), transparent);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-out);
+}
+
+.card:hover::before { opacity: 1; }
 
 .card:hover {
   border-color: var(--border-strong);
   background: var(--bg-surface-2);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(91, 141, 239, 0.04);
 }
 
 .cardTop {

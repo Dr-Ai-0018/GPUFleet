@@ -1,7 +1,5 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api";
-import { Button } from "../../ui/Button";
-import forms from "../../ui/forms.module.css";
 import styles from "./LoginScreen.module.css";
 
 type Props = {
@@ -13,6 +11,18 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Spotlight effect — track mouse on panel
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = panelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    el.style.setProperty("--spot-x", `${x}px`);
+    el.style.setProperty("--spot-y", `${y}px`);
+  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -34,97 +44,140 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
 
   return (
     <main className={styles.shell}>
-      {/* Animated background mesh */}
-      <div className={styles.bgMesh} aria-hidden />
-      <div className={styles.bgOrb1} aria-hidden />
+      {/* Background layers */}
+      <div className={styles.bgBase} aria-hidden />
+      <div className={styles.bgOrb} aria-hidden />
       <div className={styles.bgOrb2} aria-hidden />
-      <div className={styles.bgGrid} aria-hidden />
+      <div className={styles.bgNoise} aria-hidden />
+      <GridLines />
 
-      <div className={styles.frame}>
-        {/* Left: identity */}
-        <aside className={styles.aside}>
-          <div className={styles.brand}>
-            <div className={styles.brandMark}>G</div>
-            <span className={styles.brandName}>GPUFleet</span>
+      <div className={styles.layout}>
+        {/* Brand */}
+        <div className={styles.brand}>
+          <div className={styles.brandMark}>G</div>
+          <span className={styles.brandName}>GPUFleet</span>
+        </div>
+
+        {/* Hero text with decrypt effect */}
+        <DecryptText
+          text="异构 GPU 节点集群"
+          className={styles.heroTitle}
+        />
+        <DecryptText
+          text="统一控制面"
+          className={styles.heroSub}
+          delay={600}
+        />
+
+        {/* Login panel with spotlight border */}
+        <div
+          ref={panelRef}
+          className={styles.panel}
+          onMouseMove={handleMouseMove}
+        >
+          <div className={styles.panelSpotlight} aria-hidden />
+          <div className={styles.panelInner}>
+            <h2 className={styles.panelTitle}>登录</h2>
+
+            <form className={styles.form} onSubmit={onSubmit}>
+              <div className={styles.inputGroup}>
+                <label className={styles.inputLabel}>账号</label>
+                <div className={styles.inputWrap}>
+                  <input
+                    className={styles.input}
+                    value={username}
+                    autoComplete="username"
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="管理员账号"
+                    required
+                  />
+                  <span className={styles.inputGlow} aria-hidden />
+                </div>
+              </div>
+
+              <div className={styles.inputGroup}>
+                <label className={styles.inputLabel}>密码</label>
+                <div className={styles.inputWrap}>
+                  <input
+                    className={styles.input}
+                    value={password}
+                    type="password"
+                    autoComplete="current-password"
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="输入密码"
+                    required
+                  />
+                  <span className={styles.inputGlow} aria-hidden />
+                </div>
+              </div>
+
+              {error ? <div className={styles.error}>{error}</div> : null}
+
+              <button
+                type="submit"
+                className={styles.btn}
+                disabled={submitting}
+              >
+                <span className={styles.btnShine} aria-hidden />
+                {submitting ? "验证中…" : "进入控制台"}
+              </button>
+            </form>
+
+            <div className={styles.foot}>
+              <span className={styles.footItem}>HMAC-SHA256</span>
+              <span className={styles.footDot} />
+              <span className={styles.footItem}>5s 心跳</span>
+              <span className={styles.footDot} />
+              <span className={styles.footItem}>私有部署</span>
+            </div>
           </div>
-
-          <div className={styles.heroBlock}>
-            <ShinyText text="异构 GPU 节点集群控制台" />
-            <p className={styles.heroSub}>
-              节点接入 · 任务派发 · 安全审计 · 实时心跳
-            </p>
-          </div>
-
-          <div className={styles.features}>
-            <FeatureItem icon="🔐" label="HMAC-SHA256 签名通道" />
-            <FeatureItem icon="💓" label="5s 心跳 · 3× 超时离线" />
-            <FeatureItem icon="🖥" label="异构节点统一管控" />
-          </div>
-        </aside>
-
-        {/* Right: login form */}
-        <section className={styles.panel}>
-          <div className={styles.panelGlow} aria-hidden />
-          <h2 className={styles.panelTitle}>登录</h2>
-          <p className={styles.panelSub}>进入 GPUFleet 控制台</p>
-
-          <form className={styles.form} onSubmit={onSubmit}>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>账号</span>
-              <input
-                className={styles.input}
-                value={username}
-                autoComplete="username"
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="输入管理员账号"
-                required
-              />
-            </label>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>密码</span>
-              <input
-                className={styles.input}
-                value={password}
-                type="password"
-                autoComplete="current-password"
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="输入密码"
-                required
-              />
-            </label>
-            {error ? <div className={styles.error}>{error}</div> : null}
-            <button
-              type="submit"
-              className={styles.submitBtn}
-              disabled={submitting}
-            >
-              <span className={styles.submitBtnBg} aria-hidden />
-              <span className={styles.submitBtnText}>
-                {submitting ? "登录中…" : "进入控制台"}
-              </span>
-            </button>
-          </form>
-
-          <div className={styles.panelFoot}>
-            <span>GPUFleet v0.1</span>
-            <span>私有部署</span>
-          </div>
-        </section>
+        </div>
       </div>
     </main>
   );
 }
 
-/* ─── Shiny animated text ─── */
+/* ─── Decrypt text animation ─── */
 
-function ShinyText({ text }: { text: string }): JSX.Element {
+const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+
+function DecryptText({ text, className, delay = 0 }: {
+  text: string;
+  className?: string;
+  delay?: number;
+}): JSX.Element {
+  const [display, setDisplay] = useState(() => text.split("").map(() => CHARS[Math.floor(Math.random() * CHARS.length)]));
+  const [revealed, setRevealed] = useState(0);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      let frame = 0;
+      const interval = setInterval(() => {
+        frame++;
+        const revealCount = Math.floor(frame / 2);
+        setRevealed(revealCount);
+        setDisplay(
+          text.split("").map((char, i) => {
+            if (char === " ") return " ";
+            if (i < revealCount) return char;
+            return CHARS[Math.floor(Math.random() * CHARS.length)];
+          }),
+        );
+        if (revealCount >= text.length) {
+          clearInterval(interval);
+        }
+      }, 40);
+      return () => clearInterval(interval);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [text, delay]);
+
   return (
-    <h1 className={styles.shinyText}>
-      {text.split("").map((char, i) => (
+    <h1 className={className}>
+      {display.map((char, i) => (
         <span
           key={i}
-          className={styles.shinyChar}
-          style={{ animationDelay: `${i * 0.03}s` }}
+          className={i < revealed ? styles.charRevealed : styles.charScramble}
         >
           {char === " " ? "\u00A0" : char}
         </span>
@@ -133,13 +186,8 @@ function ShinyText({ text }: { text: string }): JSX.Element {
   );
 }
 
-/* ─── Feature item ─── */
+/* ─── Grid lines background ─── */
 
-function FeatureItem({ icon, label }: { icon: string; label: string }): JSX.Element {
-  return (
-    <div className={styles.featureItem}>
-      <span className={styles.featureIcon}>{icon}</span>
-      <span className={styles.featureLabel}>{label}</span>
-    </div>
-  );
+function GridLines(): JSX.Element {
+  return <div className={styles.gridLines} aria-hidden />;
 }

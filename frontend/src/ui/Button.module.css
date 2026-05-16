@@ -1,4 +1,4 @@
-/* Buttons: 28 / 32 / 36 height system — refined transitions */
+/* Buttons — with shine sweep and refined motion */
 
 .btn {
   display: inline-flex;
@@ -11,23 +11,44 @@
   user-select: none;
   border: 1px solid transparent;
   position: relative;
+  overflow: hidden;
   transition:
     background var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out),
+    box-shadow 0.25s var(--ease-out),
     transform 80ms var(--ease-out);
 }
 
 .btn:disabled { cursor: not-allowed; opacity: 0.4; }
 .btn:active:not(:disabled) { transform: translateY(0.5px); }
 
+/* Shine sweep on hover — all variants */
+.btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 100%
+  );
+  transition: left 0.5s var(--ease-out);
+  pointer-events: none;
+}
+
+.btn:hover::after { left: 120%; }
+
 /* Sizes */
 .size_sm { padding: 0 10px; font-size: var(--fs-12); height: 28px; }
 .size_md { padding: 0 14px; font-size: var(--fs-13); height: 32px; }
 .size_lg { padding: 0 18px; font-size: var(--fs-14); height: 36px; font-weight: 600; }
 
-/* Primary — white, authoritative */
+/* Primary — white */
 .variant_primary {
   background: var(--text);
   color: var(--bg-app);
@@ -37,24 +58,32 @@
 }
 .variant_primary:hover:not(:disabled) {
   background: #ffffff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), 0 0 20px rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
 }
 
-/* Accent — blue, for primary actions */
+/* Accent — gradient blue-purple */
 .variant_accent {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  background: linear-gradient(135deg, #5b8def 0%, #7c5bf0 100%);
+  color: #ffffff;
+  border-color: transparent;
   font-weight: 600;
-  box-shadow: var(--shadow-xs), var(--accent-glow);
+  box-shadow: var(--shadow-xs), 0 4px 12px rgba(91, 141, 239, 0.2);
 }
 .variant_accent:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  box-shadow: var(--shadow-sm), 0 0 16px rgba(91, 141, 239, 0.2);
+  box-shadow: var(--shadow-sm), 0 8px 24px rgba(91, 141, 239, 0.3);
+  transform: translateY(-1px);
+}
+.variant_accent::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.12) 50%,
+    transparent 100%
+  );
 }
 
-/* Ghost — secondary, bordered */
+/* Ghost — bordered */
 .variant_ghost {
   background: var(--bg-surface);
   color: var(--text);
@@ -64,9 +93,10 @@
 .variant_ghost:hover:not(:disabled) {
   background: var(--bg-elev);
   border-color: var(--border-strong);
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
 }
 
-/* Quiet — minimal, text-like */
+/* Quiet — minimal */
 .variant_quiet {
   background: transparent;
   color: var(--text-mute);
@@ -75,6 +105,7 @@
   color: var(--text);
   background: var(--bg-hover);
 }
+.variant_quiet::after { display: none; }
 
 /* Danger */
 .variant_danger {
@@ -86,4 +117,5 @@
   background: var(--c-danger-soft);
   color: var(--c-danger-fg);
   border-color: var(--c-danger);
+  box-shadow: 0 0 16px rgba(239, 95, 95, 0.1);
 }

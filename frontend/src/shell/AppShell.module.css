@@ -1,5 +1,5 @@
 /* ============================================================
- * AppShell — stable two-column layout, refined surfaces
+ * AppShell — refined with interactive light effects
  * ============================================================ */
 
 .shell {
@@ -16,10 +16,10 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 16px 12px 14px;
+  padding: 16px 10px 14px;
   border-right: 1px solid var(--border);
   background:
-    linear-gradient(180deg, var(--bg-canvas) 0%, rgba(8, 9, 13, 0.98) 100%);
+    linear-gradient(180deg, rgba(11, 13, 18, 0.98) 0%, rgba(5, 6, 8, 0.99) 100%);
   overflow-y: auto;
 }
 
@@ -27,33 +27,35 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 2px 8px 18px;
+  padding: 2px 10px 18px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 14px;
 }
 
 .brandMark {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-sm);
-  background: linear-gradient(135deg, #ffffff 0%, #c8cdd6 100%);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
   color: var(--bg-app);
   display: grid;
   place-items: center;
   font-weight: 800;
-  font-size: var(--fs-12);
+  font-size: var(--fs-13);
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .brandName {
   font-weight: 700;
-  font-size: var(--fs-14);
+  font-size: var(--fs-15);
   color: var(--text);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
-/* Navigation */
+/* Navigation — with hover spotlight */
 
 .nav {
   display: flex;
@@ -62,30 +64,59 @@
 }
 
 .navItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 10px;
-  height: 33px;
+  padding: 0 12px;
+  height: 36px;
   border-radius: var(--r-sm);
   color: var(--text-mute);
   font-size: var(--fs-13);
   font-weight: 500;
   text-decoration: none;
+  overflow: hidden;
   transition:
-    background var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
 
-.navItem:hover {
-  background: var(--bg-hover);
-  color: var(--text-soft);
+/* Hover spotlight effect */
+.navItem::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    80px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(91, 141, 239, 0.06),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-out);
+  pointer-events: none;
 }
+
+.navItem:hover::before { opacity: 1; }
+.navItem:hover { color: var(--text-soft); }
 
 .navActive {
   background: var(--bg-active);
   color: var(--text);
   font-weight: 600;
+}
+
+/* Active item left accent glow */
+.navActive::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(91, 141, 239, 0.4);
+  animation: glow-pulse 2s var(--ease-in-out) infinite;
 }
 
 .navIcon {
@@ -94,7 +125,7 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  opacity: 0.65;
+  opacity: 0.6;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 
@@ -144,7 +175,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  padding: 4px 8px;
+  padding: 4px 10px;
 }
 
 .statRow {
@@ -181,9 +212,9 @@
   gap: 12px;
   padding: 0 var(--content-pad);
   height: var(--topbar-h);
-  background: rgba(8, 9, 13, 0.78);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  background: rgba(8, 9, 13, 0.75);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
   border-bottom: 1px solid var(--border);
 }
 
@@ -213,6 +244,7 @@
   height: 5px;
   border-radius: 50%;
   background: var(--c-online);
+  box-shadow: 0 0 6px rgba(52, 200, 138, 0.4);
   animation: breathe 3s var(--ease-in-out) infinite;
 }
 
@@ -265,6 +297,7 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  animation: fade-rise 0.3s var(--ease-out) both;
 }
 
 .errorBanner code {
@@ -301,6 +334,7 @@
   }
   .brand { padding: 0 8px 0 0; border-bottom: 0; margin-bottom: 0; }
   .nav { flex-direction: row; flex-wrap: wrap; gap: 2px; }
+  .navActive::after { display: none; }
   .sidebarFoot { display: none; }
 }
 

@@ -1,10 +1,10 @@
-/* Shared page-level layout classes */
+/* Shared page-level layout */
 
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--page-gap);
-  animation: fade-rise var(--dur-base) var(--ease-out) both;
+  animation: fade-rise 0.35s var(--ease-out) both;
 }
 
 .head {
@@ -13,6 +13,7 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+  animation: fade-rise 0.4s var(--ease-out) 0.05s both;
 }
 
 .titleBlock {
@@ -26,13 +27,15 @@
   font-size: var(--fs-11);
   color: var(--text-mute);
   font-weight: 500;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
 }
 
 .title {
   font-size: var(--fs-20);
   font-weight: 700;
   color: var(--text);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .actions {

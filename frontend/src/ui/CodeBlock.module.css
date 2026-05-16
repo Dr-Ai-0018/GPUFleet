@@ -1,11 +1,24 @@
-/* Code block */
+/* Code block — terminal feel with subtle depth */
 
 .code {
+  position: relative;
   display: grid;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--bg-terminal);
   overflow: hidden;
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
+}
+
+/* Subtle top glow */
+.code::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 25%;
+  right: 25%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.15), transparent);
 }
 
 .head {
@@ -32,22 +45,28 @@
   border-radius: var(--r-xs);
   color: var(--text-mute);
   border: 1px solid transparent;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition:
+    background 0.15s var(--ease-out),
+    color 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out);
 }
 
 .copyBtn:hover {
   background: var(--bg-elev);
   color: var(--text);
+  border-color: var(--border);
 }
 
 .copyBtn[data-state="ok"] {
   color: var(--c-online-fg);
   background: var(--c-online-soft);
+  border-color: var(--c-online-border);
 }
 
 .copyBtn[data-state="err"] {
   color: var(--c-danger-fg);
   background: var(--c-danger-soft);
+  border-color: var(--c-danger-border);
 }
 
 .body {
