@@ -1,100 +1,59 @@
 /* ============================================================
- * Login screen
- *
- * Two-column slab. Left: identity statement. Right: form.
- * Hierarchy comes from typographic scale, a single hairline
- * divider, and a quietly serifed wordmark. No glow, no aurora.
+ * Login — two-column: identity + form
  * ============================================================ */
 
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
   background: var(--bg-app);
-  position: relative;
-  overflow: hidden;
-}
-
-/* Decorative background — extremely subtle radial fade. */
-.shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(1200px 600px at 20% -10%, rgba(99, 152, 255, 0.06), transparent 60%),
-    radial-gradient(900px 480px at 100% 110%, rgba(140, 110, 255, 0.04), transparent 60%);
-  pointer-events: none;
-}
-
-/* Faint diagonal grid overlay, only at very low opacity */
-.shell::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(0deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 80%);
-  pointer-events: none;
+  padding: 32px;
 }
 
 .frame {
-  position: relative;
-  z-index: 1;
-  width: min(1080px, 100%);
-  margin: auto;
-  padding: 64px 32px;
+  width: min(960px, 100%);
   display: grid;
   grid-template-columns: 1.1fr 1fr;
-  gap: 72px;
+  gap: 56px;
   align-items: center;
 }
 
-/* ---------- Aside: identity ---------- */
+/* Identity side */
 
 .aside {
   display: flex;
   flex-direction: column;
-  gap: 32px;
-  min-width: 0;
+  gap: 28px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .brandMark {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r-2);
-  background: linear-gradient(135deg, #ffffff 0%, #d2d6df 100%);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: var(--text);
   color: var(--bg-app);
   display: grid;
   place-items: center;
   font-weight: 800;
-  font-size: var(--fs-14);
-  font-family: var(--font-display);
-  letter-spacing: var(--tr-tightest);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.18) inset,
-    0 4px 12px rgba(0, 0, 0, 0.4);
+  font-size: var(--fs-13);
 }
 
 .brandName {
   font-size: var(--fs-15);
   font-weight: 700;
   color: var(--text);
-  letter-spacing: var(--tr-tight);
-  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
 .brandSep {
   width: 1px;
-  height: 16px;
+  height: 14px;
   background: var(--border-strong);
 }
 
@@ -102,20 +61,16 @@
   font-size: var(--fs-11);
   color: var(--text-mute);
   font-family: var(--font-mono);
-  letter-spacing: var(--tr-widest);
-  text-transform: uppercase;
 }
 
 .headline {
   margin: 0;
-  font-size: clamp(36px, 4.4vw, 52px);
-  line-height: 1.04;
+  font-size: clamp(32px, 4vw, 44px);
+  line-height: 1.08;
   font-weight: 700;
   color: var(--text);
-  letter-spacing: var(--tr-tightest);
-  font-family: var(--font-display);
-  font-variation-settings: "opsz" 48;
-  max-width: 18ch;
+  letter-spacing: -0.03em;
+  max-width: 16ch;
 }
 
 .headlineEm {
@@ -123,27 +78,19 @@
   font-weight: 600;
 }
 
-.lede {
-  display: none;
-}
-
-/* spec strip — three short feature lines, hairline-separated */
-
 .spec {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   background: var(--bg-canvas);
   border: 1px solid var(--border);
-  border-radius: var(--r-3);
+  border-radius: var(--r-md);
   overflow: hidden;
-  margin-top: 8px;
-  box-shadow: var(--shadow-sm);
 }
 
 .specItem {
   display: grid;
-  gap: 6px;
-  padding: 16px 18px;
+  gap: 4px;
+  padding: 12px 14px;
   border-left: 1px solid var(--border);
 }
 
@@ -151,97 +98,67 @@
 
 .specLabel {
   font-size: var(--fs-10);
-  letter-spacing: var(--tr-widest);
-  text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 500;
-  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .specValue {
-  font-size: var(--fs-13);
+  font-size: var(--fs-12);
   color: var(--text);
   font-weight: 600;
-  letter-spacing: var(--tr-snug);
-  font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Form panel ---------- */
+/* Form panel */
 
 .panel {
   background: var(--bg-canvas);
   border: 1px solid var(--border);
-  border-radius: var(--r-5);
-  padding: 36px 36px 28px;
+  border-radius: var(--r-lg);
+  padding: 32px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 0;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.025) inset,
-    var(--shadow-lg);
+  box-shadow: var(--shadow-lg);
 }
 
 .eyebrow {
   font-size: var(--fs-11);
-  letter-spacing: var(--tr-widest);
-  text-transform: uppercase;
   color: var(--text-mute);
   font-weight: 500;
-  font-family: var(--font-mono);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.eyebrow::before {
-  content: "";
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .title {
-  margin: 10px 0 8px;
-  font-size: var(--fs-24);
+  margin: 8px 0 6px;
+  font-size: var(--fs-22);
   font-weight: 700;
   color: var(--text);
-  letter-spacing: var(--tr-tight);
-  font-family: var(--font-display);
-}
-
-.help {
-  display: none;
+  letter-spacing: -0.02em;
 }
 
 .foot {
-  margin-top: 26px;
+  margin-top: 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding-top: 18px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
   font-size: var(--fs-11);
   color: var(--text-faint);
-  letter-spacing: 0;
 }
 
 .footMeta {
   font-family: var(--font-mono);
-  letter-spacing: var(--tr-wide);
 }
 
-@media (max-width: 880px) {
+@media (max-width: 800px) {
   .frame {
     grid-template-columns: 1fr;
-    gap: 32px;
-    padding: 40px 20px;
+    gap: 28px;
   }
   .spec { grid-template-columns: 1fr; }
   .specItem { border-left: 0; border-top: 1px solid var(--border); }
   .specItem:first-child { border-top: 0; }
-  .panel { padding: 28px 24px 22px; }
+  .panel { padding: 24px; }
 }

@@ -1,14 +1,16 @@
-.stack { display: grid; gap: 16px; }
+/* Form primitives */
+
+.stack { display: grid; gap: 14px; }
 
 .row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
 }
 
 .field {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -16,139 +18,101 @@
   font-size: var(--fs-12);
   color: var(--text-soft);
   font-weight: 500;
-  letter-spacing: var(--tr-snug);
 }
 
 .input,
 .textarea,
 .select {
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--r-2);
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: var(--text);
   outline: none;
-  transition:
-    border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+  transition: border-color var(--dur-fast) var(--ease-out);
   font-size: var(--fs-13);
-  font-family: inherit;
   font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tr-snug);
 }
 
 .input::placeholder,
-.textarea::placeholder {
-  color: var(--text-faint);
-  letter-spacing: 0;
-}
+.textarea::placeholder { color: var(--text-faint); }
 
-.input:hover,
-.textarea:hover,
-.select:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-canvas);
-}
-
-.input:focus,
-.textarea:focus,
-.select:focus {
-  border-color: var(--accent);
-  background: var(--bg-canvas);
-  box-shadow: var(--ring-focus);
-}
-
-.input:disabled,
-.textarea:disabled,
-.select:disabled {
+.input:hover, .textarea:hover, .select:hover { border-color: var(--border-strong); }
+.input:focus, .textarea:focus, .select:focus { border-color: var(--accent); }
+.input:disabled, .textarea:disabled, .select:disabled {
   background: var(--bg-app);
   color: var(--text-mute);
   cursor: not-allowed;
 }
 
-/* Custom select chevron */
 .select {
   appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
   background-image:
     linear-gradient(45deg, transparent 50%, var(--text-mute) 50%),
     linear-gradient(135deg, var(--text-mute) 50%, transparent 50%);
-  background-position:
-    calc(100% - 14px) 50%,
-    calc(100% - 9px) 50%;
-  background-size: 5px 5px, 5px 5px;
+  background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%;
+  background-size: 4px 4px, 4px 4px;
   background-repeat: no-repeat;
-  padding-right: 30px;
+  padding-right: 28px;
 }
 
 .textarea {
   resize: vertical;
-  min-height: 84px;
+  min-height: 72px;
   height: auto;
-  padding: 10px 12px;
-  line-height: var(--lh-normal);
+  padding: 8px 10px;
+  line-height: 1.5;
   font-family: var(--font-mono);
   font-size: var(--fs-12);
 }
 
-.mono {
-  font-family: var(--font-mono);
-  font-size: var(--fs-12);
-}
+.mono { font-family: var(--font-mono); font-size: var(--fs-12); }
 
 .hint {
   font-size: var(--fs-11);
   color: var(--text-faint);
-  line-height: var(--lh-snug);
-  letter-spacing: 0;
 }
 
-.hintInline { margin-left: 4px; }
-
 .error {
-  padding: 10px 12px;
-  border-radius: var(--r-2);
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
   background: var(--c-danger-soft);
   border: 1px solid var(--c-danger-border);
   color: var(--c-danger-fg);
   font-size: var(--fs-12);
   white-space: pre-wrap;
   font-family: var(--font-mono);
-  line-height: var(--lh-snug);
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
-/* segmented control */
+/* Segmented control */
 
 .segmented {
   display: inline-flex;
-  border-radius: var(--r-2);
+  border-radius: var(--r-sm);
   background: var(--bg-input);
   border: 1px solid var(--border);
   height: 32px;
-  overflow: hidden;
   padding: 3px;
   gap: 2px;
 }
 
 .segItem {
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: var(--fs-12);
   font-weight: 500;
   color: var(--text-mute);
+  border-radius: var(--r-xs);
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-  border-radius: var(--r-1);
 }
 
 .segItem:hover { color: var(--text); }
@@ -156,5 +120,4 @@
 .segItemActive {
   background: var(--bg-elev);
   color: var(--text);
-  box-shadow: var(--shadow-sm);
 }

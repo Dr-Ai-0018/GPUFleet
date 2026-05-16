@@ -1,6 +1,4 @@
-/* =========================================================
- * Minimal animation set — used very sparingly.
- * ========================================================= */
+/* Minimal animation set */
 
 @keyframes fade-in {
   from { opacity: 0; }
@@ -8,7 +6,7 @@
 }
 
 @keyframes fade-rise {
-  from { opacity: 0; transform: translateY(2px); }
+  from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -16,9 +14,7 @@
   to { transform: rotate(360deg); }
 }
 
-/* Subtle indicator for actively-running tasks — single inner ring beat,
- * no glow, no halo, no scale jitter. */
 @keyframes status-blink {
   0%, 60%, 100% { opacity: 1; }
-  80% { opacity: 0.45; }
+  80% { opacity: 0.4; }
 }

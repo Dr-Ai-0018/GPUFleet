@@ -1,32 +1,30 @@
+/* Toast notifications */
+
 .stack {
   position: fixed;
-  right: 16px;
   bottom: 16px;
-  z-index: 100;
+  right: 16px;
+  z-index: 9999;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 360px;
   pointer-events: none;
 }
 
 .toast {
-  position: relative;
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 12px 10px 14px;
-  border-radius: var(--r-2);
-  background: var(--bg-elev);
+  align-items: stretch;
+  min-width: 260px;
+  max-width: 380px;
+  background: var(--bg-elev-2);
   border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-popover);
-  opacity: 0;
-  transform: translateY(2px);
-  transition:
-    opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
   pointer-events: auto;
-  min-width: 280px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+  overflow: hidden;
 }
 
 .open {
@@ -35,42 +33,40 @@
 }
 
 .bar {
-  position: absolute;
-  inset: 8px auto 8px 0;
-  width: 2px;
-  background: var(--text-mute);
+  width: 3px;
+  flex-shrink: 0;
+  background: var(--text-faint);
 }
 
-.tone_info .bar    { background: var(--c-running); }
 .tone_success .bar { background: var(--c-online); }
 .tone_warning .bar { background: var(--c-waiting); }
 .tone_error .bar   { background: var(--c-danger); }
+.tone_info .bar    { background: var(--accent); }
 
 .body {
-  display: grid;
-  gap: 2px;
-  flex: 1 1 auto;
+  flex: 1;
+  padding: 10px 12px;
+  min-width: 0;
 }
 
 .title {
-  font-weight: 500;
   font-size: var(--fs-13);
+  font-weight: 600;
   color: var(--text);
 }
 
 .desc {
   font-size: var(--fs-12);
   color: var(--text-mute);
-  line-height: var(--lh-snug);
+  margin-top: 2px;
 }
 
 .close {
-  background: transparent;
+  padding: 0 10px;
   color: var(--text-faint);
-  font-size: 16px;
-  line-height: 1;
-  padding: 0 4px;
-  margin-top: -2px;
+  font-size: var(--fs-16);
+  display: grid;
+  place-items: center;
   transition: color var(--dur-fast) var(--ease-out);
 }
 

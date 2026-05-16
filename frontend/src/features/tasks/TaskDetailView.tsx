@@ -13,7 +13,6 @@ import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 import page from "../../ui/page.module.css";
 import styles from "./TaskDetailView.module.css";
-import fleet from "../nodes/FleetView.module.css";
 
 const ACTIVE_STATUSES = new Set(["pending", "claimed", "running"]);
 
@@ -130,7 +129,7 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
     <div className={page.page}>
       <header className={page.head}>
         <div className={page.titleBlock}>
-          <div className={page.eyebrow}>TASK · {detail.task_id}</div>
+          <span className={page.eyebrow}>{detail.task_id}</span>
           <h1 className={page.title}>{detail.type}</h1>
           <div className={page.statusRow}>
             <StatusPill
@@ -138,7 +137,6 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
               label={taskStatusLabel[detail.status] ?? detail.status}
               pulse={isActive}
             />
-            <span className={fleet.metaChip}>{detail.danger_level}</span>
             <Button
               size="sm"
               variant="quiet"

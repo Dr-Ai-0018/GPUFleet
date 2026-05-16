@@ -22,7 +22,6 @@ import { TaskComposer } from "../tasks/TaskComposer";
 import type { DashboardNodeCard, NodeResponse } from "../../types";
 import page from "../../ui/page.module.css";
 import styles from "./NodeDetailView.module.css";
-import fleet from "./FleetView.module.css";
 
 type Props = { nodeId: string };
 
@@ -90,7 +89,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     <div className={page.page}>
       <header className={page.head}>
         <div className={page.titleBlock}>
-          <div className={page.eyebrow}>NODE · {node.node_id}</div>
+          <span className={page.eyebrow}>{node.node_id}</span>
           <h1 className={page.title}>{node.display_name}</h1>
           <div className={page.statusRow}>
             <StatusPill
@@ -103,10 +102,6 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
               label={onboardingLabel[node.onboarding_status]}
               pulse={node.onboarding_status === "awaiting_first_heartbeat"}
             />
-            <span className={fleet.metaChip}>{nodeTypeLabel[node.node_type] ?? node.node_type}</span>
-            {node.os_type ? (
-              <span className={fleet.metaChip}>{osLabel[node.os_type] ?? node.os_type}</span>
-            ) : null}
           </div>
         </div>
         <div className={page.actions}>

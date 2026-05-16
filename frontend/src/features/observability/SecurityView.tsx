@@ -1,155 +1,224 @@
+import { useMemo, useState } from "react";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { StatusPill } from "../../ui/StatusPill";
 import { formatRelative, formatTime, prettyJson } from "../../lib/format";
 import styles from "./SecurityView.module.css";
 
+type TabKey = "warnings" | "audits";
+
 export function SecurityView(): JSX.Element {
   const store = useConsoleStore();
-  const warnCount = store.warnings.length;
-  const auditCount = store.audits.length;
+  const [tab, setTab] = useState<TabKey>(store.warnings.length > 0 ? "warnings" : "audits");
+  const [query, setQuery] = useState("");
+
+  const filteredWarnings = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return store.warnings;
+    return store.warnings.filter((w) =>
+      [w.warning_type, w.source_type, w.command_excerpt ?? ""].join(" ").toLowerCase().includes(q),
+    );
+  }, [store.warnings, query]);
+
+  const filteredAudits = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return store.audits;
+    return store.audits.filter((e) =>
+      [e.action, e.actor_type, e.target_type, e.target_id ?? "", e.request_ip ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [store.audits, query]);
 
   return (
     <div className={styles.page}>
-      <header className={styles.hero}>
-        <div className={styles.heroLeft}>
-          <span className={styles.heroEyebrow}>
-            <span className={styles.heroEyebrowDot} aria-hidden />
-            SECURITY · AUDIT
+      <header className={styles.header}>
+        <h1 className={styles.title}>安全审计</h1>
+        <div className={styles.headerMeta}>
+          <span className={store.warnings.length > 0 ? styles.metaDanger : styles.metaNormal}>
+            {store.warnings.length} 告警
           </span>
-          <h1 className={styles.heroTitle}>安全审计</h1>
-        </div>
-        <div className={styles.band}>
-          <div className={styles.bandCell}>
-            <span className={`${styles.bandLabel} ${warnCount > 0 ? styles.bandLabelDanger : ""}`}>
-              WARNINGS
-            </span>
-            <span
-              className={`${styles.bandValue} ${
-                warnCount > 0 ? styles.bandValueDanger : styles.bandValueMute
-              }`}
-            >
-              {warnCount}
-            </span>
-          </div>
-          <div className={styles.bandCell}>
-            <span className={styles.bandLabel}>AUDIT EVENTS</span>
-            <span
-              className={`${styles.bandValue} ${auditCount === 0 ? styles.bandValueMute : ""}`}
-            >
-              {auditCount}
-            </span>
-          </div>
+          <span className={styles.metaNormal}>{store.audits.length} 事件</span>
         </div>
       </header>
 
-      <section className={`${styles.section} ${warnCount > 0 ? styles.sectionDanger : ""}`}>
-        <header className={styles.sectionHead}>
-          <span className={`${styles.sectionTitle} ${warnCount > 0 ? styles.sectionTitleDanger : ""}`}>
-            <ShieldIcon danger={warnCount > 0} />
+      {/* Tab + filter */}
+      <div className={styles.toolbar}>
+        <div className={styles.tabs}>
+          <button
+            type="button"
+            className={`${styles.tab}${tab === "warnings" ? ` ${styles.tabActive}` : ""}`}
+            onClick={() => setTab("warnings")}
+          >
             安全告警
-          </span>
-          <span className={styles.sectionMeta}>{warnCount} entries</span>
-        </header>
-        {warnCount === 0 ? (
-          <div className={styles.sectionEmpty}>
-            <span className={styles.sectionEmptyMeta}>NO BLOCKED OPERATIONS</span>
-            <span className={styles.sectionEmptyLabel}>当前没有被拦截的危险动作</span>
-          </div>
-        ) : (
-          <ul className={styles.list}>
-            {store.warnings.map((warning) => (
-              <li key={warning.id} className={`${styles.item} ${styles.warn}`}>
-                <div className={styles.head}>
-                  <span className={`${styles.title} ${styles.titleDanger}`}>
-                    {warning.warning_type}
-                  </span>
-                  <span className={styles.titleMeta}>
-                    <StatusPill tone="danger" label={warning.source_type} />
-                  </span>
-                </div>
-                <div className={styles.meta}>
-                  {formatTime(warning.created_at)} · {formatRelative(warning.created_at)}
-                </div>
-                {warning.command_excerpt ? (
-                  <CodeBlock label="命中片段" value={warning.command_excerpt} multiline={false} />
-                ) : null}
-                <CodeBlock label="详情" value={prettyJson(warning.detail)} maxHeight={220} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className={styles.section}>
-        <header className={styles.sectionHead}>
-          <span className={styles.sectionTitle}>
-            <BookIcon />
+            {store.warnings.length > 0 ? (
+              <span className={styles.tabBadge}>{store.warnings.length}</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className={`${styles.tab}${tab === "audits" ? ` ${styles.tabActive}` : ""}`}
+            onClick={() => setTab("audits")}
+          >
             审计事件
-          </span>
-          <span className={styles.sectionMeta}>{auditCount} entries</span>
-        </header>
-        {auditCount === 0 ? (
-          <div className={styles.sectionEmpty}>
-            <span className={styles.sectionEmptyMeta}>NO AUDIT EVENTS</span>
-            <span className={styles.sectionEmptyLabel}>—</span>
-          </div>
-        ) : (
-          <ul className={styles.list}>
-            {store.audits.map((event) => (
-              <li key={event.id} className={styles.item}>
-                <div className={styles.head}>
-                  <span className={styles.title}>{event.action}</span>
-                  <span className={styles.titleMeta}>
-                    <span className={styles.metaChip}>{event.actor_type}</span>
-                  </span>
-                </div>
-                <div className={styles.meta}>
-                  {formatTime(event.created_at)} · {formatRelative(event.created_at)} · {event.target_type}
-                  {event.target_id ? ` · ${event.target_id}` : ""}
-                  {event.request_ip ? ` · ${event.request_ip}` : ""}
-                </div>
-                <CodeBlock label="详情" value={prettyJson(event.detail)} maxHeight={220} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          </button>
+        </div>
+
+        <div className={styles.searchWrap}>
+          <SearchIcon />
+          <input
+            className={styles.searchInput}
+            placeholder="搜索…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Content */}
+      {tab === "warnings" ? (
+        <WarningsTable items={filteredWarnings} />
+      ) : (
+        <AuditsTable items={filteredAudits} />
+      )}
     </div>
   );
 }
 
-function ShieldIcon({ danger }: { danger?: boolean }): JSX.Element {
+/* ─── Warnings table ─── */
+
+function WarningsTable({ items }: { items: ReturnType<typeof useConsoleStore>["warnings"] }): JSX.Element {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  if (items.length === 0) {
+    return <div className={styles.empty}>当前没有安全告警</div>;
+  }
+
   return (
-    <svg
-      width={14}
-      height={14}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke={danger ? "var(--c-danger)" : "currentColor"}
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M8 1.5L13.5 4v3.5c0 3.2-2.4 5.8-5.5 6.5-3.1-.7-5.5-3.3-5.5-6.5V4L8 1.5z" />
-    </svg>
+    <div className={styles.tableWrap}>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>类型</th>
+            <th>来源</th>
+            <th>命中片段</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((w) => (
+            <WarningRow
+              key={w.id}
+              item={w}
+              isExpanded={expanded === w.id}
+              onToggle={() => setExpanded(expanded === w.id ? null : w.id)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-function BookIcon(): JSX.Element {
+function WarningRow({ item, isExpanded, onToggle }: {
+  item: ReturnType<typeof useConsoleStore>["warnings"][number];
+  isExpanded: boolean;
+  onToggle: () => void;
+}): JSX.Element {
   return (
-    <svg
-      width={14}
-      height={14}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 3h6.5L13 5v8H3z" />
-      <path d="M9.5 3v2.5H13" />
+    <>
+      <tr className={styles.row} onClick={onToggle}>
+        <td className={styles.cellTime}>{formatTime(item.created_at)}</td>
+        <td>
+          <StatusPill tone="danger" label={item.warning_type} />
+        </td>
+        <td className={styles.cellMono}>{item.source_type}</td>
+        <td className={styles.cellExcerpt}>{item.command_excerpt ?? "—"}</td>
+        <td className={styles.cellExpand}>{isExpanded ? "▾" : "▸"}</td>
+      </tr>
+      {isExpanded ? (
+        <tr className={styles.detailRow}>
+          <td colSpan={5}>
+            <CodeBlock label="详情" value={prettyJson(item.detail)} maxHeight={240} />
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+/* ─── Audits table ─── */
+
+function AuditsTable({ items }: { items: ReturnType<typeof useConsoleStore>["audits"] }): JSX.Element {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  if (items.length === 0) {
+    return <div className={styles.empty}>暂无审计事件</div>;
+  }
+
+  return (
+    <div className={styles.tableWrap}>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>操作者</th>
+            <th>操作</th>
+            <th>目标</th>
+            <th>IP</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((e) => (
+            <AuditRow
+              key={e.id}
+              item={e}
+              isExpanded={expanded === e.id}
+              onToggle={() => setExpanded(expanded === e.id ? null : e.id)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AuditRow({ item, isExpanded, onToggle }: {
+  item: ReturnType<typeof useConsoleStore>["audits"][number];
+  isExpanded: boolean;
+  onToggle: () => void;
+}): JSX.Element {
+  return (
+    <>
+      <tr className={styles.row} onClick={onToggle}>
+        <td className={styles.cellTime}>{formatTime(item.created_at)}</td>
+        <td className={styles.cellMono}>{item.actor_type}</td>
+        <td className={styles.cellAction}>{item.action}</td>
+        <td className={styles.cellMono}>
+          {item.target_type}{item.target_id ? ` · ${item.target_id}` : ""}
+        </td>
+        <td className={styles.cellMono}>{item.request_ip ?? "—"}</td>
+        <td className={styles.cellExpand}>{isExpanded ? "▾" : "▸"}</td>
+      </tr>
+      {isExpanded ? (
+        <tr className={styles.detailRow}>
+          <td colSpan={6}>
+            <CodeBlock label="详情" value={prettyJson(item.detail)} maxHeight={240} />
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+function SearchIcon(): JSX.Element {
+  return (
+    <svg className={styles.searchIcon} width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M11 11l3 3" />
     </svg>
   );
 }

@@ -1,81 +1,71 @@
+/* Onboarding package panel */
+
 .grid {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
-/* ---------- Secret strip ---------- */
+/* Secret strip */
 
 .secret {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .secretHead {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .secretLabel {
   font-size: var(--fs-11);
-  letter-spacing: var(--tr-widest);
-  text-transform: uppercase;
   color: var(--text-mute);
   font-weight: 500;
-  font-family: var(--font-mono);
 }
 
 .secretActions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .secretWrap {
   display: flex;
   align-items: stretch;
   border: 1px solid var(--border);
-  border-radius: var(--r-2);
+  border-radius: var(--r-sm);
   background: var(--bg-input);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
 }
 
 .secretValue {
   font-family: var(--font-mono);
   font-size: var(--fs-12);
   color: var(--text);
-  padding: 10px 14px;
-  flex: 1 1 auto;
+  padding: 8px 12px;
+  flex: 1;
   overflow-x: auto;
   white-space: nowrap;
-  letter-spacing: 0.02em;
   font-weight: 500;
 }
 
 .secretMode {
   border-left: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-size: var(--fs-11);
   color: var(--text-mute);
   background: var(--bg-surface-2);
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
-  letter-spacing: var(--tr-wide);
 }
 
-.secretHint {
-  font-size: var(--fs-11);
-  color: var(--text-faint);
-  line-height: var(--lh-snug);
-}
-
-/* ---------- Steps list ---------- */
+/* Steps */
 
 .steps {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -84,27 +74,25 @@
 
 .step {
   display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 14px;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
   counter-increment: step;
   font-size: var(--fs-13);
-  line-height: var(--lh-snug);
   color: var(--text-soft);
+  line-height: 1.4;
 }
 
 .step::before {
   content: counter(step);
-  width: 24px;
-  height: 24px;
-  border-radius: var(--r-1);
-  background: var(--bg-input);
-  border: 1px solid var(--border-strong);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-xs);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
   font-size: var(--fs-11);
   font-weight: 600;
-  color: var(--text-soft);
+  color: var(--text-mute);
   display: grid;
   place-items: center;
-  font-family: var(--font-mono);
-  margin-top: 1px;
   font-variant-numeric: tabular-nums;
 }

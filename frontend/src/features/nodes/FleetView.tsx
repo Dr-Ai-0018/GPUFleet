@@ -13,7 +13,6 @@ import {
   osLabel,
 } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
-import forms from "../../ui/forms.module.css";
 import styles from "./FleetView.module.css";
 
 type ConnectionFilter = "all" | OnlineStatus;
@@ -42,83 +41,78 @@ export function FleetView(): JSX.Element {
 
   return (
     <div className={styles.page}>
-      <header className={styles.hero}>
-        <div className={styles.heroLeft}>
-          <span className={styles.heroEyebrow}>
-            <span className={styles.heroEyebrowDot} aria-hidden />
-            FLEET
-          </span>
-          <h1 className={styles.heroTitle}>节点舰队</h1>
-        </div>
-        <div className={styles.heroActions}>
-          <Button variant="ghost" onClick={() => navigate({ name: "onboarding" })}>
-            登记新节点
-          </Button>
-        </div>
+      {/* Page header — title + primary action, nothing else */}
+      <header className={styles.header}>
+        <h1 className={styles.title}>节点舰队</h1>
+        <Button variant="ghost" onClick={() => navigate({ name: "onboarding" })}>
+          登记新节点
+        </Button>
       </header>
 
-      <div className={styles.strip}>
-        <div className={styles.stripGroup}>
-          <span className={styles.stripLabel}>CONN</span>
-          <SegmentedControl<ConnectionFilter>
+      {/* Filter strip */}
+      <div className={styles.filterBar}>
+        <div className={styles.filterGroup}>
+          <FilterSelect
             value={connectionFilter}
-            onChange={setConnectionFilter}
+            onChange={(v) => setConnectionFilter(v as ConnectionFilter)}
             options={[
-              { value: "all", label: "全部" },
+              { value: "all", label: "全部状态" },
               { value: "online", label: "在线" },
               { value: "offline", label: "离线" },
               { value: "never_seen", label: "未上线" },
               { value: "disabled", label: "停用" },
             ]}
           />
-        </div>
-        <div className={styles.stripGroup}>
-          <span className={styles.stripLabel}>ONBOARD</span>
-          <SegmentedControl<OnboardingFilter>
+          <FilterSelect
             value={onboardingFilter}
-            onChange={setOnboardingFilter}
+            onChange={(v) => setOnboardingFilter(v as OnboardingFilter)}
             options={[
-              { value: "all", label: "全部" },
+              { value: "all", label: "全部接入" },
               { value: "awaiting_first_heartbeat", label: "待接入" },
               { value: "connected", label: "已接入" },
               { value: "disabled", label: "停用" },
             ]}
           />
         </div>
-        <div className={styles.searchWrap}>
-          <SearchIcon className={styles.searchIcon} />
-          <input
-            className={styles.searchInput}
-            placeholder="按 名称 / node_id / 主机名 / 标签 检索"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        <span className={styles.stripCount}>
-          <strong>{filtered.length}</strong> / {store.nodes.length}
-        </span>
-        <div className={styles.viewToggle} role="tablist" aria-label="view">
-          <button
-            type="button"
-            className={`${styles.viewBtn}${view === "table" ? ` ${styles.viewBtnActive}` : ""}`}
-            onClick={() => setView("table")}
-          >
-            <RowsIcon /> TABLE
-          </button>
-          <button
-            type="button"
-            className={`${styles.viewBtn}${view === "grid" ? ` ${styles.viewBtnActive}` : ""}`}
-            onClick={() => setView("grid")}
-          >
-            <GridIcon /> GRID
-          </button>
+
+        <div className={styles.filterRight}>
+          <div className={styles.searchWrap}>
+            <SearchIcon />
+            <input
+              className={styles.searchInput}
+              placeholder="搜索名称、ID、主机名、标签…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <span className={styles.count}>
+            {filtered.length} / {store.nodes.length}
+          </span>
+          <div className={styles.viewToggle}>
+            <button
+              type="button"
+              className={`${styles.viewBtn}${view === "table" ? ` ${styles.viewBtnActive}` : ""}`}
+              onClick={() => setView("table")}
+              aria-label="列表视图"
+            >
+              <RowsIcon />
+            </button>
+            <button
+              type="button"
+              className={`${styles.viewBtn}${view === "grid" ? ` ${styles.viewBtnActive}` : ""}`}
+              onClick={() => setView("grid")}
+              aria-label="卡片视图"
+            >
+              <GridIcon />
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Content */}
       {filtered.length === 0 ? (
         <div className={styles.empty}>
-          <span className={styles.emptyMeta}>NO MATCHING NODES</span>
-          <span className={styles.emptyTitle}>
+          <span className={styles.emptyText}>
             {store.nodes.length === 0 ? "舰队为空" : "无匹配结果"}
           </span>
           {store.nodes.length === 0 ? (
@@ -140,96 +134,69 @@ export function FleetView(): JSX.Element {
   );
 }
 
-/* ---------- Table view ---------- */
+/* ─── Table ─── */
 
 function FleetTable({ nodes }: { nodes: NodeResponse[] }): JSX.Element {
   return (
     <div className={styles.tableWrap}>
-      <div style={{ overflowX: "auto" }}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>NODE</th>
-              <th>STATE</th>
-              <th>ROLE / OS</th>
-              <th>HOSTNAME</th>
-              <th>HEARTBEAT</th>
-              <th>FIRST · LAST</th>
-              <th>TAGS</th>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th>节点</th>
+            <th>状态</th>
+            <th>类型</th>
+            <th>主机名</th>
+            <th>心跳</th>
+            <th>最近活动</th>
+            <th>标签</th>
+          </tr>
+        </thead>
+        <tbody>
+          {nodes.map((node) => (
+            <tr
+              key={node.node_id}
+              className={styles.row}
+              onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
+            >
+              <td>
+                <div className={styles.cellNode}>
+                  <span className={styles.nodeName}>{node.display_name}</span>
+                  <code className={styles.nodeId}>{node.node_id}</code>
+                </div>
+              </td>
+              <td>
+                <StatusPill
+                  tone={connectionTone[node.connection_status]}
+                  label={connectionLabel[node.connection_status]}
+                  pulse={node.connection_status === "online"}
+                />
+              </td>
+              <td className={styles.cellMeta}>
+                {nodeTypeLabel[node.node_type] ?? node.node_type}
+                {node.os_type ? <span className={styles.cellSub}>{osLabel[node.os_type] ?? node.os_type}</span> : null}
+              </td>
+              <td className={styles.cellMono}>{node.hostname ?? "—"}</td>
+              <td className={styles.cellMono}>{node.heartbeat_interval_sec}s</td>
+              <td className={styles.cellTime}>
+                {node.last_seen_at ? formatRelative(node.last_seen_at) : "尚未"}
+              </td>
+              <td>
+                <div className={styles.tags}>
+                  {node.tags.slice(0, 3).map((tag) => (
+                    <span key={tag} className={styles.tag}>{tag}</span>
+                  ))}
+                  {node.tags.length > 3 ? <span className={styles.tag}>+{node.tags.length - 3}</span> : null}
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {nodes.map((node) => (
-              <tr
-                key={node.node_id}
-                className={styles.row}
-                onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
-              >
-                <td>
-                  <div className={styles.cellNode}>
-                    <span className={styles.cellNodeName}>{node.display_name}</span>
-                    <code className={styles.cellNodeId}>{node.node_id}</code>
-                  </div>
-                </td>
-                <td>
-                  <div className={styles.statusStack}>
-                    <StatusPill
-                      tone={connectionTone[node.connection_status]}
-                      label={connectionLabel[node.connection_status]}
-                      pulse={node.connection_status === "online"}
-                    />
-                    <StatusPill
-                      tone={onboardingTone[node.onboarding_status]}
-                      label={onboardingLabel[node.onboarding_status]}
-                      pulse={node.onboarding_status === "awaiting_first_heartbeat"}
-                      subtle
-                    />
-                  </div>
-                </td>
-                <td>
-                  <span className={styles.cellMeta}>
-                    {nodeTypeLabel[node.node_type] ?? node.node_type}
-                  </span>
-                  {node.os_type ? (
-                    <span className={styles.cellMetaSub}>{osLabel[node.os_type] ?? node.os_type}</span>
-                  ) : null}
-                </td>
-                <td>
-                  <span className={styles.cellHostname}>{node.hostname ?? "—"}</span>
-                </td>
-                <td>
-                  <span className={styles.cellMeta}>{node.heartbeat_interval_sec}s</span>
-                </td>
-                <td>
-                  <span className={styles.cellTime}>
-                    {node.first_seen_at ? formatRelative(node.first_seen_at) : "—"}
-                  </span>
-                  <span className={styles.cellMetaSub}>
-                    {node.last_seen_at ? formatRelative(node.last_seen_at) : "尚未"}
-                  </span>
-                </td>
-                <td>
-                  <div className={styles.tags}>
-                    {node.tags.slice(0, 4).map((tag) => (
-                      <span key={tag} className={styles.tag}>
-                        {tag}
-                      </span>
-                    ))}
-                    {node.tags.length > 4 ? (
-                      <span className={styles.tag}>+{node.tags.length - 4}</span>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-/* ---------- Grid view ---------- */
+/* ─── Grid ─── */
 
 function FleetCard({ node }: { node: NodeResponse }): JSX.Element {
   return (
@@ -238,17 +205,12 @@ function FleetCard({ node }: { node: NodeResponse }): JSX.Element {
       onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
       role="button"
       tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          navigate({ name: "node-detail", nodeId: node.node_id });
-        }
-      }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate({ name: "node-detail", nodeId: node.node_id }); } }}
     >
-      <div className={styles.cardHead}>
-        <div className={styles.cardTitleBlock}>
-          <h3 className={styles.cardTitle}>{node.display_name}</h3>
-          <code className={styles.cardId}>{node.node_id}</code>
+      <div className={styles.cardTop}>
+        <div className={styles.cardTitle}>
+          <h3>{node.display_name}</h3>
+          <code>{node.node_id}</code>
         </div>
         <StatusPill
           tone={connectionTone[node.connection_status]}
@@ -256,83 +218,37 @@ function FleetCard({ node }: { node: NodeResponse }): JSX.Element {
           pulse={node.connection_status === "online"}
         />
       </div>
-
-      <div className={styles.cardMeta}>
-        <span className={styles.metaChip}>{nodeTypeLabel[node.node_type] ?? node.node_type}</span>
-        {node.os_type ? (
-          <span className={styles.metaChip}>{osLabel[node.os_type] ?? node.os_type}</span>
-        ) : null}
-        <StatusPill
-          tone={onboardingTone[node.onboarding_status]}
-          label={onboardingLabel[node.onboarding_status]}
-          subtle
-        />
+      <div className={styles.cardBody}>
+        <span>{nodeTypeLabel[node.node_type] ?? node.node_type}</span>
+        <span>{node.os_type ? osLabel[node.os_type] ?? node.os_type : "—"}</span>
+        <span>{node.hostname ?? "—"}</span>
+        <span>{node.last_seen_at ? formatRelative(node.last_seen_at) : "尚未"}</span>
       </div>
-
-      <dl className={styles.cardSpec}>
-        <div className={styles.specCell}>
-          <dt className={styles.specLabel}>HOSTNAME</dt>
-          <dd className={styles.specValue}>{node.hostname ?? "—"}</dd>
-        </div>
-        <div className={styles.specCell}>
-          <dt className={styles.specLabel}>HEARTBEAT</dt>
-          <dd className={styles.specValue}>{node.heartbeat_interval_sec}s</dd>
-        </div>
-        <div className={styles.specCell}>
-          <dt className={styles.specLabel}>FIRST SEEN</dt>
-          <dd className={styles.specValue}>
-            {node.first_seen_at ? formatRelative(node.first_seen_at) : "尚未"}
-          </dd>
-        </div>
-        <div className={styles.specCell}>
-          <dt className={styles.specLabel}>LAST SEEN</dt>
-          <dd className={styles.specValue}>{formatRelative(node.last_seen_at)}</dd>
-        </div>
-      </dl>
     </article>
   );
 }
 
-/* ---------- Helpers ---------- */
+/* ─── Helpers ─── */
 
-function SegmentedControl<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T;
-  onChange: (next: T) => void;
-  options: { value: T; label: string }[];
+function FilterSelect({ value, onChange, options }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
 }): JSX.Element {
   return (
-    <div className={forms.segmented}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={`${forms.segItem}${value === option.value ? ` ${forms.segItemActive}` : ""}`}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
+    <select
+      className={styles.filterSelect}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
   );
 }
 
-function SearchIcon({ className }: { className?: string }): JSX.Element {
+function SearchIcon(): JSX.Element {
   return (
-    <svg
-      className={className}
-      width={14}
-      height={14}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={styles.searchIcon} width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <circle cx="7" cy="7" r="4.5" />
       <path d="M11 11l3 3" />
     </svg>
@@ -340,20 +256,9 @@ function SearchIcon({ className }: { className?: string }): JSX.Element {
 }
 
 function RowsIcon(): JSX.Element {
-  return (
-    <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
-    </svg>
-  );
+  return <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round"><path d="M2 4h12M2 8h12M2 12h12" /></svg>;
 }
 
 function GridIcon(): JSX.Element {
-  return (
-    <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="0.5" />
-      <rect x="9" y="2.5" width="4.5" height="4.5" rx="0.5" />
-      <rect x="2.5" y="9" width="4.5" height="4.5" rx="0.5" />
-      <rect x="9" y="9" width="4.5" height="4.5" rx="0.5" />
-    </svg>
-  );
+  return <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="2" y="2" width="5" height="5" rx="0.5" /><rect x="9" y="2" width="5" height="5" rx="0.5" /><rect x="2" y="9" width="5" height="5" rx="0.5" /><rect x="9" y="9" width="5" height="5" rx="0.5" /></svg>;
 }

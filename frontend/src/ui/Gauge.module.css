@@ -1,3 +1,5 @@
+/* Gauge ring */
+
 .gauge {
   position: relative;
   display: inline-grid;
@@ -9,14 +11,12 @@
   transform: rotate(-90deg);
 }
 
-.track {
-  stroke: var(--border-strong);
-}
+.track { stroke: var(--border-strong); }
 
 .value {
   stroke: var(--ring-color, var(--text));
   stroke-linecap: round;
-  transition: stroke-dashoffset 600ms var(--ease-out);
+  transition: stroke-dashoffset 500ms var(--ease-out);
 }
 
 .center {
@@ -29,11 +29,9 @@
 }
 
 .percent {
-  font-family: var(--font-display);
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text);
-  letter-spacing: var(--tr-tight);
   line-height: 1;
 }
 
@@ -45,12 +43,10 @@
 
 .label {
   font-size: var(--fs-10);
-  letter-spacing: var(--tr-wide);
   text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 500;
-  margin-top: 4px;
-  font-family: var(--font-mono);
+  margin-top: 3px;
 }
 
 .tone_calm   { --ring-color: var(--text); }

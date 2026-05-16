@@ -5,25 +5,20 @@
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 16px;
+  gap: 14px;
   align-items: start;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1100px) {
   .layout { grid-template-columns: 1fr; }
 }
 
-.layout > .full {
-  grid-column: 1 / -1;
-}
-
-/* ---------- Connection slab — primary panel ---------- */
+/* Connection slab */
 
 .slab {
-  display: grid;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-3);
+  border-radius: var(--r-md);
   overflow: hidden;
 }
 
@@ -31,16 +26,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 18px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  min-height: 46px;
 }
 
 .slabTitle {
   font-size: var(--fs-13);
   font-weight: 600;
   color: var(--text);
-  letter-spacing: var(--tr-snug);
 }
 
 .slabPills {
@@ -48,7 +41,7 @@
   gap: 6px;
 }
 
-/* Connection state visualizer — three-step rail */
+/* Connection rail */
 
 .connRail {
   display: grid;
@@ -57,92 +50,82 @@
 }
 
 .connStep {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 10px;
+  padding: 12px 16px;
   border-left: 1px solid var(--border);
   background: var(--bg-canvas);
 }
 
 .connStep:first-child { border-left: 0; }
 
-.connStepActive {
-  background: var(--bg-surface);
-}
+.connStepActive { background: var(--bg-surface); }
 
 .connStepDone .connDot {
   background: var(--c-online);
-  box-shadow: 0 0 0 4px var(--c-online-soft);
 }
 
 .connStepActive .connDot {
   background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 .connStepFail .connDot {
   background: var(--c-danger);
-  box-shadow: 0 0 0 4px var(--c-danger-soft);
 }
 
 .connDot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--text-faint);
   flex-shrink: 0;
 }
 
 .connBody {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
 
 .connLabel {
   font-size: var(--fs-10);
-  letter-spacing: var(--tr-widest);
-  text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 500;
-  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .connValue {
-  font-size: var(--fs-13);
+  font-size: var(--fs-12);
   color: var(--text);
   font-weight: 600;
-  letter-spacing: var(--tr-snug);
-  font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .connValueMute {
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 400;
 }
 
-.slabBody {
-  padding: 18px;
-}
+.slabBody { padding: 16px; }
 
-/* Guard banner — single strict line, no decorative left bar */
+/* Guard banner */
 
 .guard {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  margin-top: 14px;
-  border-radius: var(--r-2);
+  gap: 8px;
+  padding: 8px 12px;
+  margin-top: 12px;
+  border-radius: var(--r-sm);
   font-size: var(--fs-12);
   background: var(--bg-canvas);
   border: 1px solid var(--border);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  letter-spacing: var(--tr-snug);
 }
 
 .guardWarn {
@@ -159,7 +142,7 @@
 
 .guardIcon { flex-shrink: 0; }
 
-/* ---------- Path list ---------- */
+/* Path list */
 
 .pathList {
   list-style: none;
@@ -170,8 +153,8 @@
 }
 
 .pathList li {
-  padding: 8px 10px;
-  border-radius: var(--r-2);
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
   background: var(--bg-input);
   border: 1px solid var(--border);
   font-size: var(--fs-12);
@@ -189,32 +172,30 @@
 .tag {
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
+  padding: 1px 7px;
   height: 20px;
-  border-radius: var(--r-1);
-  background: var(--bg-input);
+  border-radius: var(--r-xs);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
-  color: var(--text-soft);
+  color: var(--text-mute);
   font-size: var(--fs-11);
   font-family: var(--font-mono);
-  letter-spacing: 0;
 }
 
-/* ---------- Recent tasks (compact rows) ---------- */
+/* Recent tasks */
 
 .tasksList {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
 }
 
 .taskRow {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 12px;
-  padding: 10px 18px;
+  gap: 10px;
+  padding: 9px 16px;
   border-top: 1px solid var(--border);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
@@ -247,30 +228,30 @@
   color: var(--text-mute);
   font-variant-numeric: tabular-nums;
   text-align: right;
-  font-family: var(--font-mono);
 }
 
-/* ---------- Snapshot block ---------- */
+/* Snapshot */
 
 .snapshotBar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 24px;
-  padding: 4px 0 16px;
+  gap: 20px;
+  padding: 4px 0 14px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .gauges {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
 }
 
 .snapshotInfo {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -293,23 +274,23 @@
   color: var(--text-faint);
 }
 
-/* GPU list */
+/* GPU grid */
 
 .gpuGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
-  border-radius: var(--r-2);
+  border-radius: var(--r-sm);
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .gpuCell {
   display: grid;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 10px 12px;
   background: var(--bg-canvas);
 }
 
@@ -317,7 +298,7 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
 }
 
 .gpuName {
@@ -336,7 +317,7 @@
 }
 
 .gpuBar {
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
   background: var(--border-strong);
   overflow: hidden;
@@ -346,7 +327,7 @@
   height: 100%;
   background: var(--text-soft);
   border-radius: inherit;
-  transition: width 360ms var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  transition: width 300ms var(--ease-out);
 }
 
 .gpuBarFillWarm { background: var(--c-waiting); }
