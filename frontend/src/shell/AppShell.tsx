@@ -9,6 +9,7 @@ import { TasksView } from "../features/tasks/TasksView";
 import { TaskDetailView } from "../features/tasks/TaskDetailView";
 import { SecurityView } from "../features/observability/SecurityView";
 import { Button } from "../ui/Button";
+import { PageTransition } from "../ui/Motion";
 import styles from "./AppShell.module.css";
 
 type NavKey = Route["name"];
@@ -226,20 +227,28 @@ function Breadcrumb({ route }: { route: Route }): JSX.Element {
 }
 
 function RouteOutlet({ route }: { route: Route }): JSX.Element {
-  switch (route.name) {
-    case "onboarding":
-      return <OnboardingView />;
-    case "fleet":
-      return <FleetView />;
-    case "node-detail":
-      return <NodeDetailView nodeId={route.nodeId} />;
-    case "tasks":
-      return <TasksView />;
-    case "task-detail":
-      return <TaskDetailView taskId={route.taskId} />;
-    case "security":
-      return <SecurityView />;
-  }
+  const content = (() => {
+    switch (route.name) {
+      case "onboarding":
+        return <OnboardingView />;
+      case "fleet":
+        return <FleetView />;
+      case "node-detail":
+        return <NodeDetailView nodeId={route.nodeId} />;
+      case "tasks":
+        return <TasksView />;
+      case "task-detail":
+        return <TaskDetailView taskId={route.taskId} />;
+      case "security":
+        return <SecurityView />;
+    }
+  })();
+
+  return (
+    <PageTransition id={route.name === "node-detail" ? `node-${route.nodeId}` : route.name === "task-detail" ? `task-${route.taskId}` : route.name}>
+      {content}
+    </PageTransition>
+  );
 }
 
 /* ─── Icons ─── */

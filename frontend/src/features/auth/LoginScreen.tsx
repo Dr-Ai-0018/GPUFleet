@@ -1,6 +1,9 @@
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useRef, useState, lazy, Suspense } from "react";
 import { ApiError, api } from "../../api";
+import { motion } from "motion/react";
 import styles from "./LoginScreen.module.css";
+
+const ParticleField = lazy(() => import("../../ui/ParticleField").then(m => ({ default: m.ParticleField })));
 
 type Props = {
   onAuthenticated: (token: string) => void;
@@ -13,15 +16,12 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Spotlight effect — track mouse on panel
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const el = panelRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    el.style.setProperty("--spot-x", `${x}px`);
-    el.style.setProperty("--spot-y", `${y}px`);
+    el.style.setProperty("--mx", `${e.clientX - rect.left}px`);
+    el.style.setProperty("--my", `${e.clientY - rect.top}px`);
   }, []);
 
   async function onSubmit(event: FormEvent) {
@@ -44,38 +44,57 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
 
   return (
     <main className={styles.shell}>
-      {/* Background layers */}
-      <div className={styles.bgBase} aria-hidden />
-      <div className={styles.bgOrb} aria-hidden />
-      <div className={styles.bgOrb2} aria-hidden />
-      <div className={styles.bgNoise} aria-hidden />
-      <GridLines />
+      {/* 3D particle background */}
+      <Suspense fallback={null}>
+        <ParticleField />
+      </Suspense>
+
+      {/* Noise overlay */}
+      <div className={styles.noise} aria-hidden />
 
       <div className={styles.layout}>
         {/* Brand */}
-        <div className={styles.brand}>
+        <motion.div
+          className={styles.brand}
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        >
           <div className={styles.brandMark}>G</div>
           <span className={styles.brandName}>GPUFleet</span>
-        </div>
+        </motion.div>
 
-        {/* Hero text with decrypt effect */}
-        <DecryptText
-          text="异构 GPU 节点集群"
-          className={styles.heroTitle}
-        />
-        <DecryptText
-          text="统一控制面"
+        {/* Hero */}
+        <motion.h1
+          className={styles.hero}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+        >
+          异构 GPU 节点集群
+          <br />
+          <span className={styles.heroGradient}>统一控制面</span>
+        </motion.h1>
+
+        <motion.p
           className={styles.heroSub}
-          delay={600}
-        />
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+        >
+          节点接入 · 任务派发 · 安全审计 · 实时心跳
+        </motion.p>
 
-        {/* Login panel with spotlight border */}
-        <div
+        {/* Panel */}
+        <motion.div
           ref={panelRef}
           className={styles.panel}
           onMouseMove={handleMouseMove}
+          initial={{ opacity: 0, y: 16, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className={styles.panelSpotlight} aria-hidden />
+          <div className={styles.panelBorderGlow} aria-hidden />
           <div className={styles.panelInner}>
             <h2 className={styles.panelTitle}>登录</h2>
 
@@ -91,7 +110,7 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
                     placeholder="管理员账号"
                     required
                   />
-                  <span className={styles.inputGlow} aria-hidden />
+                  <span className={styles.inputLine} aria-hidden />
                 </div>
               </div>
 
@@ -107,87 +126,45 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
                     placeholder="输入密码"
                     required
                   />
-                  <span className={styles.inputGlow} aria-hidden />
+                  <span className={styles.inputLine} aria-hidden />
                 </div>
               </div>
 
-              {error ? <div className={styles.error}>{error}</div> : null}
+              {error ? (
+                <motion.div
+                  className={styles.error}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {error}
+                </motion.div>
+              ) : null}
 
-              <button
+              <motion.button
                 type="submit"
                 className={styles.btn}
                 disabled={submitting}
+                whileHover={{ scale: 1.01, y: -1 }}
+                whileTap={{ scale: 0.98 }}
               >
-                <span className={styles.btnShine} aria-hidden />
-                {submitting ? "验证中…" : "进入控制台"}
-              </button>
+                <span className={styles.btnGlow} aria-hidden />
+                <span className={styles.btnText}>
+                  {submitting ? "验证中…" : "进入控制台"}
+                </span>
+              </motion.button>
             </form>
 
             <div className={styles.foot}>
-              <span className={styles.footItem}>HMAC-SHA256</span>
+              <span>HMAC-SHA256</span>
               <span className={styles.footDot} />
-              <span className={styles.footItem}>5s 心跳</span>
+              <span>5s 心跳</span>
               <span className={styles.footDot} />
-              <span className={styles.footItem}>私有部署</span>
+              <span>私有部署</span>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </main>
   );
-}
-
-/* ─── Decrypt text animation ─── */
-
-const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-
-function DecryptText({ text, className, delay = 0 }: {
-  text: string;
-  className?: string;
-  delay?: number;
-}): JSX.Element {
-  const [display, setDisplay] = useState(() => text.split("").map(() => CHARS[Math.floor(Math.random() * CHARS.length)]));
-  const [revealed, setRevealed] = useState(0);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      let frame = 0;
-      const interval = setInterval(() => {
-        frame++;
-        const revealCount = Math.floor(frame / 2);
-        setRevealed(revealCount);
-        setDisplay(
-          text.split("").map((char, i) => {
-            if (char === " ") return " ";
-            if (i < revealCount) return char;
-            return CHARS[Math.floor(Math.random() * CHARS.length)];
-          }),
-        );
-        if (revealCount >= text.length) {
-          clearInterval(interval);
-        }
-      }, 40);
-      return () => clearInterval(interval);
-    }, delay);
-    return () => clearTimeout(timeout);
-  }, [text, delay]);
-
-  return (
-    <h1 className={className}>
-      {display.map((char, i) => (
-        <span
-          key={i}
-          className={i < revealed ? styles.charRevealed : styles.charScramble}
-        >
-          {char === " " ? "\u00A0" : char}
-        </span>
-      ))}
-    </h1>
-  );
-}
-
-/* ─── Grid lines background ─── */
-
-function GridLines(): JSX.Element {
-  return <div className={styles.gridLines} aria-hidden />;
 }

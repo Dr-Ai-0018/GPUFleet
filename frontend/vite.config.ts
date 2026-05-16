@@ -7,6 +7,16 @@ export default defineConfig(({ mode }) => {
   return {
     base: "/console/",
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            three: ["three", "@react-three/fiber", "@react-three/drei"],
+            motion: ["motion"],
+          },
+        },
+      },
+    },
     server: {
       port: 5173,
       host: "127.0.0.1",
