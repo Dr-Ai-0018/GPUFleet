@@ -1,4 +1,4 @@
-/* Buttons follow Linear's height system: 24 / 28 / 32px. */
+/* Buttons follow a clean height system: 28 / 32 / 36px. */
 
 .btn {
   display: inline-flex;
@@ -7,12 +7,14 @@
   gap: 6px;
   border-radius: var(--r-2);
   font-weight: 500;
-  letter-spacing: var(--tr-normal);
+  letter-spacing: var(--tr-snug);
   white-space: nowrap;
   transition:
     background var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform 80ms var(--ease-out);
   user-select: none;
   border: 1px solid transparent;
   font-family: inherit;
@@ -21,18 +23,20 @@
 
 .btn:disabled { cursor: not-allowed; opacity: 0.45; }
 .btn:focus-visible { outline-offset: 2px; }
+.btn:active:not(:disabled) { transform: translateY(0.5px); }
 
 /* sizes */
-.size_sm { padding: 0 8px; font-size: var(--fs-12); height: 24px; }
-.size_md { padding: 0 12px; font-size: var(--fs-13); height: 28px; }
-.size_lg { padding: 0 16px; font-size: var(--fs-13); height: 32px; }
+.size_sm { padding: 0 10px; font-size: var(--fs-12); height: 28px; gap: 6px; }
+.size_md { padding: 0 12px; font-size: var(--fs-13); height: 32px; gap: 7px; }
+.size_lg { padding: 0 18px; font-size: var(--fs-14); height: 36px; gap: 8px; font-weight: 600; }
 
-/* ---------- Primary ---------- */
+/* ---------- Primary (white) ---------- */
 .variant_primary {
   background: var(--text);
   color: var(--bg-app);
   border-color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, var(--shadow-sm);
 }
 .variant_primary:hover:not(:disabled) {
   background: #ffffff;
@@ -48,14 +52,22 @@
   background: var(--accent);
   color: var(--accent-fg);
   border-color: var(--accent);
+  font-weight: 600;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 4px 12px rgba(99, 152, 255, 0.18);
 }
 .variant_accent:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.20) inset,
+    0 6px 16px rgba(99, 152, 255, 0.28);
 }
 .variant_accent:active:not(:disabled) {
   background: var(--accent-active);
   border-color: var(--accent-active);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.10) inset;
 }
 
 /* ---------- Ghost (default secondary) ---------- */
@@ -92,6 +104,7 @@
 .variant_danger:hover:not(:disabled) {
   background: var(--c-danger-soft);
   border-color: var(--c-danger);
+  color: var(--c-danger-fg);
 }
 
 /* leading + trailing slot color cues */

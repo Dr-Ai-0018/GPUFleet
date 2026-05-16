@@ -1,98 +1,115 @@
 /* =========================================================
  * GPUFleet · Design Tokens
  *
- * Reference register: Linear, Vercel Dashboard, Datadog APM.
- * Core principle: dense information, restrained palette,
- * one decisive accent, fields deliver hierarchy via hairlines
- * and surface elevation — never glow.
+ * Reference register: Linear, Vercel, Datadog, Resend.
+ * Dense information · single decisive accent · hairline
+ * elevation · numeric tabular type · zero glow.
  * ========================================================= */
 
 :root {
   color-scheme: dark;
 
-  /* ---------- Surfaces ---------- */
-  /* Five-step elevation: app < canvas < surface < surface-2 < elev */
-  --bg-app: #0a0b0f;
-  --bg-canvas: #0e1014;
-  --bg-surface: #13161c;
-  --bg-surface-2: #181c23;
-  --bg-elev: #1d2029;
-  --bg-input: #0d0f14;
-  --bg-terminal: #08090c;
-  --bg-hover: rgba(255, 255, 255, 0.025);
-  --bg-active: rgba(255, 255, 255, 0.045);
-  --bg-selected: rgba(91, 141, 239, 0.10);
+  /* ---------- Surfaces (six-step elevation) ---------- */
+  --bg-app: #07080b;
+  --bg-canvas: #0b0d12;
+  --bg-surface: #11141a;
+  --bg-surface-2: #161a22;
+  --bg-elev: #1c2029;
+  --bg-elev-2: #232834;
+  --bg-input: #0c0e13;
+  --bg-terminal: #06070a;
+
+  --bg-hover: rgba(255, 255, 255, 0.035);
+  --bg-active: rgba(255, 255, 255, 0.06);
+  --bg-selected: rgba(99, 152, 255, 0.10);
+
+  /* ambient washes for the canvas — used very sparingly */
+  --wash-1: radial-gradient(
+    1100px 540px at 18% -4%,
+    rgba(99, 152, 255, 0.045),
+    transparent 60%
+  );
+  --wash-2: radial-gradient(
+    900px 480px at 100% 0%,
+    rgba(140, 110, 255, 0.035),
+    transparent 60%
+  );
 
   /* ---------- Borders ---------- */
-  --border: #1f232b;
-  --border-strong: #2a2f3a;
-  --border-muted: #181c23;
-  --border-focus: #5b8def;
+  --border: #1d212a;
+  --border-strong: #2b3140;
+  --border-muted: #161a22;
+  --border-focus: #6398ff;
 
   /* ---------- Text ---------- */
-  --text: #f0f2f5;
-  --text-soft: #c5c9d2;
-  --text-mute: #8a8f9a;
-  --text-faint: #5c616b;
-  --text-disabled: #3f434c;
+  --text: #f4f6fa;
+  --text-soft: #c9cdd6;
+  --text-mute: #8b909c;
+  --text-faint: #5a5f6b;
+  --text-disabled: #3a3e48;
 
-  /* ---------- Brand accent ---------- */
-  /* Used VERY rarely — primary CTA, focus ring, active nav indicator. */
-  --accent: #5b8def;
-  --accent-hover: #6f9bf2;
-  --accent-active: #4a7ee0;
+  /* ---------- Accent (use sparingly) ---------- */
+  --accent: #6398ff;
+  --accent-hover: #7aa9ff;
+  --accent-active: #4f86ee;
   --accent-fg: #ffffff;
-  --accent-soft: rgba(91, 141, 239, 0.12);
-  --accent-border: rgba(91, 141, 239, 0.32);
+  --accent-soft: rgba(99, 152, 255, 0.12);
+  --accent-border: rgba(99, 152, 255, 0.34);
 
   /* ---------- Status semantics ---------- */
-  --c-online: #4ade80;
-  --c-online-fg: #98ecb1;
-  --c-online-soft: rgba(74, 222, 128, 0.10);
-  --c-online-border: rgba(74, 222, 128, 0.28);
+  --c-online: #3ed598;
+  --c-online-fg: #8fe8c0;
+  --c-online-soft: rgba(62, 213, 152, 0.10);
+  --c-online-border: rgba(62, 213, 152, 0.30);
 
-  --c-waiting: #facc15;
-  --c-waiting-fg: #fbe27c;
-  --c-waiting-soft: rgba(250, 204, 21, 0.10);
-  --c-waiting-border: rgba(250, 204, 21, 0.28);
+  --c-waiting: #f5b94a;
+  --c-waiting-fg: #f7d089;
+  --c-waiting-soft: rgba(245, 185, 74, 0.10);
+  --c-waiting-border: rgba(245, 185, 74, 0.30);
 
-  --c-offline: #8b8f99;
-  --c-offline-soft: rgba(139, 143, 153, 0.10);
-  --c-offline-border: rgba(139, 143, 153, 0.28);
+  --c-offline: #8b909c;
+  --c-offline-soft: rgba(139, 144, 156, 0.10);
+  --c-offline-border: rgba(139, 144, 156, 0.28);
 
-  --c-danger: #f87171;
-  --c-danger-fg: #fbacac;
-  --c-danger-soft: rgba(248, 113, 113, 0.10);
-  --c-danger-border: rgba(248, 113, 113, 0.28);
+  --c-danger: #ff6b6b;
+  --c-danger-fg: #ffa5a5;
+  --c-danger-soft: rgba(255, 107, 107, 0.10);
+  --c-danger-border: rgba(255, 107, 107, 0.30);
 
-  --c-running: #5b8def;
-  --c-running-soft: rgba(91, 141, 239, 0.12);
-  --c-running-border: rgba(91, 141, 239, 0.30);
+  --c-running: #6398ff;
+  --c-running-soft: rgba(99, 152, 255, 0.12);
+  --c-running-border: rgba(99, 152, 255, 0.32);
 
-  /* ---------- Radii (small, geometric) ---------- */
-  --r-1: 3px;
-  --r-2: 5px;
-  --r-3: 7px;
+  /* ---------- Radii ---------- */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 8px;
   --r-4: 10px;
-  --r-5: 12px;
+  --r-5: 14px;
+  --r-pill: 999px;
 
   /* ---------- Elevation ---------- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.40);
-  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
-  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--border-strong);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.46);
+  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.60), 0 0 0 1px var(--border-strong);
+  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.50), 0 0 0 1px var(--border-strong);
+  --ring-focus: 0 0 0 3px rgba(99, 152, 255, 0.22);
 
-  /* ---------- Type ---------- */
+  /* ---------- Typography ---------- */
+  /* Inter for UI, JetBrains Mono for monospace.
+     CJK falls through to PingFang SC / Microsoft YaHei. */
   --font-ui:
-    "Inter", "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei",
-    -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    "Inter", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont,
+    system-ui, "Helvetica Neue", Arial, sans-serif;
   --font-display:
-    "Inter Display", "Inter", -apple-system, BlinkMacSystemFont, system-ui,
-    sans-serif;
+    "Inter", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono:
-    "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Cascadia Code", "Consolas",
-    ui-monospace, SFMono-Regular, monospace;
+    "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Cascadia Code",
+    "SF Mono", "Roboto Mono", ui-monospace, SFMono-Regular,
+    Consolas, "Liberation Mono", monospace;
 
   --fs-10: 10px;
   --fs-11: 11px;
@@ -100,23 +117,29 @@
   --fs-13: 13px;
   --fs-14: 14px;
   --fs-15: 15px;
-  --fs-17: 17px;
+  --fs-16: 16px;
+  --fs-18: 18px;
   --fs-20: 20px;
+  --fs-22: 22px;
   --fs-24: 24px;
   --fs-28: 28px;
+  --fs-32: 32px;
+  --fs-40: 40px;
 
   /* Tracking */
+  --tr-tightest: -0.025em;
   --tr-tight: -0.015em;
   --tr-snug: -0.005em;
   --tr-normal: 0;
   --tr-wide: 0.04em;
+  --tr-widest: 0.08em;
 
   /* Line heights */
   --lh-1: 1;
-  --lh-tight: 1.2;
+  --lh-tight: 1.15;
   --lh-snug: 1.4;
-  --lh-normal: 1.5;
-  --lh-relaxed: 1.6;
+  --lh-normal: 1.55;
+  --lh-relaxed: 1.65;
 
   /* ---------- Spacing (4px grid) ---------- */
   --sp-1: 4px;
@@ -132,14 +155,15 @@
   --sp-16: 64px;
 
   /* ---------- Layout ---------- */
-  --side-rail: 232px;
-  --topbar-h: 52px;
-  --content-max: 1440px;
-  --content-pad: 24px;
+  --side-rail: 240px;
+  --topbar-h: 56px;
+  --content-max: 1480px;
+  --content-pad: 32px;
 
   /* ---------- Motion ---------- */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;

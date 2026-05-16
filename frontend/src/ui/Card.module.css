@@ -1,8 +1,10 @@
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-3);
+  border-radius: var(--r-4);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur-base) var(--ease-out);
 }
 
 .head {
@@ -10,22 +12,25 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border);
-  min-height: 44px;
-  background: var(--bg-surface);
+  min-height: 52px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, transparent 100%),
+    var(--bg-surface);
 }
 
 .head h2 {
   margin: 0;
-  font-size: var(--fs-13);
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text);
   letter-spacing: var(--tr-snug);
+  line-height: 1.2;
 }
 
 .sub {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   font-size: var(--fs-12);
   color: var(--text-mute);
   line-height: var(--lh-snug);
@@ -36,17 +41,17 @@
 .actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
-.body { padding: 16px; }
+.body { padding: 20px; }
 .bodyFlush { padding: 0; }
 
 .titleRow {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -54,11 +59,12 @@
   font-family: var(--font-mono);
   font-size: var(--fs-11);
   font-weight: 500;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: var(--r-1);
   background: var(--bg-input);
   color: var(--text-soft);
   border: 1px solid var(--border);
+  letter-spacing: 0;
 }
 
 .actionsRow {
@@ -75,22 +81,30 @@
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
-  border-radius: var(--r-2);
+  border-radius: var(--r-3);
   overflow: hidden;
 }
 
 .field {
   display: grid;
   gap: 4px;
-  padding: 10px 12px;
-  background: var(--bg-surface);
+  padding: 12px 14px;
+  background: var(--bg-canvas);
   min-width: 0;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.field:hover {
+  background: var(--bg-surface);
 }
 
 .fieldLabel {
-  font-size: var(--fs-11);
-  color: var(--text-mute);
+  font-size: var(--fs-10);
+  color: var(--text-faint);
   font-weight: 500;
+  letter-spacing: var(--tr-widest);
+  text-transform: uppercase;
+  font-family: var(--font-mono);
 }
 
 .fieldValue {
@@ -98,12 +112,15 @@
   color: var(--text);
   word-break: break-all;
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: var(--tr-snug);
 }
 
 .fieldValueMono {
   font-family: var(--font-mono);
   font-size: var(--fs-12);
   color: var(--text);
+  font-weight: 500;
 }
 
 .fieldHint {

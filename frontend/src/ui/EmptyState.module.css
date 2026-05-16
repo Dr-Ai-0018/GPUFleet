@@ -2,26 +2,33 @@
   display: grid;
   place-items: center;
   text-align: center;
-  padding: 40px 20px;
-  gap: 10px;
+  padding: 56px 24px;
+  gap: 12px;
 }
 
 .iconWrap {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--r-2);
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-3);
   display: grid;
   place-items: center;
-  color: var(--text-faint);
-  background: var(--bg-input);
-  border: 1px solid var(--border);
+  color: var(--text-mute);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(99, 152, 255, 0.12), transparent 60%),
+    var(--bg-input);
+  border: 1px solid var(--border-strong);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    var(--shadow-sm);
+  margin-bottom: 4px;
 }
 
 .title {
   margin: 0;
-  font-size: var(--fs-13);
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text);
+  letter-spacing: var(--tr-snug);
 }
 
 .desc {
@@ -29,9 +36,9 @@
   color: var(--text-mute);
   max-width: 56ch;
   font-size: var(--fs-12);
-  line-height: var(--lh-snug);
+  line-height: var(--lh-relaxed);
 }
 
 .action {
-  margin-top: 8px;
+  margin-top: 10px;
 }

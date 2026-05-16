@@ -1,13 +1,13 @@
 .grid {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 /* ---------- Secret strip ---------- */
 
 .secret {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .secretHead {
@@ -19,7 +19,7 @@
 
 .secretLabel {
   font-size: var(--fs-11);
-  letter-spacing: var(--tr-wide);
+  letter-spacing: var(--tr-widest);
   text-transform: uppercase;
   color: var(--text-mute);
   font-weight: 500;
@@ -38,28 +38,31 @@
   border-radius: var(--r-2);
   background: var(--bg-input);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .secretValue {
   font-family: var(--font-mono);
   font-size: var(--fs-12);
   color: var(--text);
-  padding: 8px 12px;
+  padding: 10px 14px;
   flex: 1 1 auto;
   overflow-x: auto;
   white-space: nowrap;
   letter-spacing: 0.02em;
+  font-weight: 500;
 }
 
 .secretMode {
   border-left: 1px solid var(--border);
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: var(--fs-11);
   color: var(--text-mute);
   background: var(--bg-surface-2);
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
+  letter-spacing: var(--tr-wide);
 }
 
 .secretHint {
@@ -72,7 +75,7 @@
 
 .steps {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -81,8 +84,8 @@
 
 .step {
   display: grid;
-  grid-template-columns: 22px 1fr;
-  gap: 12px;
+  grid-template-columns: 24px 1fr;
+  gap: 14px;
   counter-increment: step;
   font-size: var(--fs-13);
   line-height: var(--lh-snug);
@@ -91,16 +94,17 @@
 
 .step::before {
   content: counter(step);
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--r-1);
   background: var(--bg-input);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   font-size: var(--fs-11);
   font-weight: 600;
-  color: var(--text-mute);
+  color: var(--text-soft);
   display: grid;
   place-items: center;
   font-family: var(--font-mono);
   margin-top: 1px;
+  font-variant-numeric: tabular-nums;
 }

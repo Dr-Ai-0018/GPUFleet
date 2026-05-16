@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: var(--side-rail) 1fr;
   min-height: 100vh;
-  background: var(--bg-app);
+  background: transparent;
 }
 
 /* ============================================================
@@ -16,64 +16,74 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 12px 8px;
+  padding: 14px 12px 12px;
   border-right: 1px solid var(--border);
-  background: var(--bg-canvas);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 18, 24, 0.95) 0%,
+    rgba(11, 13, 18, 0.95) 100%
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 8px 16px;
+  padding: 4px 6px 18px;
   position: relative;
 }
 
 .brandMark {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-1);
-  background: var(--text);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-2);
+  background: linear-gradient(135deg, #ffffff 0%, #d2d6df 100%);
   color: var(--bg-app);
   display: grid;
   place-items: center;
-  font-weight: 700;
-  font-size: var(--fs-11);
+  font-weight: 800;
+  font-size: var(--fs-13);
   font-family: var(--font-display);
-  letter-spacing: var(--tr-tight);
+  letter-spacing: var(--tr-tightest);
   flex-shrink: 0;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 .brandTitle {
-  font-weight: 600;
-  font-size: var(--fs-13);
+  font-weight: 700;
+  font-size: var(--fs-14);
   color: var(--text);
-  letter-spacing: var(--tr-snug);
-  line-height: 1.2;
+  letter-spacing: var(--tr-tight);
+  line-height: 1.1;
+  font-family: var(--font-display);
 }
 
 .brandSub {
   color: var(--text-faint);
   font-size: var(--fs-10);
-  letter-spacing: var(--tr-wide);
+  letter-spacing: var(--tr-widest);
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: 3px;
   font-family: var(--font-mono);
 }
 
 .navSection {
   display: grid;
-  gap: 1px;
-  padding: 8px 0;
+  gap: 2px;
+  padding: 10px 0 8px;
 }
 
 .navLabel {
   font-size: var(--fs-10);
-  letter-spacing: var(--tr-wide);
+  letter-spacing: var(--tr-widest);
   text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 500;
-  padding: 4px 10px 6px;
+  padding: 6px 10px 8px;
   font-family: var(--font-mono);
 }
 
@@ -83,7 +93,7 @@
   grid-template-columns: 16px 1fr auto;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px;
+  padding: 0 10px;
   border-radius: var(--r-2);
   text-decoration: none;
   color: var(--text-mute);
@@ -92,7 +102,7 @@
     color var(--dur-fast) var(--ease-out);
   font-size: var(--fs-13);
   font-weight: 500;
-  height: 28px;
+  height: 32px;
 }
 
 .navItem:hover {
@@ -103,6 +113,19 @@
 .navItemActive {
   background: var(--bg-active);
   color: var(--text);
+  font-weight: 600;
+}
+
+/* Active item rail indicator */
+.navItemActive::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
 }
 
 .navIcon {
@@ -112,7 +135,10 @@
   place-items: center;
   color: currentColor;
   flex-shrink: 0;
+  opacity: 0.85;
 }
+
+.navItemActive .navIcon { opacity: 1; }
 
 .navText {
   min-width: 0;
@@ -123,44 +149,49 @@
 
 .navBadge {
   font-size: var(--fs-10);
-  font-weight: 500;
+  font-weight: 600;
   padding: 0 6px;
-  height: 16px;
-  border-radius: var(--r-1);
+  height: 17px;
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   color: var(--text-soft);
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
 }
 
 .navBadgeWarn {
   background: var(--c-waiting-soft);
   color: var(--c-waiting-fg);
+  border: 1px solid var(--c-waiting-border);
 }
 
 .navBadgeMute {
   background: var(--c-offline-soft);
   color: var(--c-offline);
+  border: 1px solid var(--c-offline-border);
 }
 
 .navBadgeDanger {
   background: var(--c-danger-soft);
   color: var(--c-danger-fg);
+  border: 1px solid var(--c-danger-border);
 }
 
 /* sidebar foot summary */
 
 .foot {
   margin-top: auto;
-  padding-top: 12px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
 .summary {
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  gap: 8px;
+  padding: 10px 8px;
 }
 
 .summaryHead {
@@ -168,12 +199,20 @@
   justify-content: space-between;
   align-items: baseline;
   font-size: var(--fs-10);
-  letter-spacing: var(--tr-wide);
+  letter-spacing: var(--tr-widest);
   text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 500;
   font-family: var(--font-mono);
   margin-bottom: 4px;
+}
+
+.summaryHead span:last-child {
+  color: var(--text-soft);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-13);
+  letter-spacing: var(--tr-tight);
 }
 
 .summaryRow {
@@ -188,8 +227,9 @@
   font-size: var(--fs-13);
   color: var(--text);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: 600;
   font-family: var(--font-display);
+  letter-spacing: var(--tr-tight);
 }
 
 .summaryDot {
@@ -197,7 +237,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  margin-right: 6px;
+  margin-right: 8px;
   vertical-align: middle;
 }
 
@@ -213,7 +253,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-app);
+  background: transparent;
 }
 
 .topbar {
@@ -226,9 +266,9 @@
   gap: 12px;
   padding: 0 var(--content-pad);
   height: var(--topbar-h);
-  background: rgba(10, 11, 15, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(7, 8, 11, 0.72);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--border);
 }
 
@@ -244,11 +284,12 @@
   gap: 8px;
   font-size: var(--fs-12);
   color: var(--text-mute);
-  padding: 0 10px;
-  height: 28px;
+  padding: 0 12px;
+  height: 32px;
   border-radius: var(--r-2);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
+  letter-spacing: 0;
 }
 
 .clockDivider {
@@ -261,11 +302,11 @@
 .syncChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: var(--fs-12);
   color: var(--text-mute);
-  padding: 0 10px;
-  height: 28px;
+  padding: 0 12px;
+  height: 32px;
   border-radius: var(--r-2);
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -277,9 +318,13 @@
   height: 6px;
   border-radius: 50%;
   background: var(--c-online);
+  box-shadow: 0 0 0 3px var(--c-online-soft);
 }
 
-.syncDotIdle { background: var(--text-faint); }
+.syncDotIdle {
+  background: var(--text-faint);
+  box-shadow: none;
+}
 
 /* breadcrumb */
 
@@ -298,27 +343,35 @@
   text-decoration: none;
   transition: color var(--dur-fast) var(--ease-out);
   white-space: nowrap;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border-radius: var(--r-1);
 }
 
-.breadcrumb a:hover { color: var(--text); }
+.breadcrumb a:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
 
 .breadcrumbCurrent {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
+  letter-spacing: var(--tr-snug);
 }
 
 .breadcrumbSep {
   color: var(--text-faint);
   user-select: none;
+  font-weight: 400;
 }
 
 .banner {
-  margin: 12px var(--content-pad) 0;
-  padding: 10px 14px;
-  border-radius: var(--r-2);
+  margin: 16px var(--content-pad) 0;
+  padding: 12px 16px;
+  border-radius: var(--r-3);
   font-size: var(--fs-12);
   border: 1px solid var(--border);
   display: flex;
@@ -333,7 +386,7 @@
 }
 
 .content {
-  padding: var(--sp-6) var(--content-pad) var(--sp-16);
+  padding: var(--sp-7) var(--content-pad) var(--sp-16);
   flex: 1 1 auto;
   max-width: var(--content-max);
   margin: 0 auto;
@@ -355,7 +408,7 @@
     flex-direction: row;
     align-items: center;
     flex-wrap: wrap;
-    padding: 8px 12px;
+    padding: 10px 16px;
     gap: 8px;
   }
   .brand { padding: 4px 8px; }
@@ -367,7 +420,8 @@
     padding: 0;
   }
   .navLabel { display: none; }
-  .navItem { height: 30px; }
+  .navItem { height: 32px; padding: 0 12px; }
+  .navItemActive::before { display: none; }
   .foot { display: none; }
 }
 
