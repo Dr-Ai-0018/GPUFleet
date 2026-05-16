@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 export type RouteName =
+  | "overview"
   | "onboarding"
   | "fleet"
   | "node-detail"
@@ -9,6 +10,7 @@ export type RouteName =
   | "security";
 
 export type Route =
+  | { name: "overview" }
   | { name: "onboarding" }
   | { name: "fleet" }
   | { name: "node-detail"; nodeId: string }
@@ -16,7 +18,7 @@ export type Route =
   | { name: "task-detail"; taskId: string }
   | { name: "security" };
 
-const DEFAULT_HASH = "#/onboarding";
+const DEFAULT_HASH = "#/overview";
 
 function parseHash(raw: string): Route {
   const trimmed = raw.replace(/^#\/?/, "").trim();
@@ -25,6 +27,8 @@ function parseHash(raw: string): Route {
   switch (head) {
     case undefined:
     case "":
+    case "overview":
+      return { name: "overview" };
     case "onboarding":
       return { name: "onboarding" };
     case "fleet":
@@ -40,12 +44,14 @@ function parseHash(raw: string): Route {
     case "security":
       return { name: "security" };
     default:
-      return { name: "onboarding" };
+      return { name: "overview" };
   }
 }
 
 export function buildHash(route: Route): string {
   switch (route.name) {
+    case "overview":
+      return "#/overview";
     case "onboarding":
       return "#/onboarding";
     case "fleet":

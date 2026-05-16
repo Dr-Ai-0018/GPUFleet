@@ -1,9 +1,8 @@
-import { type FormEvent, useCallback, useRef, useState, lazy, Suspense } from "react";
+import { type FormEvent, useCallback, useRef, useState } from "react";
 import { ApiError, api } from "../../api";
 import { motion } from "motion/react";
+import { ParticleField } from "../../ui/ParticleField";
 import styles from "./LoginScreen.module.css";
-
-const ParticleField = lazy(() => import("../../ui/ParticleField").then(m => ({ default: m.ParticleField })));
 
 type Props = {
   onAuthenticated: (token: string) => void;
@@ -44,10 +43,8 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
 
   return (
     <main className={styles.shell}>
-      {/* 3D particle background */}
-      <Suspense fallback={null}>
-        <ParticleField />
-      </Suspense>
+      {/* Background */}
+      <ParticleField />
 
       {/* Noise overlay */}
       <div className={styles.noise} aria-hidden />

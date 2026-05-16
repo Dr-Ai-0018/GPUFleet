@@ -8,6 +8,7 @@ import { NodeDetailView } from "../features/nodes/NodeDetailView";
 import { TasksView } from "../features/tasks/TasksView";
 import { TaskDetailView } from "../features/tasks/TaskDetailView";
 import { SecurityView } from "../features/observability/SecurityView";
+import { OverviewView } from "../features/overview/OverviewView";
 import { Button } from "../ui/Button";
 import { PageTransition } from "../ui/Motion";
 import styles from "./AppShell.module.css";
@@ -42,6 +43,12 @@ export function AppShell({ onLogout }: Props): JSX.Element {
 
   const navItems = useMemo<NavItem[]>(
     () => [
+      {
+        key: "overview",
+        to: { name: "overview" },
+        label: "总览",
+        icon: <NavIcon kind="overview" />,
+      },
       {
         key: "onboarding",
         to: { name: "onboarding" },
@@ -178,6 +185,9 @@ function Breadcrumb({ route }: { route: Route }): JSX.Element {
   const store = useConsoleStore();
   const trail: { label: string; to?: Route }[] = [];
   switch (route.name) {
+    case "overview":
+      trail.push({ label: "总览" });
+      break;
     case "onboarding":
       trail.push({ label: "节点接入" });
       break;
@@ -229,6 +239,8 @@ function Breadcrumb({ route }: { route: Route }): JSX.Element {
 function RouteOutlet({ route }: { route: Route }): JSX.Element {
   const content = (() => {
     switch (route.name) {
+      case "overview":
+        return <OverviewView />;
       case "onboarding":
         return <OnboardingView />;
       case "fleet":
@@ -253,9 +265,11 @@ function RouteOutlet({ route }: { route: Route }): JSX.Element {
 
 /* ─── Icons ─── */
 
-function NavIcon({ kind }: { kind: "onboarding" | "fleet" | "tasks" | "security" }): JSX.Element {
+function NavIcon({ kind }: { kind: "overview" | "onboarding" | "fleet" | "tasks" | "security" }): JSX.Element {
   const p = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (kind) {
+    case "overview":
+      return <svg {...p}><rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="3" rx="1" /><rect x="2" y="9" width="5" height="5" rx="1" /><rect x="9" y="7" width="5" height="7" rx="1" /></svg>;
     case "onboarding":
       return <svg {...p}><path d="M3 8h6" /><path d="M9 5l3 3-3 3" /><path d="M13 3v10" /></svg>;
     case "fleet":

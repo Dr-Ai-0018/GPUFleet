@@ -1,0 +1,186 @@
+/* Overview dashboard */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-size: var(--fs-22);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.serverTime {
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* KPI grid */
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.kpiCard {
+  padding: 16px 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.kpiCard:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--inset-highlight), var(--shadow-sm);
+}
+
+.kpiOnline { border-color: var(--c-online-border); }
+.kpiOnline .kpiValue { color: var(--c-online-fg); }
+
+.kpiDanger { border-color: var(--c-danger-border); }
+.kpiDanger .kpiValue { color: var(--c-danger-fg); }
+
+.kpiLabel {
+  font-size: var(--fs-11);
+  color: var(--text-mute);
+  font-weight: 500;
+}
+
+.kpiValue {
+  font-size: var(--fs-24);
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Charts */
+
+.chartsRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .chartsRow { grid-template-columns: 1fr; }
+}
+
+.chartCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px;
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
+}
+
+.chartTitle {
+  margin: 0 0 12px;
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chartEmpty {
+  height: 200px;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: var(--fs-12);
+}
+
+/* Recent tasks */
+
+.recentSection {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--inset-highlight), var(--shadow-xs);
+}
+
+.recentHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.recentTitle {
+  margin: 0;
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.recentEmpty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--fs-12);
+}
+
+.recentTable {
+  overflow-x: auto;
+}
+
+.recentTable table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-13);
+}
+
+.recentTable thead th {
+  text-align: left;
+  padding: 9px 14px;
+  font-size: var(--fs-11);
+  font-weight: 500;
+  color: var(--text-mute);
+  background: var(--bg-canvas);
+  border-bottom: 1px solid var(--border);
+}
+
+.recentTable tbody td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: middle;
+  color: var(--text-soft);
+}
+
+.recentTable tbody tr:last-child td { border-bottom: 0; }
+
+.recentTable tbody tr {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.recentTable tbody tr:hover { background: var(--bg-hover); }
+
+.cellMono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+
+.cellTime {
+  font-size: var(--fs-12);
+  color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
