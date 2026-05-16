@@ -1,16 +1,33 @@
 import type {
   AdminTaskDetail,
+  AdminTaskListItem,
   AuditEventView,
   DashboardOverview,
+  NodeCreatePayload,
   NodeCreateResponse,
   NodeResponse,
   SecurityWarningView,
+  TaskCreatePayload,
   TokenPair,
 } from "./types";
 
 const API_ROOT = "";
 
-async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
+class ApiError extends Error {
+  status: number;
+  body: string;
+  constructor(status: number, body: string) {
+    super(body || `HTTP ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  token?: string,
+): Promise<T> {
   const headers = new Headers(init.headers ?? {});
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
@@ -18,97 +35,105 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const response = await fetch(`${API_ROOT}${path}`, {
-    ...init,
-    headers,
-  });
+  const response = await fetch(`${API_ROOT}${path}`, { ...init, headers });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `HTTP ${response.status}`);
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { detail?: string };
+      if (parsed?.detail) detail = parsed.detail;
+    } catch {
+      /* keep raw text */
+    }
+    throw new ApiError(response.status, detail);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
-export function login(username: string, password: string): Promise<TokenPair> {
-  return request<TokenPair>("/api/admin/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
-}
+export { ApiError };
 
-export function getOverview(token: string): Promise<DashboardOverview> {
-  return request<DashboardOverview>("/api/admin/dashboard/overview", {}, token);
-}
-
-export function getNodes(token: string): Promise<NodeResponse[]> {
-  return request<NodeResponse[]>("/api/admin/nodes", {}, token);
-}
-
-export function createNode(
-  token: string,
-  payload: {
-    node_id: string;
-    display_name: string;
-    node_type: "physical" | "modal_runner" | "control_plane";
-    os_type?: "windows" | "linux" | null;
-    hostname?: string | null;
-    heartbeat_interval_sec?: number;
-    allowed_workdirs?: string[];
-    tags?: string[];
+export const api = {
+  login(username: string, password: string): Promise<TokenPair> {
+    return request<TokenPair>("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
   },
-): Promise<NodeCreateResponse> {
-  return request<NodeCreateResponse>(
-    "/api/admin/nodes",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
-    token,
-  );
-}
 
-export function getTaskDetail(token: string, taskId: string): Promise<AdminTaskDetail> {
-  return request<AdminTaskDetail>(`/api/admin/tasks/${taskId}`, {}, token);
-}
-
-export function createTask(
-  token: string,
-  payload: {
-    node_id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    workdir?: string | null;
-    env?: Record<string, string>;
-    requested_gpu_ids?: number[];
-    timeout_sec?: number | null;
-    kill_grace_sec?: number;
-    danger_level?: string;
+  getOverview(token: string): Promise<DashboardOverview> {
+    return request<DashboardOverview>("/api/admin/dashboard/overview", {}, token);
   },
-): Promise<AdminTaskDetail> {
-  return request<AdminTaskDetail>(
-    "/api/admin/tasks",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
-    token,
-  );
-}
 
-export function cancelTask(token: string, taskId: string): Promise<AdminTaskDetail> {
-  return request<AdminTaskDetail>(
-    `/api/admin/tasks/${taskId}/cancel`,
-    {
-      method: "POST",
-    },
-    token,
-  );
-}
+  getNodes(token: string): Promise<NodeResponse[]> {
+    return request<NodeResponse[]>("/api/admin/nodes", {}, token);
+  },
 
-export function getAuditEvents(token: string, limit = 50): Promise<AuditEventView[]> {
-  return request<AuditEventView[]>(`/api/admin/audit-events?limit=${limit}`, {}, token);
-}
+  createNode(token: string, payload: NodeCreatePayload): Promise<NodeCreateResponse> {
+    return request<NodeCreateResponse>(
+      "/api/admin/nodes",
+      { method: "POST", body: JSON.stringify(payload) },
+      token,
+    );
+  },
 
-export function getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {
-  return request<SecurityWarningView[]>(`/api/admin/security-warnings?limit=${limit}`, {}, token);
-}
+  enableNode(token: string, nodeId: string): Promise<NodeResponse> {
+    return request<NodeResponse>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}/enable`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  disableNode(token: string, nodeId: string): Promise<NodeResponse> {
+    return request<NodeResponse>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}/disable`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  listTasks(token: string): Promise<AdminTaskListItem[]> {
+    return request<AdminTaskListItem[]>("/api/admin/tasks", {}, token);
+  },
+
+  getTaskDetail(token: string, taskId: string): Promise<AdminTaskDetail> {
+    return request<AdminTaskDetail>(
+      `/api/admin/tasks/${encodeURIComponent(taskId)}`,
+      {},
+      token,
+    );
+  },
+
+  createTask(token: string, payload: TaskCreatePayload): Promise<AdminTaskDetail> {
+    return request<AdminTaskDetail>(
+      "/api/admin/tasks",
+      { method: "POST", body: JSON.stringify(payload) },
+      token,
+    );
+  },
+
+  cancelTask(token: string, taskId: string): Promise<AdminTaskDetail> {
+    return request<AdminTaskDetail>(
+      `/api/admin/tasks/${encodeURIComponent(taskId)}/cancel`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  getAuditEvents(token: string, limit = 50): Promise<AuditEventView[]> {
+    return request<AuditEventView[]>(
+      `/api/admin/audit-events?limit=${limit}`,
+      {},
+      token,
+    );
+  },
+
+  getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {
+    return request<SecurityWarningView[]>(
+      `/api/admin/security-warnings?limit=${limit}`,
+      {},
+      token,
+    );
+  },
+};

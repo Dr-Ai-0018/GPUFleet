@@ -1,0 +1,112 @@
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  min-height: 44px;
+  background: var(--bg-surface);
+}
+
+.head h2 {
+  margin: 0;
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tr-snug);
+}
+
+.sub {
+  margin: 3px 0 0;
+  font-size: var(--fs-12);
+  color: var(--text-mute);
+  line-height: var(--lh-snug);
+  max-width: 78ch;
+  font-weight: 400;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.body { padding: 16px; }
+.bodyFlush { padding: 0; }
+
+.titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.titleTag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--r-1);
+  background: var(--bg-input);
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+
+.actionsRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- Field grid ---------- */
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  overflow: hidden;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  min-width: 0;
+}
+
+.fieldLabel {
+  font-size: var(--fs-11);
+  color: var(--text-mute);
+  font-weight: 500;
+}
+
+.fieldValue {
+  font-size: var(--fs-13);
+  color: var(--text);
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.fieldValueMono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text);
+}
+
+.fieldHint {
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+}

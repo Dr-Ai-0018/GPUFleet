@@ -22,6 +22,9 @@ export type NodeStatusPreview = {
   task_runtime: Record<string, unknown>;
 };
 
+export type OnlineStatus = "online" | "offline" | "never_seen" | "disabled";
+export type OnboardingStatus = "awaiting_first_heartbeat" | "connected" | "disabled";
+
 export type DashboardNodeCard = {
   node_id: string;
   display_name: string;
@@ -33,8 +36,8 @@ export type DashboardNodeCard = {
   heartbeat_interval_sec: number;
   first_seen_at: string | null;
   last_seen_at: string | null;
-  onboarding_status: "awaiting_first_heartbeat" | "connected" | "disabled";
-  online_status: "online" | "offline" | "never_seen" | "disabled";
+  onboarding_status: OnboardingStatus;
+  online_status: OnlineStatus;
   latest_status: NodeStatusPreview | null;
   active_task: {
     task_id: string;
@@ -76,8 +79,8 @@ export type NodeResponse = {
   is_enabled: boolean;
   first_seen_at: string | null;
   last_seen_at: string | null;
-  connection_status: "online" | "offline" | "disabled" | "never_seen";
-  onboarding_status: "awaiting_first_heartbeat" | "connected" | "disabled";
+  connection_status: OnlineStatus;
+  onboarding_status: OnboardingStatus;
   created_at: string;
   updated_at: string;
 };
@@ -86,6 +89,22 @@ export type NodeCreateResponse = NodeResponse & {
   node_secret: string;
   signing_hint: string;
   onboarding: NodeOnboardingPackage;
+};
+
+export type AdminTaskListItem = {
+  task_id: string;
+  revision: number;
+  node_id: string;
+  type: string;
+  status: string;
+  workdir: string | null;
+  requested_gpu_ids: number[];
+  timeout_sec: number;
+  danger_level: string;
+  created_at: string;
+  claimed_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
 };
 
 export type AdminTaskLogView = {
@@ -112,20 +131,7 @@ export type AdminTaskResultSummary = {
   finished_at: string | null;
 };
 
-export type AdminTaskDetail = {
-  task_id: string;
-  revision: number;
-  node_id: string;
-  type: string;
-  status: string;
-  workdir: string | null;
-  requested_gpu_ids: number[];
-  timeout_sec: number;
-  danger_level: string;
-  created_at: string;
-  claimed_at: string | null;
-  started_at: string | null;
-  finished_at: string | null;
+export type AdminTaskDetail = AdminTaskListItem & {
   idempotency_key: string;
   payload: Record<string, unknown>;
   env: Record<string, string>;
@@ -155,4 +161,30 @@ export type SecurityWarningView = {
   command_excerpt: string | null;
   detail: Record<string, unknown>;
   created_at: string;
+};
+
+export type NodeType = "physical" | "modal_runner" | "control_plane";
+export type OsType = "windows" | "linux";
+
+export type NodeCreatePayload = {
+  node_id: string;
+  display_name: string;
+  node_type: NodeType;
+  os_type?: OsType | null;
+  hostname?: string | null;
+  heartbeat_interval_sec?: number;
+  allowed_workdirs?: string[];
+  tags?: string[];
+};
+
+export type TaskCreatePayload = {
+  node_id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  workdir?: string | null;
+  env?: Record<string, string>;
+  requested_gpu_ids?: number[];
+  timeout_sec?: number | null;
+  kill_grace_sec?: number;
+  danger_level?: string;
 };

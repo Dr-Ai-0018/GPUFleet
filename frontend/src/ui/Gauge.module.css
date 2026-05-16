@@ -1,0 +1,59 @@
+.gauge {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.svg {
+  display: block;
+  transform: rotate(-90deg);
+}
+
+.track {
+  stroke: var(--border-strong);
+}
+
+.value {
+  stroke: var(--ring-color, var(--text));
+  stroke-linecap: round;
+  transition: stroke-dashoffset 600ms var(--ease-out);
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.percent {
+  font-family: var(--font-display);
+  font-size: var(--fs-15);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tr-tight);
+  line-height: 1;
+}
+
+.percent .pct {
+  font-size: var(--fs-10);
+  color: var(--text-mute);
+  margin-left: 1px;
+}
+
+.label {
+  font-size: var(--fs-10);
+  letter-spacing: var(--tr-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 500;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+
+.tone_calm   { --ring-color: var(--text); }
+.tone_indigo { --ring-color: var(--c-running); }
+.tone_warm   { --ring-color: var(--c-waiting); }
+.tone_alert  { --ring-color: var(--c-danger); }

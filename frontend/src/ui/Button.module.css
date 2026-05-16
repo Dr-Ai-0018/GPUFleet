@@ -1,0 +1,98 @@
+/* Buttons follow Linear's height system: 24 / 28 / 32px. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--r-2);
+  font-weight: 500;
+  letter-spacing: var(--tr-normal);
+  white-space: nowrap;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+  user-select: none;
+  border: 1px solid transparent;
+  font-family: inherit;
+  position: relative;
+}
+
+.btn:disabled { cursor: not-allowed; opacity: 0.45; }
+.btn:focus-visible { outline-offset: 2px; }
+
+/* sizes */
+.size_sm { padding: 0 8px; font-size: var(--fs-12); height: 24px; }
+.size_md { padding: 0 12px; font-size: var(--fs-13); height: 28px; }
+.size_lg { padding: 0 16px; font-size: var(--fs-13); height: 32px; }
+
+/* ---------- Primary ---------- */
+.variant_primary {
+  background: var(--text);
+  color: var(--bg-app);
+  border-color: var(--text);
+  font-weight: 500;
+}
+.variant_primary:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+.variant_primary:active:not(:disabled) {
+  background: var(--text-soft);
+  border-color: var(--text-soft);
+}
+
+/* ---------- Accent (use only for the hero CTA) ---------- */
+.variant_accent {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.variant_accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.variant_accent:active:not(:disabled) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+/* ---------- Ghost (default secondary) ---------- */
+.variant_ghost {
+  background: var(--bg-surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.variant_ghost:hover:not(:disabled) {
+  background: var(--bg-elev);
+  border-color: var(--border-strong);
+}
+.variant_ghost:active:not(:disabled) {
+  background: var(--bg-surface-2);
+}
+
+/* ---------- Quiet (icon-button, link-like) ---------- */
+.variant_quiet {
+  background: transparent;
+  color: var(--text-mute);
+  border-color: transparent;
+}
+.variant_quiet:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+/* ---------- Danger ---------- */
+.variant_danger {
+  background: transparent;
+  color: var(--c-danger);
+  border-color: var(--c-danger-border);
+}
+.variant_danger:hover:not(:disabled) {
+  background: var(--c-danger-soft);
+  border-color: var(--c-danger);
+}
+
+/* leading + trailing slot color cues */
+.btn > svg { display: block; flex-shrink: 0; }

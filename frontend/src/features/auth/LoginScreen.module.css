@@ -1,0 +1,214 @@
+/* ============================================================
+ * Login screen
+ *
+ * A two-column slab. Left: identity statement. Right: form.
+ * No glow, no aurora. Hierarchy comes from typographic scale,
+ * a single hairline divider, and a quietly serifed wordmark.
+ * ============================================================ */
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--bg-app);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Decorative background — extremely subtle radial fade, used
+ * only to give the otherwise flat dark canvas faint depth. */
+.shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1200px 600px at 30% 0%, rgba(91, 141, 239, 0.04), transparent 60%),
+    radial-gradient(800px 400px at 100% 100%, rgba(255, 255, 255, 0.02), transparent 60%);
+  pointer-events: none;
+}
+
+.frame {
+  position: relative;
+  z-index: 1;
+  width: min(1080px, 100%);
+  margin: auto;
+  padding: 48px 32px;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+
+/* ---------- Aside: identity ---------- */
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brandMark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-1);
+  background: var(--text);
+  color: var(--bg-app);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: var(--fs-12);
+  font-family: var(--font-display);
+  letter-spacing: var(--tr-tight);
+}
+
+.brandName {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tr-snug);
+}
+
+.brandSep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+
+.brandTag {
+  font-size: var(--fs-11);
+  color: var(--text-mute);
+  font-family: var(--font-mono);
+  letter-spacing: var(--tr-wide);
+  text-transform: uppercase;
+}
+
+.headline {
+  margin: 0;
+  font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1.1;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tr-tight);
+  font-family: var(--font-display);
+  max-width: 14ch;
+}
+
+.headlineEm {
+  color: var(--text-mute);
+  font-weight: 500;
+}
+
+.lede {
+  font-size: var(--fs-14);
+  line-height: var(--lh-relaxed);
+  color: var(--text-mute);
+  margin: 0;
+  max-width: 44ch;
+}
+
+/* spec strip — three short feature lines, hairline-separated */
+
+.spec {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.specItem {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--bg-canvas);
+}
+
+.specLabel {
+  font-size: var(--fs-10);
+  letter-spacing: var(--tr-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+
+.specValue {
+  font-size: var(--fs-13);
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: var(--tr-snug);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Form panel ---------- */
+
+.panel {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-4);
+  padding: 28px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.eyebrow {
+  font-size: var(--fs-11);
+  letter-spacing: var(--tr-wide);
+  text-transform: uppercase;
+  color: var(--text-mute);
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+
+.title {
+  margin: 6px 0 6px;
+  font-size: var(--fs-20);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tr-tight);
+}
+
+.help {
+  margin: 0 0 18px;
+  color: var(--text-mute);
+  font-size: var(--fs-13);
+  line-height: var(--lh-snug);
+}
+
+.foot {
+  margin-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+  letter-spacing: 0;
+}
+
+.footMeta {
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 880px) {
+  .frame {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 40px 20px;
+  }
+  .spec { grid-template-columns: 1fr; }
+}

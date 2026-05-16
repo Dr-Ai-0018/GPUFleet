@@ -1,0 +1,106 @@
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+/* ---------- Secret strip ---------- */
+
+.secret {
+  display: grid;
+  gap: 8px;
+}
+
+.secretHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.secretLabel {
+  font-size: var(--fs-11);
+  letter-spacing: var(--tr-wide);
+  text-transform: uppercase;
+  color: var(--text-mute);
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+
+.secretActions {
+  display: flex;
+  gap: 6px;
+}
+
+.secretWrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.secretValue {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text);
+  padding: 8px 12px;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.secretMode {
+  border-left: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: var(--fs-11);
+  color: var(--text-mute);
+  background: var(--bg-surface-2);
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+}
+
+.secretHint {
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+  line-height: var(--lh-snug);
+}
+
+/* ---------- Steps list ---------- */
+
+.steps {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: step;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 12px;
+  counter-increment: step;
+  font-size: var(--fs-13);
+  line-height: var(--lh-snug);
+  color: var(--text-soft);
+}
+
+.step::before {
+  content: counter(step);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--text-mute);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  margin-top: 1px;
+}

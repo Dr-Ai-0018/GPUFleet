@@ -1,0 +1,146 @@
+/* =========================================================
+ * GPUFleet · Design Tokens
+ *
+ * Reference register: Linear, Vercel Dashboard, Datadog APM.
+ * Core principle: dense information, restrained palette,
+ * one decisive accent, fields deliver hierarchy via hairlines
+ * and surface elevation — never glow.
+ * ========================================================= */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------- Surfaces ---------- */
+  /* Five-step elevation: app < canvas < surface < surface-2 < elev */
+  --bg-app: #0a0b0f;
+  --bg-canvas: #0e1014;
+  --bg-surface: #13161c;
+  --bg-surface-2: #181c23;
+  --bg-elev: #1d2029;
+  --bg-input: #0d0f14;
+  --bg-terminal: #08090c;
+  --bg-hover: rgba(255, 255, 255, 0.025);
+  --bg-active: rgba(255, 255, 255, 0.045);
+  --bg-selected: rgba(91, 141, 239, 0.10);
+
+  /* ---------- Borders ---------- */
+  --border: #1f232b;
+  --border-strong: #2a2f3a;
+  --border-muted: #181c23;
+  --border-focus: #5b8def;
+
+  /* ---------- Text ---------- */
+  --text: #f0f2f5;
+  --text-soft: #c5c9d2;
+  --text-mute: #8a8f9a;
+  --text-faint: #5c616b;
+  --text-disabled: #3f434c;
+
+  /* ---------- Brand accent ---------- */
+  /* Used VERY rarely — primary CTA, focus ring, active nav indicator. */
+  --accent: #5b8def;
+  --accent-hover: #6f9bf2;
+  --accent-active: #4a7ee0;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(91, 141, 239, 0.12);
+  --accent-border: rgba(91, 141, 239, 0.32);
+
+  /* ---------- Status semantics ---------- */
+  --c-online: #4ade80;
+  --c-online-fg: #98ecb1;
+  --c-online-soft: rgba(74, 222, 128, 0.10);
+  --c-online-border: rgba(74, 222, 128, 0.28);
+
+  --c-waiting: #facc15;
+  --c-waiting-fg: #fbe27c;
+  --c-waiting-soft: rgba(250, 204, 21, 0.10);
+  --c-waiting-border: rgba(250, 204, 21, 0.28);
+
+  --c-offline: #8b8f99;
+  --c-offline-soft: rgba(139, 143, 153, 0.10);
+  --c-offline-border: rgba(139, 143, 153, 0.28);
+
+  --c-danger: #f87171;
+  --c-danger-fg: #fbacac;
+  --c-danger-soft: rgba(248, 113, 113, 0.10);
+  --c-danger-border: rgba(248, 113, 113, 0.28);
+
+  --c-running: #5b8def;
+  --c-running-soft: rgba(91, 141, 239, 0.12);
+  --c-running-border: rgba(91, 141, 239, 0.30);
+
+  /* ---------- Radii (small, geometric) ---------- */
+  --r-1: 3px;
+  --r-2: 5px;
+  --r-3: 7px;
+  --r-4: 10px;
+  --r-5: 12px;
+
+  /* ---------- Elevation ---------- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.40);
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--border-strong);
+
+  /* ---------- Type ---------- */
+  --font-ui:
+    "Inter", "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display:
+    "Inter Display", "Inter", -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+  --font-mono:
+    "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Cascadia Code", "Consolas",
+    ui-monospace, SFMono-Regular, monospace;
+
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-17: 17px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-28: 28px;
+
+  /* Tracking */
+  --tr-tight: -0.015em;
+  --tr-snug: -0.005em;
+  --tr-normal: 0;
+  --tr-wide: 0.04em;
+
+  /* Line heights */
+  --lh-1: 1;
+  --lh-tight: 1.2;
+  --lh-snug: 1.4;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.6;
+
+  /* ---------- Spacing (4px grid) ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---------- Layout ---------- */
+  --side-rail: 232px;
+  --topbar-h: 52px;
+  --content-max: 1440px;
+  --content-pad: 24px;
+
+  /* ---------- Motion ---------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+}
