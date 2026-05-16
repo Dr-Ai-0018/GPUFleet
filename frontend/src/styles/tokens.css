@@ -1,54 +1,54 @@
 /* =========================================================
  * GPUFleet · Design Tokens
  *
- * Reference register: Linear, Vercel, Datadog, Resend.
- * Dense information · single decisive accent · hairline
- * elevation · numeric tabular type · zero glow.
+ * Reference: a private infrastructure control plane.
+ * Calm, severe, dense. Hierarchy from scale, weight,
+ * spacing — not from ornament.
  * ========================================================= */
 
 :root {
   color-scheme: dark;
 
-  /* ---------- Surfaces (six-step elevation) ---------- */
+  /* ---------- Surfaces ---------- */
   --bg-app: #07080b;
-  --bg-canvas: #0b0d12;
-  --bg-surface: #11141a;
-  --bg-surface-2: #161a22;
-  --bg-elev: #1c2029;
-  --bg-elev-2: #232834;
-  --bg-input: #0c0e13;
+  --bg-canvas: #0a0c11;
+  --bg-surface: #10131a;
+  --bg-surface-2: #151922;
+  --bg-elev: #1b202b;
+  --bg-elev-2: #232a37;
+  --bg-input: #0c0e14;
   --bg-terminal: #06070a;
 
-  --bg-hover: rgba(255, 255, 255, 0.035);
-  --bg-active: rgba(255, 255, 255, 0.06);
+  --bg-hover: rgba(255, 255, 255, 0.03);
+  --bg-active: rgba(255, 255, 255, 0.055);
   --bg-selected: rgba(99, 152, 255, 0.10);
 
-  /* ambient washes for the canvas — used very sparingly */
+  /* ambient washes — only at the application root */
   --wash-1: radial-gradient(
     1100px 540px at 18% -4%,
-    rgba(99, 152, 255, 0.045),
+    rgba(99, 152, 255, 0.04),
     transparent 60%
   );
   --wash-2: radial-gradient(
     900px 480px at 100% 0%,
-    rgba(140, 110, 255, 0.035),
+    rgba(140, 110, 255, 0.025),
     transparent 60%
   );
 
   /* ---------- Borders ---------- */
-  --border: #1d212a;
-  --border-strong: #2b3140;
+  --border: #1c2029;
+  --border-strong: #2a303d;
   --border-muted: #161a22;
   --border-focus: #6398ff;
 
   /* ---------- Text ---------- */
   --text: #f4f6fa;
-  --text-soft: #c9cdd6;
-  --text-mute: #8b909c;
-  --text-faint: #5a5f6b;
-  --text-disabled: #3a3e48;
+  --text-soft: #c8ccd5;
+  --text-mute: #868a96;
+  --text-faint: #565a66;
+  --text-disabled: #393c45;
 
-  /* ---------- Accent (use sparingly) ---------- */
+  /* ---------- Accent ---------- */
   --accent: #6398ff;
   --accent-hover: #7aa9ff;
   --accent-active: #4f86ee;
@@ -67,14 +67,14 @@
   --c-waiting-soft: rgba(245, 185, 74, 0.10);
   --c-waiting-border: rgba(245, 185, 74, 0.30);
 
-  --c-offline: #8b909c;
-  --c-offline-soft: rgba(139, 144, 156, 0.10);
-  --c-offline-border: rgba(139, 144, 156, 0.28);
+  --c-offline: #868a96;
+  --c-offline-soft: rgba(134, 138, 150, 0.10);
+  --c-offline-border: rgba(134, 138, 150, 0.28);
 
   --c-danger: #ff6b6b;
   --c-danger-fg: #ffa5a5;
   --c-danger-soft: rgba(255, 107, 107, 0.10);
-  --c-danger-border: rgba(255, 107, 107, 0.30);
+  --c-danger-border: rgba(255, 107, 107, 0.32);
 
   --c-running: #6398ff;
   --c-running-soft: rgba(99, 152, 255, 0.12);
@@ -97,8 +97,6 @@
   --ring-focus: 0 0 0 3px rgba(99, 152, 255, 0.22);
 
   /* ---------- Typography ---------- */
-  /* Inter for UI, JetBrains Mono for monospace.
-     CJK falls through to PingFang SC / Microsoft YaHei. */
   --font-ui:
     "Inter", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
     "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont,
@@ -125,8 +123,8 @@
   --fs-28: 28px;
   --fs-32: 32px;
   --fs-40: 40px;
+  --fs-48: 48px;
 
-  /* Tracking */
   --tr-tightest: -0.025em;
   --tr-tight: -0.015em;
   --tr-snug: -0.005em;
@@ -134,14 +132,12 @@
   --tr-wide: 0.04em;
   --tr-widest: 0.08em;
 
-  /* Line heights */
   --lh-1: 1;
   --lh-tight: 1.15;
   --lh-snug: 1.4;
   --lh-normal: 1.55;
   --lh-relaxed: 1.65;
 
-  /* ---------- Spacing (4px grid) ---------- */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -154,13 +150,11 @@
   --sp-12: 48px;
   --sp-16: 64px;
 
-  /* ---------- Layout ---------- */
-  --side-rail: 240px;
+  --side-rail: 232px;
   --topbar-h: 56px;
   --content-max: 1480px;
   --content-pad: 32px;
 
-  /* ---------- Motion ---------- */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);

@@ -18,11 +18,12 @@
   flex-direction: column;
   padding: 14px 12px 12px;
   border-right: 1px solid var(--border);
-  background: linear-gradient(
-    180deg,
-    rgba(15, 18, 24, 0.95) 0%,
-    rgba(11, 13, 18, 0.95) 100%
-  );
+  background:
+    linear-gradient(
+      180deg,
+      rgba(13, 16, 22, 0.96) 0%,
+      rgba(8, 10, 14, 0.96) 100%
+    );
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -32,14 +33,15 @@
   align-items: center;
   gap: 10px;
   padding: 4px 6px 18px;
-  position: relative;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
 }
 
 .brandMark {
   width: 26px;
   height: 26px;
   border-radius: var(--r-2);
-  background: linear-gradient(135deg, #ffffff 0%, #d2d6df 100%);
+  background: linear-gradient(135deg, #ffffff 0%, #c9cdd6 100%);
   color: var(--bg-app);
   display: grid;
   place-items: center;
@@ -49,7 +51,7 @@
   letter-spacing: var(--tr-tightest);
   flex-shrink: 0;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
     0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
@@ -73,8 +75,8 @@
 
 .navSection {
   display: grid;
-  gap: 2px;
-  padding: 10px 0 8px;
+  gap: 1px;
+  padding: 8px 0 8px;
 }
 
 .navLabel {
@@ -83,7 +85,7 @@
   text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 500;
-  padding: 6px 10px 8px;
+  padding: 8px 10px 6px;
   font-family: var(--font-mono);
 }
 
@@ -102,7 +104,7 @@
     color var(--dur-fast) var(--ease-out);
   font-size: var(--fs-13);
   font-weight: 500;
-  height: 32px;
+  height: 30px;
 }
 
 .navItem:hover {
@@ -116,18 +118,6 @@
   font-weight: 600;
 }
 
-/* Active item rail indicator */
-.navItemActive::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  top: 6px;
-  bottom: 6px;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent);
-}
-
 .navIcon {
   width: 16px;
   height: 16px;
@@ -135,7 +125,7 @@
   place-items: center;
   color: currentColor;
   flex-shrink: 0;
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
 .navItemActive .navIcon { opacity: 1; }
@@ -151,8 +141,8 @@
   font-size: var(--fs-10);
   font-weight: 600;
   padding: 0 6px;
-  height: 17px;
-  border-radius: var(--r-pill);
+  height: 16px;
+  border-radius: var(--r-1);
   background: var(--bg-elev);
   color: var(--text-soft);
   font-variant-numeric: tabular-nums;
@@ -165,33 +155,30 @@
 .navBadgeWarn {
   background: var(--c-waiting-soft);
   color: var(--c-waiting-fg);
-  border: 1px solid var(--c-waiting-border);
 }
 
 .navBadgeMute {
   background: var(--c-offline-soft);
   color: var(--c-offline);
-  border: 1px solid var(--c-offline-border);
 }
 
 .navBadgeDanger {
   background: var(--c-danger-soft);
   color: var(--c-danger-fg);
-  border: 1px solid var(--c-danger-border);
 }
 
-/* sidebar foot summary */
+/* sidebar foot — fleet pulse */
 
 .foot {
   margin-top: auto;
-  padding-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
 .summary {
   display: grid;
-  gap: 8px;
-  padding: 10px 8px;
+  gap: 0;
+  padding: 6px 4px 2px;
 }
 
 .summaryHead {
@@ -204,23 +191,24 @@
   color: var(--text-faint);
   font-weight: 500;
   font-family: var(--font-mono);
-  margin-bottom: 4px;
+  padding: 6px 6px 8px;
 }
 
 .summaryHead span:last-child {
-  color: var(--text-soft);
+  color: var(--text);
   font-family: var(--font-display);
-  font-weight: 600;
-  font-size: var(--fs-13);
+  font-weight: 700;
+  font-size: var(--fs-14);
   letter-spacing: var(--tr-tight);
 }
 
 .summaryRow {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   font-size: var(--fs-12);
   color: var(--text-mute);
+  padding: 5px 6px;
 }
 
 .summaryRow strong {
@@ -241,7 +229,10 @@
   vertical-align: middle;
 }
 
-.summaryDotOnline { background: var(--c-online); }
+.summaryDotOnline {
+  background: var(--c-online);
+  box-shadow: 0 0 0 3px var(--c-online-soft);
+}
 .summaryDotWaiting { background: var(--c-waiting); }
 .summaryDotOffline { background: var(--c-offline); }
 
@@ -266,7 +257,7 @@
   gap: 12px;
   padding: 0 var(--content-pad);
   height: var(--topbar-h);
-  background: rgba(7, 8, 11, 0.72);
+  background: rgba(7, 8, 11, 0.78);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--border);
@@ -277,6 +268,55 @@
   align-items: center;
   gap: 8px;
 }
+
+/* live fleet pulse — operational presence in the topbar */
+.fleetPulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  height: 32px;
+  border-radius: var(--r-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  font-size: var(--fs-12);
+  color: var(--text-mute);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tr-snug);
+}
+
+.fleetPulse strong {
+  color: var(--text);
+  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: var(--fs-13);
+  letter-spacing: var(--tr-tight);
+}
+
+.fleetPulseDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
+
+.fleetPulseSeg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.fleetDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.fleetDotOnline {
+  background: var(--c-online);
+  box-shadow: 0 0 0 3px var(--c-online-soft);
+}
+.fleetDotWait { background: var(--c-waiting); }
+.fleetDotOff  { background: var(--c-offline); }
 
 .clock {
   display: inline-flex;
@@ -290,13 +330,6 @@
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
   letter-spacing: 0;
-}
-
-.clockDivider {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  margin: 0 2px;
 }
 
 .syncChip {
@@ -411,7 +444,7 @@
     padding: 10px 16px;
     gap: 8px;
   }
-  .brand { padding: 4px 8px; }
+  .brand { padding: 4px 8px; border-bottom: 0; margin-bottom: 0; }
   .navSection {
     flex-direction: row;
     flex: 1 1 auto;
@@ -421,12 +454,11 @@
   }
   .navLabel { display: none; }
   .navItem { height: 32px; padding: 0 12px; }
-  .navItemActive::before { display: none; }
   .foot { display: none; }
 }
 
 @media (max-width: 720px) {
   .topbar { padding: 0 16px; }
   .content { padding: 20px 16px 64px; }
-  .clock { display: none; }
+  .clock, .fleetPulse { display: none; }
 }

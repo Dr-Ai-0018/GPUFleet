@@ -4,13 +4,10 @@ import { navigate } from "../../lib/routing";
 import type { NodeCreateResponse } from "../../types";
 import { NodeCreatePanel } from "./NodeCreatePanel";
 import { OnboardingPackagePanel } from "./OnboardingPackagePanel";
-import { Card } from "../../ui/Card";
 import { StatusPill } from "../../ui/StatusPill";
-import { EmptyState } from "../../ui/EmptyState";
 import { Button } from "../../ui/Button";
 import { connectionLabel, connectionTone, onboardingLabel, onboardingTone } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
-import page from "../../ui/page.module.css";
 import styles from "./OnboardingView.module.css";
 
 export function OnboardingView(): JSX.Element {
@@ -22,35 +19,75 @@ export function OnboardingView(): JSX.Element {
     [store.nodes],
   );
 
+  const total = store.nodes.length;
+  const online = store.nodes.filter((n) => n.connection_status === "online").length;
+  const offline = store.nodes.filter((n) => n.connection_status === "offline").length;
+
+  // Process ribbon stage logic — drives the visual narrative without prose
+  const stage: 1 | 2 | 3 = !pkg
+    ? 1
+    : awaiting.some((n) => n.node_id === pkg.node_id)
+      ? 2
+      : 3;
+
   return (
     <div className={styles.page}>
-      <header className={styles.head}>
-        <div className={styles.headTitle}>
-          <div className={page.eyebrow}>ONBOARDING · 主流程</div>
-          <h1 className={page.title}>先把节点拉上线</h1>
-          <p className={page.lede}>
-            创建节点会立即生成签名密钥与接入包；只有收到首个有效心跳，节点才进入在线状态。
-          </p>
+      <header className={styles.hero}>
+        <div className={styles.heroLeft}>
+          <span className={styles.heroEyebrow}>
+            <span className={styles.heroEyebrowDot} aria-hidden />
+            ONBOARDING
+          </span>
+          <h1 className={styles.heroTitle}>节点接入</h1>
         </div>
-        <KeyMetrics />
+        <div className={styles.kpiBand} aria-label="fleet overview">
+          <div className={styles.kpi}>
+            <span className={styles.kpiLabel}>
+              <span className={`${styles.kpiDot} ${styles.kpiDotMuted}`} />
+              FLEET
+            </span>
+            <span className={`${styles.kpiValue} ${total === 0 ? styles.kpiValueMuted : ""}`}>{total}</span>
+          </div>
+          <div className={styles.kpi}>
+            <span className={styles.kpiLabel}>
+              <span className={`${styles.kpiDot} ${styles.kpiDotOnline}`} />
+              ONLINE
+            </span>
+            <span className={`${styles.kpiValue} ${online === 0 ? styles.kpiValueMuted : ""}`}>{online}</span>
+          </div>
+          <div className={styles.kpi}>
+            <span className={styles.kpiLabel}>
+              <span className={`${styles.kpiDot} ${styles.kpiDotWaiting}`} />
+              AWAITING
+            </span>
+            <span className={`${styles.kpiValue} ${awaiting.length === 0 ? styles.kpiValueMuted : ""}`}>
+              {awaiting.length}
+            </span>
+          </div>
+          <div className={styles.kpi}>
+            <span className={styles.kpiLabel}>
+              <span className={`${styles.kpiDot} ${styles.kpiDotOffline}`} />
+              OFFLINE
+            </span>
+            <span className={`${styles.kpiValue} ${offline === 0 ? styles.kpiValueMuted : ""}`}>{offline}</span>
+          </div>
+        </div>
       </header>
 
-      <section className={styles.grid2}>
+      <ProcessRibbon stage={stage} />
+
+      <section className={styles.workspace}>
         <NodeCreatePanel onCreated={setPkg} />
         <OnboardingPackagePanel pkg={pkg} />
       </section>
 
-      <Card
-        title="待接入清单"
-        subtitle="已在控制平面登记，但还没收到首个有效心跳。"
-        actions={<span className="muted tabular">{awaiting.length} 个节点</span>}
-        bodyFlush={awaiting.length > 0}
-      >
+      <section className={styles.ledger}>
+        <header className={styles.ledgerHead}>
+          <span className={styles.ledgerTitle}>待首次心跳</span>
+          <span className={styles.ledgerCount}>{awaiting.length} pending</span>
+        </header>
         {awaiting.length === 0 ? (
-          <EmptyState
-            title="目前没有挂起的接入"
-            description="所有已登记节点都已完成首次签名心跳。新建节点会出现在这里。"
-          />
+          <div className={styles.ledgerEmpty}>NO PENDING NODES</div>
         ) : (
           <ul className={styles.awaitingList}>
             {awaiting.map((node) => (
@@ -61,10 +98,12 @@ export function OnboardingView(): JSX.Element {
                     <code className={styles.awaitingId}>{node.node_id}</code>
                   </div>
                   <div className={styles.awaitingMeta}>
-                    <span>创建于 {formatRelative(node.created_at)}</span>
+                    <span>登记于 {formatRelative(node.created_at)}</span>
+                    <span>·</span>
+                    <span>心跳 {node.heartbeat_interval_sec}s</span>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
+                <div className={styles.awaitingPills}>
                   <StatusPill
                     tone={onboardingTone[node.onboarding_status]}
                     label={onboardingLabel[node.onboarding_status]}
@@ -86,34 +125,59 @@ export function OnboardingView(): JSX.Element {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     </div>
   );
 }
 
-function KeyMetrics(): JSX.Element {
-  const store = useConsoleStore();
-  const total = store.nodes.length;
-  const awaiting = store.nodes.filter((n) => n.onboarding_status === "awaiting_first_heartbeat").length;
-  const online = store.nodes.filter((n) => n.connection_status === "online").length;
-  const offline = store.nodes.filter((n) => n.connection_status === "offline").length;
-  const items: { label: string; value: number; dot: string }[] = [
-    { label: "TOTAL", value: total, dot: styles.metricDotMuted },
-    { label: "ONLINE", value: online, dot: styles.metricDotOnline },
-    { label: "AWAITING", value: awaiting, dot: styles.metricDotWaiting },
-    { label: "OFFLINE", value: offline, dot: styles.metricDotOffline },
+function ProcessRibbon({ stage }: { stage: 1 | 2 | 3 }): JSX.Element {
+  const stages: { label: string; title: string }[] = [
+    { label: "STAGE 01", title: "登记节点 · 下发密钥" },
+    { label: "STAGE 02", title: "写入接入包 · 启动 agent" },
+    { label: "STAGE 03", title: "首次签名心跳 · 上线" },
   ];
   return (
-    <div className={styles.metricStrip}>
-      {items.map((item) => (
-        <div key={item.label} className={styles.metric}>
-          <span className={styles.metricLabel}>
-            <i className={`${styles.metricDot} ${item.dot}`} />
-            {item.label}
-          </span>
-          <span className={styles.metricValue}>{item.value}</span>
-        </div>
-      ))}
+    <div className={styles.ribbon}>
+      {stages.map((s, idx) => {
+        const num = (idx + 1) as 1 | 2 | 3;
+        const isDone = stage > num;
+        const isActive = stage === num;
+        const cls = [
+          styles.stage,
+          isActive ? styles.stageActive : "",
+          isDone ? styles.stageDone : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return (
+          <div key={s.label} className={cls}>
+            <div className={styles.stageBadge} aria-hidden>
+              {isDone ? <CheckIcon /> : String(num).padStart(2, "0")}
+            </div>
+            <div className={styles.stageBody}>
+              <span className={styles.stageLabel}>{s.label}</span>
+              <span className={styles.stageTitle}>{s.title}</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
+  );
+}
+
+function CheckIcon(): JSX.Element {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3.5 8.5l3 3 6-6" />
+    </svg>
   );
 }

@@ -108,14 +108,14 @@
 
 .headline {
   margin: 0;
-  font-size: clamp(32px, 4vw, 48px);
-  line-height: 1.05;
+  font-size: clamp(36px, 4.4vw, 52px);
+  line-height: 1.04;
   font-weight: 700;
   color: var(--text);
   letter-spacing: var(--tr-tightest);
   font-family: var(--font-display);
-  font-variation-settings: "opsz" 40;
-  max-width: 14ch;
+  font-variation-settings: "opsz" 48;
+  max-width: 18ch;
 }
 
 .headlineEm {
@@ -124,11 +124,7 @@
 }
 
 .lede {
-  font-size: var(--fs-14);
-  line-height: var(--lh-relaxed);
-  color: var(--text-mute);
-  margin: 0;
-  max-width: 44ch;
+  display: none;
 }
 
 /* spec strip — three short feature lines, hairline-separated */
@@ -217,10 +213,7 @@
 }
 
 .help {
-  margin: 0 0 22px;
-  color: var(--text-mute);
-  font-size: var(--fs-13);
-  line-height: var(--lh-snug);
+  display: none;
 }
 
 .foot {

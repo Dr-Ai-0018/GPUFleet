@@ -2,10 +2,8 @@ import { useMemo, useState } from "react";
 import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import type { NodeResponse, OnboardingStatus, OnlineStatus } from "../../types";
-import { EmptyState } from "../../ui/EmptyState";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
-import { Card } from "../../ui/Card";
 import {
   connectionLabel,
   connectionTone,
@@ -15,18 +13,19 @@ import {
   osLabel,
 } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
-import page from "../../ui/page.module.css";
 import forms from "../../ui/forms.module.css";
 import styles from "./FleetView.module.css";
 
 type ConnectionFilter = "all" | OnlineStatus;
 type OnboardingFilter = "all" | OnboardingStatus;
+type ViewMode = "table" | "grid";
 
 export function FleetView(): JSX.Element {
   const store = useConsoleStore();
   const [query, setQuery] = useState("");
   const [connectionFilter, setConnectionFilter] = useState<ConnectionFilter>("all");
   const [onboardingFilter, setOnboardingFilter] = useState<OnboardingFilter>("all");
+  const [view, setView] = useState<ViewMode>("table");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -42,23 +41,25 @@ export function FleetView(): JSX.Element {
   }, [store.nodes, connectionFilter, onboardingFilter, query]);
 
   return (
-    <div className={page.page}>
-      <header className={page.head}>
-        <div className={page.titleBlock}>
-          <div className={page.eyebrow}>FLEET</div>
-          <h1 className={page.title}>节点舰队</h1>
-          <p className={page.lede}>实时观察每个节点的接入与连接状态。</p>
+    <div className={styles.page}>
+      <header className={styles.hero}>
+        <div className={styles.heroLeft}>
+          <span className={styles.heroEyebrow}>
+            <span className={styles.heroEyebrowDot} aria-hidden />
+            FLEET
+          </span>
+          <h1 className={styles.heroTitle}>节点舰队</h1>
         </div>
-        <div className={page.actions}>
-          <Button variant="accent" onClick={() => navigate({ name: "onboarding" })}>
-            创建新节点
+        <div className={styles.heroActions}>
+          <Button variant="ghost" onClick={() => navigate({ name: "onboarding" })}>
+            登记新节点
           </Button>
         </div>
       </header>
 
-      <div className={styles.filterBar}>
-        <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>Conn</span>
+      <div className={styles.strip}>
+        <div className={styles.stripGroup}>
+          <span className={styles.stripLabel}>CONN</span>
           <SegmentedControl<ConnectionFilter>
             value={connectionFilter}
             onChange={setConnectionFilter}
@@ -71,9 +72,8 @@ export function FleetView(): JSX.Element {
             ]}
           />
         </div>
-        <span className={styles.filterDivider} aria-hidden />
-        <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>Onboard</span>
+        <div className={styles.stripGroup}>
+          <span className={styles.stripLabel}>ONBOARD</span>
           <SegmentedControl<OnboardingFilter>
             value={onboardingFilter}
             onChange={setOnboardingFilter}
@@ -89,34 +89,46 @@ export function FleetView(): JSX.Element {
           <SearchIcon className={styles.searchIcon} />
           <input
             className={styles.searchInput}
-            placeholder="按名称、node_id、主机名或标签查找"
+            placeholder="按 名称 / node_id / 主机名 / 标签 检索"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <span className={styles.filterCount}>
-          {filtered.length}<span className="muted"> / {store.nodes.length}</span>
+        <span className={styles.stripCount}>
+          <strong>{filtered.length}</strong> / {store.nodes.length}
         </span>
+        <div className={styles.viewToggle} role="tablist" aria-label="view">
+          <button
+            type="button"
+            className={`${styles.viewBtn}${view === "table" ? ` ${styles.viewBtnActive}` : ""}`}
+            onClick={() => setView("table")}
+          >
+            <RowsIcon /> TABLE
+          </button>
+          <button
+            type="button"
+            className={`${styles.viewBtn}${view === "grid" ? ` ${styles.viewBtnActive}` : ""}`}
+            onClick={() => setView("grid")}
+          >
+            <GridIcon /> GRID
+          </button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
-        <Card>
-          <EmptyState
-            title="没有符合条件的节点"
-            description={
-              store.nodes.length === 0
-                ? "控制平面尚未登记任何节点。先去创建一个，再回这里看舰队总览。"
-                : "调整一下筛选条件，或回到节点接入再加一个。"
-            }
-            action={
-              store.nodes.length === 0 ? (
-                <Button variant="accent" onClick={() => navigate({ name: "onboarding" })}>
-                  去创建节点
-                </Button>
-              ) : null
-            }
-          />
-        </Card>
+        <div className={styles.empty}>
+          <span className={styles.emptyMeta}>NO MATCHING NODES</span>
+          <span className={styles.emptyTitle}>
+            {store.nodes.length === 0 ? "舰队为空" : "无匹配结果"}
+          </span>
+          {store.nodes.length === 0 ? (
+            <Button variant="accent" onClick={() => navigate({ name: "onboarding" })}>
+              去登记节点
+            </Button>
+          ) : null}
+        </div>
+      ) : view === "table" ? (
+        <FleetTable nodes={filtered} />
       ) : (
         <div className={styles.grid}>
           {filtered.map((node) => (
@@ -127,6 +139,97 @@ export function FleetView(): JSX.Element {
     </div>
   );
 }
+
+/* ---------- Table view ---------- */
+
+function FleetTable({ nodes }: { nodes: NodeResponse[] }): JSX.Element {
+  return (
+    <div className={styles.tableWrap}>
+      <div style={{ overflowX: "auto" }}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>NODE</th>
+              <th>STATE</th>
+              <th>ROLE / OS</th>
+              <th>HOSTNAME</th>
+              <th>HEARTBEAT</th>
+              <th>FIRST · LAST</th>
+              <th>TAGS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {nodes.map((node) => (
+              <tr
+                key={node.node_id}
+                className={styles.row}
+                onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
+              >
+                <td>
+                  <div className={styles.cellNode}>
+                    <span className={styles.cellNodeName}>{node.display_name}</span>
+                    <code className={styles.cellNodeId}>{node.node_id}</code>
+                  </div>
+                </td>
+                <td>
+                  <div className={styles.statusStack}>
+                    <StatusPill
+                      tone={connectionTone[node.connection_status]}
+                      label={connectionLabel[node.connection_status]}
+                      pulse={node.connection_status === "online"}
+                    />
+                    <StatusPill
+                      tone={onboardingTone[node.onboarding_status]}
+                      label={onboardingLabel[node.onboarding_status]}
+                      pulse={node.onboarding_status === "awaiting_first_heartbeat"}
+                      subtle
+                    />
+                  </div>
+                </td>
+                <td>
+                  <span className={styles.cellMeta}>
+                    {nodeTypeLabel[node.node_type] ?? node.node_type}
+                  </span>
+                  {node.os_type ? (
+                    <span className={styles.cellMetaSub}>{osLabel[node.os_type] ?? node.os_type}</span>
+                  ) : null}
+                </td>
+                <td>
+                  <span className={styles.cellHostname}>{node.hostname ?? "—"}</span>
+                </td>
+                <td>
+                  <span className={styles.cellMeta}>{node.heartbeat_interval_sec}s</span>
+                </td>
+                <td>
+                  <span className={styles.cellTime}>
+                    {node.first_seen_at ? formatRelative(node.first_seen_at) : "—"}
+                  </span>
+                  <span className={styles.cellMetaSub}>
+                    {node.last_seen_at ? formatRelative(node.last_seen_at) : "尚未"}
+                  </span>
+                </td>
+                <td>
+                  <div className={styles.tags}>
+                    {node.tags.slice(0, 4).map((tag) => (
+                      <span key={tag} className={styles.tag}>
+                        {tag}
+                      </span>
+                    ))}
+                    {node.tags.length > 4 ? (
+                      <span className={styles.tag}>+{node.tags.length - 4}</span>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Grid view ---------- */
 
 function FleetCard({ node }: { node: NodeResponse }): JSX.Element {
   return (
@@ -141,7 +244,6 @@ function FleetCard({ node }: { node: NodeResponse }): JSX.Element {
           navigate({ name: "node-detail", nodeId: node.node_id });
         }
       }}
-      style={{ cursor: "pointer" }}
     >
       <div className={styles.cardHead}>
         <div className={styles.cardTitleBlock}>
@@ -169,41 +271,29 @@ function FleetCard({ node }: { node: NodeResponse }): JSX.Element {
 
       <dl className={styles.cardSpec}>
         <div className={styles.specCell}>
-          <dt className={styles.specLabel}>Hostname</dt>
+          <dt className={styles.specLabel}>HOSTNAME</dt>
           <dd className={styles.specValue}>{node.hostname ?? "—"}</dd>
         </div>
         <div className={styles.specCell}>
-          <dt className={styles.specLabel}>Heartbeat</dt>
+          <dt className={styles.specLabel}>HEARTBEAT</dt>
           <dd className={styles.specValue}>{node.heartbeat_interval_sec}s</dd>
         </div>
         <div className={styles.specCell}>
-          <dt className={styles.specLabel}>Last seen</dt>
-          <dd className={styles.specValue}>{formatRelative(node.last_seen_at)}</dd>
-        </div>
-        <div className={styles.specCell}>
-          <dt className={styles.specLabel}>First seen</dt>
+          <dt className={styles.specLabel}>FIRST SEEN</dt>
           <dd className={styles.specValue}>
             {node.first_seen_at ? formatRelative(node.first_seen_at) : "尚未"}
           </dd>
         </div>
-      </dl>
-
-      <div className={styles.cardFoot}>
-        <div className={styles.tagRow}>
-          {node.tags.slice(0, 4).map((tag) => (
-            <span key={tag} className={styles.tag}>
-              {tag}
-            </span>
-          ))}
-          {node.tags.length > 4 ? (
-            <span className={styles.tag}>+{node.tags.length - 4}</span>
-          ) : null}
+        <div className={styles.specCell}>
+          <dt className={styles.specLabel}>LAST SEEN</dt>
+          <dd className={styles.specValue}>{formatRelative(node.last_seen_at)}</dd>
         </div>
-        <span className="muted" style={{ fontSize: "var(--fs-11)" }}>查看详情 →</span>
-      </div>
+      </dl>
     </article>
   );
 }
+
+/* ---------- Helpers ---------- */
 
 function SegmentedControl<T extends string>({
   value,
@@ -245,6 +335,25 @@ function SearchIcon({ className }: { className?: string }): JSX.Element {
     >
       <circle cx="7" cy="7" r="4.5" />
       <path d="M11 11l3 3" />
+    </svg>
+  );
+}
+
+function RowsIcon(): JSX.Element {
+  return (
+    <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GridIcon(): JSX.Element {
+  return (
+    <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="2.5" y="9" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="0.5" />
     </svg>
   );
 }

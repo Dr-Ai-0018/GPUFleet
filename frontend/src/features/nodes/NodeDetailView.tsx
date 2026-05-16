@@ -19,7 +19,7 @@ import {
 } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 import { TaskComposer } from "../tasks/TaskComposer";
-import type { DashboardNodeCard } from "../../types";
+import type { DashboardNodeCard, NodeResponse } from "../../types";
 import page from "../../ui/page.module.css";
 import styles from "./NodeDetailView.module.css";
 import fleet from "./FleetView.module.css";
@@ -41,17 +41,15 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   if (!node) {
     return (
       <div className={page.page}>
-        <Card>
-          <EmptyState
-            title="未找到节点"
-            description={`节点 ${nodeId} 不在当前列表里，可能已被删除或正在同步。`}
-            action={
-              <Button variant="accent" onClick={() => navigate({ name: "fleet" })}>
-                返回舰队
-              </Button>
-            }
-          />
-        </Card>
+        <EmptyState
+          title="未找到节点"
+          description={`节点 ${nodeId} 不在当前列表里。`}
+          action={
+            <Button variant="accent" onClick={() => navigate({ name: "fleet" })}>
+              返回舰队
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -88,8 +86,6 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     node.connection_status === "online" &&
     node.onboarding_status === "connected";
 
-  const guardCopy = guardMessage(node.connection_status, node.onboarding_status, node.is_enabled);
-
   return (
     <div className={page.page}>
       <header className={page.head}>
@@ -108,7 +104,9 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
               pulse={node.onboarding_status === "awaiting_first_heartbeat"}
             />
             <span className={fleet.metaChip}>{nodeTypeLabel[node.node_type] ?? node.node_type}</span>
-            {node.os_type ? <span className={fleet.metaChip}>{osLabel[node.os_type] ?? node.os_type}</span> : null}
+            {node.os_type ? (
+              <span className={fleet.metaChip}>{osLabel[node.os_type] ?? node.os_type}</span>
+            ) : null}
           </div>
         </div>
         <div className={page.actions}>
@@ -122,53 +120,13 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         </div>
       </header>
 
-      <section className={styles.layout}>
-        <Card title="接入与连接" subtitle="区分‘已登记’与‘已连接’，避免误派任务。">
-          <FieldGrid>
-            <Field label="接入状态" value={onboardingLabel[node.onboarding_status]} />
-            <Field label="连接状态" value={connectionLabel[node.connection_status]} />
-            <Field label="是否启用" value={node.is_enabled ? "启用" : "已停用"} />
-            <Field label="心跳间隔" value={`${node.heartbeat_interval_sec} s`} />
-            <Field
-              label="首次心跳"
-              value={
-                node.first_seen_at
-                  ? `${formatTime(node.first_seen_at)} · ${formatRelative(node.first_seen_at)}`
-                  : "尚未"
-              }
-            />
-            <Field
-              label="最近心跳"
-              value={
-                node.last_seen_at
-                  ? `${formatTime(node.last_seen_at)} · ${formatRelative(node.last_seen_at)}`
-                  : "—"
-              }
-            />
-            <Field label="主机名" value={node.hostname ?? "—"} mono />
-            <Field label="创建时间" value={formatTime(node.created_at)} />
-          </FieldGrid>
-          {!node.is_enabled ? (
-            <Callout tone="danger" iconKind="ban">
-              节点已停用，agent 无法获取任务，控制面也将拒绝其心跳。
-            </Callout>
-          ) : node.onboarding_status === "awaiting_first_heartbeat" ? (
-            <Callout tone="info" iconKind="clock">
-              控制面尚未收到来自该节点的首个有效心跳。请确保子节点已写入接入包并启动 agent。
-            </Callout>
-          ) : node.connection_status === "offline" ? (
-            <Callout tone="warn" iconKind="bolt">
-              节点上线过，但近 3× 心跳间隔内没有再签到。可能掉线或网络异常。
-            </Callout>
-          ) : null}
-        </Card>
+      {/* Connection slab — primary panel, dominates the page */}
+      <ConnectionSlab node={node} />
 
-        <Card title="允许的工作目录" subtitle="任务的 workdir 必须落在白名单内。">
+      <section className={styles.layout}>
+        <Card title="允许的工作目录">
           {node.allowed_workdirs.length === 0 ? (
-            <EmptyState
-              title="尚未配置工作目录"
-              description="任务下发会被拒绝。请在节点配置中添加允许的工作目录。"
-            />
+            <EmptyState title="尚未配置" description="任务下发会被拒绝。" />
           ) : (
             <ul className={styles.pathList}>
               {node.allowed_workdirs.map((dir) => (
@@ -180,7 +138,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
 
         <Card title="标签">
           {node.tags.length === 0 ? (
-            <span className="muted">暂未配置标签。</span>
+            <span className="muted">—</span>
           ) : (
             <div className={styles.tagRow}>
               {node.tags.map((tag) => (
@@ -191,32 +149,25 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         </Card>
       </section>
 
-      <Card
-        title="任务下发"
-        subtitle={
-          canDispatch
-            ? "节点处于在线且已接入状态，可立即下发任务。"
-            : "节点尚未具备接收任务的条件，下方表单已禁用。"
-        }
-      >
+      <Card title="任务下发">
         {!canDispatch ? (
-          <EmptyState title="任务下发暂不可用" description={guardCopy} />
+          <EmptyState title="暂不可下发" description={dispatchGuard(node)} />
         ) : (
           <TaskComposer node={node} />
         )}
       </Card>
 
       <Card
-        title="该节点最近任务"
+        title="最近任务"
         bodyFlush={recentTasks.length > 0}
         actions={
           <Button size="sm" variant="quiet" onClick={() => navigate({ name: "tasks" })}>
-            查看全部 →
+            全部 →
           </Button>
         }
       >
         {recentTasks.length === 0 ? (
-          <EmptyState title="该节点尚无任务" description="完成接入后，从上方表单创建第一条任务。" />
+          <EmptyState title="尚无任务" />
         ) : (
           <ul className={styles.tasksList}>
             {recentTasks.map((task) => (
@@ -242,67 +193,154 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   );
 }
 
-function guardMessage(connection: string, onboarding: string, enabled: boolean): string {
-  if (!enabled) return "节点已停用，先启用再下发任务。";
-  if (onboarding === "awaiting_first_heartbeat") return "节点尚未完成首次接入，等待首个签名心跳后再尝试。";
-  if (connection === "offline") return "节点上线过但当前离线，agent 不会拉到任务。";
-  if (connection === "never_seen") return "节点从未上线过，请先把 agent 启动起来。";
-  return "节点状态暂不可用。";
-}
-
-function Callout({
-  tone,
-  iconKind,
-  children,
-}: {
-  tone: "info" | "warn" | "danger";
-  iconKind: "clock" | "bolt" | "ban";
-  children: React.ReactNode;
-}): JSX.Element {
-  const cls =
-    tone === "warn" ? styles.calloutWarn : tone === "danger" ? styles.calloutDanger : "";
+function ConnectionSlab({ node }: { node: NodeResponse }): JSX.Element {
+  // Three-step connection rail: PROVISIONED → FIRST CONTACT → LIVE
+  const provisioned = true; // node exists, by definition
+  const firstContact = !!node.first_seen_at;
+  const live = node.connection_status === "online";
+  const guardTone = !node.is_enabled
+    ? "danger"
+    : node.connection_status === "offline"
+      ? "warn"
+      : node.onboarding_status === "awaiting_first_heartbeat"
+        ? "warn"
+        : null;
+  const guardLabel = !node.is_enabled
+    ? "DISABLED · agent will be rejected"
+    : node.onboarding_status === "awaiting_first_heartbeat"
+      ? "AWAITING FIRST HEARTBEAT"
+      : node.connection_status === "offline"
+        ? "OFFLINE · last seen exceeded 3× heartbeat"
+        : node.connection_status === "never_seen"
+          ? "NEVER SEEN"
+          : null;
   return (
-    <div className={`${styles.callout} ${cls}`}>
-      <CalloutIcon kind={iconKind} />
-      <span>{children}</span>
+    <div className={styles.slab}>
+      <header className={styles.slabHead}>
+        <span className={styles.slabTitle}>接入与连接</span>
+        <span className={styles.slabPills}>
+          <StatusPill
+            tone={onboardingTone[node.onboarding_status]}
+            label={onboardingLabel[node.onboarding_status]}
+            pulse={node.onboarding_status === "awaiting_first_heartbeat"}
+          />
+          <StatusPill
+            tone={connectionTone[node.connection_status]}
+            label={connectionLabel[node.connection_status]}
+            pulse={node.connection_status === "online"}
+          />
+        </span>
+      </header>
+
+      <div className={styles.connRail}>
+        <ConnStep
+          label="PROVISIONED"
+          value={`#${node.node_id}`}
+          state={provisioned ? "done" : "idle"}
+        />
+        <ConnStep
+          label="FIRST CONTACT"
+          value={node.first_seen_at ? formatRelative(node.first_seen_at) : "尚未"}
+          state={firstContact ? "done" : guardTone === "warn" ? "active" : "idle"}
+          mute={!firstContact}
+        />
+        <ConnStep
+          label="LAST HEARTBEAT"
+          value={node.last_seen_at ? formatRelative(node.last_seen_at) : "—"}
+          state={live ? "active" : node.connection_status === "offline" ? "fail" : "idle"}
+          mute={!node.last_seen_at}
+        />
+      </div>
+
+      <div className={styles.slabBody}>
+        <FieldGrid>
+          <Field label="心跳间隔" value={`${node.heartbeat_interval_sec} s`} />
+          <Field label="是否启用" value={node.is_enabled ? "启用" : "已停用"} />
+          <Field label="主机名" value={node.hostname ?? "—"} mono />
+          <Field
+            label="首次心跳"
+            value={node.first_seen_at ? formatTime(node.first_seen_at) : "—"}
+          />
+          <Field
+            label="最近心跳"
+            value={node.last_seen_at ? formatTime(node.last_seen_at) : "—"}
+          />
+          <Field label="登记时间" value={formatTime(node.created_at)} />
+        </FieldGrid>
+
+        {guardLabel ? (
+          <div
+            className={`${styles.guard} ${
+              guardTone === "danger" ? styles.guardDanger : guardTone === "warn" ? styles.guardWarn : ""
+            }`}
+          >
+            <GuardIcon className={styles.guardIcon} />
+            <span>{guardLabel}</span>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function CalloutIcon({ kind }: { kind: "clock" | "bolt" | "ban" }): JSX.Element {
-  const props = {
-    width: 16,
-    height: 16,
-    viewBox: "0 0 16 16",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.5,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    className: styles.calloutIcon,
-  };
-  switch (kind) {
-    case "clock":
-      return (
-        <svg {...props}>
-          <circle cx="8" cy="8" r="6" />
-          <path d="M8 5v3l2 1" />
-        </svg>
-      );
-    case "bolt":
-      return (
-        <svg {...props}>
-          <path d="M9 1L3 9h4l-1 6 6-8H8l1-6z" />
-        </svg>
-      );
-    case "ban":
-      return (
-        <svg {...props}>
-          <circle cx="8" cy="8" r="6" />
-          <path d="M3.7 3.7l8.6 8.6" />
-        </svg>
-      );
-  }
+function ConnStep({
+  label,
+  value,
+  state,
+  mute,
+}: {
+  label: string;
+  value: string;
+  state: "idle" | "active" | "done" | "fail";
+  mute?: boolean;
+}): JSX.Element {
+  const cls = [
+    styles.connStep,
+    state === "active" ? styles.connStepActive : "",
+    state === "done" ? styles.connStepDone : "",
+    state === "fail" ? styles.connStepFail : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div className={cls}>
+      <span className={styles.connDot} aria-hidden />
+      <div className={styles.connBody}>
+        <span className={styles.connLabel}>{label}</span>
+        <span className={`${styles.connValue}${mute ? ` ${styles.connValueMute}` : ""}`}>
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function GuardIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      className={className}
+      width={14}
+      height={14}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8 1.5L13.5 4v3.5c0 3.2-2.4 5.8-5.5 6.5-3.1-.7-5.5-3.3-5.5-6.5V4L8 1.5z" />
+      <path d="M8 6v3" />
+      <circle cx="8" cy="11" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function dispatchGuard(node: NodeResponse): string {
+  if (!node.is_enabled) return "节点已停用，启用后再下发。";
+  if (node.onboarding_status === "awaiting_first_heartbeat") return "尚未完成首次接入。";
+  if (node.connection_status === "offline") return "节点当前离线。";
+  if (node.connection_status === "never_seen") return "节点从未上线过。";
+  return "节点状态暂不可用。";
 }
 
 function NodeRuntimeBlock({ card }: { card: DashboardNodeCard | null }): JSX.Element | null {
@@ -319,10 +357,7 @@ function NodeRuntimeBlock({ card }: { card: DashboardNodeCard | null }): JSX.Ele
   );
 
   return (
-    <Card
-      title="运行时快照"
-      subtitle={`报告于 ${formatTime(status.reported_at)} · ${formatRelative(status.reported_at)}`}
-    >
+    <Card title={`运行时快照 · ${formatRelative(status.reported_at)}`}>
       <div className={styles.snapshotBar}>
         <div className={styles.gauges}>
           <Gauge value={cpuUse} label="CPU" size={72} thickness={4} />
@@ -331,7 +366,8 @@ function NodeRuntimeBlock({ card }: { card: DashboardNodeCard | null }): JSX.Ele
         <div className={styles.snapshotInfo}>
           <div className={styles.snapshotName}>{cpu.model ?? "—"}</div>
           <div className={styles.snapshotMeta}>
-            {cpu.logical_cores ?? "—"} cores · {bytesToReadable(memory.used_bytes)} / {bytesToReadable(memory.total_bytes)}
+            {cpu.logical_cores ?? "—"} cores · {bytesToReadable(memory.used_bytes)} /{" "}
+            {bytesToReadable(memory.total_bytes)}
           </div>
           {pythonEnv.python_version ? (
             <div className={styles.snapshotPython}>Python {pythonEnv.python_version}</div>

@@ -44,38 +44,34 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
           </div>
 
           <h1 className={styles.headline}>
-            私有 GPU 舰队的 <span className={styles.headlineEm}>统一控制面。</span>
+            Private GPU fleet,
+            <br />
+            <span className={styles.headlineEm}>under one control surface.</span>
           </h1>
-
-          <p className={styles.lede}>
-            登记节点 · 下发签名接入包 · 确认首次心跳 · 派发任务。
-            一切操作走同一条审计与签名链路。
-          </p>
 
           <div className={styles.spec}>
             <div className={styles.specItem}>
-              <span className={styles.specLabel}>Channel</span>
+              <span className={styles.specLabel}>CHANNEL</span>
               <span className={styles.specValue}>HMAC-SHA256</span>
             </div>
             <div className={styles.specItem}>
-              <span className={styles.specLabel}>Heartbeat</span>
+              <span className={styles.specLabel}>HEARTBEAT</span>
               <span className={styles.specValue}>5s · 3× offline</span>
             </div>
             <div className={styles.specItem}>
-              <span className={styles.specLabel}>Tenancy</span>
+              <span className={styles.specLabel}>TENANCY</span>
               <span className={styles.specValue}>Single Operator</span>
             </div>
           </div>
         </aside>
 
         <section className={styles.panel}>
-          <div className={styles.eyebrow}>Sign in</div>
-          <h2 className={styles.title}>登录主控</h2>
-          <p className={styles.help}>使用超级管理员账号进入 GPUFleet 控制台。</p>
+          <div className={styles.eyebrow}>SIGN IN</div>
+          <h2 className={styles.title}>登录</h2>
 
           <form className={forms.stack} onSubmit={onSubmit}>
             <label className={forms.field}>
-              <span className={forms.label}>管理员账号</span>
+              <span className={forms.label}>账号</span>
               <input
                 className={forms.input}
                 value={username}

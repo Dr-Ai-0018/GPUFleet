@@ -39,6 +39,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
     (n) => n.onboarding_status === "awaiting_first_heartbeat",
   ).length;
   const offlineCount = store.nodes.filter((n) => n.connection_status === "offline").length;
+  const onlineCount = store.nodes.filter((n) => n.connection_status === "online").length;
   const warningCount = store.warnings.length;
 
   const navItems = useMemo<NavItem[]>(
@@ -125,6 +126,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
         <header className={styles.topbar}>
           <Breadcrumb route={route} />
           <div className={styles.topbarActions}>
+            <FleetPulse online={onlineCount} awaiting={awaitingCount} offline={offlineCount} total={store.nodes.length} />
             <span className={styles.clock} title={now.toISOString()}>
               <span>{formatClock(now)}</span>
             </span>
@@ -163,6 +165,38 @@ export function AppShell({ onLogout }: Props): JSX.Element {
 function formatClock(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function FleetPulse({
+  online,
+  awaiting,
+  offline,
+  total,
+}: {
+  online: number;
+  awaiting: number;
+  offline: number;
+  total: number;
+}): JSX.Element | null {
+  if (total === 0) return null;
+  return (
+    <div className={styles.fleetPulse} title={`Fleet · ${total} nodes`}>
+      <span className={styles.fleetPulseSeg}>
+        <span className={`${styles.fleetDot} ${styles.fleetDotOnline}`} />
+        <strong>{online}</strong>
+      </span>
+      <span className={styles.fleetPulseDivider} aria-hidden />
+      <span className={styles.fleetPulseSeg}>
+        <span className={`${styles.fleetDot} ${styles.fleetDotWait}`} />
+        <strong>{awaiting}</strong>
+      </span>
+      <span className={styles.fleetPulseDivider} aria-hidden />
+      <span className={styles.fleetPulseSeg}>
+        <span className={`${styles.fleetDot} ${styles.fleetDotOff}`} />
+        <strong>{offline}</strong>
+      </span>
+    </div>
+  );
 }
 
 function SyncStatus({ now }: { now: number }): JSX.Element {
@@ -283,7 +317,7 @@ function RouteOutlet({ route }: { route: Route }): JSX.Element {
 }
 
 /* ============================================================
- * Icons (1.5 stroke, 16px viewport)
+ * Icons
  * ============================================================ */
 
 function NavIcon({ kind }: { kind: "onboarding" | "fleet" | "tasks" | "security" }): JSX.Element {

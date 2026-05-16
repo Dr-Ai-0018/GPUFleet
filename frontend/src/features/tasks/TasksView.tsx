@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
-import { Card } from "../../ui/Card";
-import { EmptyState } from "../../ui/EmptyState";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative, formatTime } from "../../lib/format";
-import page from "../../ui/page.module.css";
 import forms from "../../ui/forms.module.css";
 import styles from "./TasksView.module.css";
 
@@ -32,7 +29,10 @@ export function TasksView(): JSX.Element {
   const [query, setQuery] = useState("");
 
   const connectedNodes = store.nodes.filter(
-    (node) => node.is_enabled && node.connection_status === "online" && node.onboarding_status === "connected",
+    (node) =>
+      node.is_enabled &&
+      node.connection_status === "online" &&
+      node.onboarding_status === "connected",
   );
 
   const filtered = useMemo(() => {
@@ -50,59 +50,58 @@ export function TasksView(): JSX.Element {
   }, [store.tasks, nodeFilter, filter, query]);
 
   return (
-    <div className={page.page}>
-      <header className={page.head}>
-        <div className={page.titleBlock}>
-          <div className={page.eyebrow}>TASKS</div>
-          <h1 className={page.title}>任务中心</h1>
-          <p className={page.lede}>选择一个已接入的节点下发任务，从这里追踪状态、日志与产物。</p>
+    <div className={styles.page}>
+      <header className={styles.hero}>
+        <div className={styles.heroLeft}>
+          <span className={styles.heroEyebrow}>
+            <span className={styles.heroEyebrowDot} aria-hidden />
+            TASKS
+          </span>
+          <h1 className={styles.heroTitle}>任务</h1>
         </div>
-        {connectedNodes.length === 0 ? (
-          <Button variant="accent" onClick={() => navigate({ name: "onboarding" })}>
-            先去接入节点
-          </Button>
-        ) : null}
       </header>
 
-      {connectedNodes.length === 0 ? (
-        <Card>
-          <EmptyState
-            title="尚无可派发任务的节点"
-            description="任务需要目标节点处于在线 + 已接入状态。请先在节点接入面板创建并连接节点。"
-            action={
-              <Button variant="accent" onClick={() => navigate({ name: "onboarding" })}>
-                去节点接入
-              </Button>
-            }
-          />
-        </Card>
-      ) : (
-        <Card title="选择节点下发" subtitle="只有处于在线 + 已接入状态的节点可下发任务。" bodyFlush>
-          <div className={styles.dispatchGrid}>
+      {/* Node dispatch rail — slim, subordinate to fleet state */}
+      <div className={styles.railWrap}>
+        <div className={styles.railHead}>
+          <span className={styles.railLabel}>可下发节点</span>
+          <span className={styles.railCount}>{connectedNodes.length} ready</span>
+        </div>
+        {connectedNodes.length === 0 ? (
+          <div className={styles.gateNote}>
+            <GateIcon />
+            <span>当前无在线 + 已接入节点 · 任务下发不可用</span>
+            <Button size="sm" variant="ghost" onClick={() => navigate({ name: "onboarding" })}>
+              去节点接入
+            </Button>
+          </div>
+        ) : (
+          <div className={styles.rail}>
             {connectedNodes.map((node) => (
               <button
                 key={node.node_id}
                 type="button"
-                className={styles.dispatchCard}
+                className={styles.railCard}
                 onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
               >
-                <div className={styles.dispatchHead}>
-                  <span className={styles.dispatchName}>{node.display_name}</span>
+                <div className={styles.railHead2}>
+                  <span className={styles.railName}>{node.display_name}</span>
                   <StatusPill tone="online" label="在线" pulse />
                 </div>
-                <code className={styles.dispatchId}>{node.node_id}</code>
-                <span className={styles.dispatchMeta}>
+                <code className={styles.railId}>{node.node_id}</code>
+                <span className={styles.railMeta}>
                   {node.node_type} · {node.os_type ?? "—"} · {node.heartbeat_interval_sec}s
                 </span>
               </button>
             ))}
           </div>
-        </Card>
-      )}
+        )}
+      </div>
 
-      <div className={styles.filterBar}>
-        <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>Status</span>
+      {/* Filter strip */}
+      <div className={styles.strip}>
+        <div className={styles.stripGroup}>
+          <span className={styles.stripLabel}>STATUS</span>
           <div className={forms.segmented}>
             {STATUS_GROUPS.map((group) => (
               <button
@@ -116,12 +115,11 @@ export function TasksView(): JSX.Element {
             ))}
           </div>
         </div>
-        <span className={styles.filterDivider} aria-hidden />
-        <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>Node</span>
+        <div className={styles.stripGroup}>
+          <span className={styles.stripLabel}>NODE</span>
           <select
             className={forms.select}
-            style={{ width: "auto", maxWidth: 240 }}
+            style={{ width: "auto", maxWidth: 240, height: 32 }}
             value={nodeFilter}
             onChange={(event) => setNodeFilter(event.target.value)}
           >
@@ -137,42 +135,45 @@ export function TasksView(): JSX.Element {
           <SearchIcon className={styles.searchIcon} />
           <input
             className={styles.searchInput}
-            placeholder="按 task_id、类型、节点查找"
+            placeholder="按 task_id / type / node 检索"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <span className={styles.filterCount}>
-          {filtered.length}<span className="muted"> / {store.tasks.length}</span>
+        <span className={styles.stripCount}>
+          <strong>{filtered.length}</strong> / {store.tasks.length}
         </span>
       </div>
 
-      <Card title="任务列表" bodyFlush={filtered.length > 0}>
-        {filtered.length === 0 ? (
-          <EmptyState title="没有符合条件的任务" description="先在已接入节点上下发任务，或调整筛选。" />
-        ) : (
+      {filtered.length === 0 ? (
+        <div className={styles.empty}>
+          <span className={styles.emptyMeta}>NO MATCHING TASKS</span>
+          <span className={styles.emptyTitle}>—</span>
+        </div>
+      ) : (
+        <div className={styles.tableWrap}>
           <div style={{ overflowX: "auto" }}>
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Task</th>
-                  <th>Node</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Finished</th>
+                  <th>TASK</th>
+                  <th>NODE</th>
+                  <th>TYPE</th>
+                  <th>STATUS</th>
+                  <th>CREATED</th>
+                  <th>FINISHED</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((task) => (
                   <tr
                     key={task.task_id}
-                    className={styles.rowClickable}
+                    className={styles.row}
                     onClick={() => navigate({ name: "task-detail", taskId: task.task_id })}
                   >
                     <td className={styles.idCell}>{task.task_id}</td>
                     <td className={styles.nodeCell}>{task.node_id}</td>
-                    <td>{task.type}</td>
+                    <td className={styles.typeCell}>{task.type}</td>
                     <td>
                       <StatusPill
                         tone={taskStatusTone[task.status] ?? "muted"}
@@ -183,7 +184,10 @@ export function TasksView(): JSX.Element {
                     <td title={formatTime(task.created_at)} className={styles.timeCell}>
                       {formatRelative(task.created_at)}
                     </td>
-                    <td title={task.finished_at ? formatTime(task.finished_at) : ""} className={styles.timeCell}>
+                    <td
+                      title={task.finished_at ? formatTime(task.finished_at) : ""}
+                      className={styles.timeCell}
+                    >
                       {task.finished_at ? formatRelative(task.finished_at) : "—"}
                     </td>
                   </tr>
@@ -191,8 +195,8 @@ export function TasksView(): JSX.Element {
               </tbody>
             </table>
           </div>
-        )}
-      </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -212,6 +216,24 @@ function SearchIcon({ className }: { className?: string }): JSX.Element {
     >
       <circle cx="7" cy="7" r="4.5" />
       <path d="M11 11l3 3" />
+    </svg>
+  );
+}
+
+function GateIcon(): JSX.Element {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="7" width="10" height="6.5" rx="1" />
+      <path d="M5 7V5a3 3 0 0 1 6 0v2" />
     </svg>
   );
 }

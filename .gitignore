@@ -50,3 +50,4 @@ node_agent/.venv-py/
 node_agent/runtime/
 node_agent/src/*.egg-info/
 
+.playwright-cli

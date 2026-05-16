@@ -207,13 +207,13 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
             </div>
           </>
         ) : (
-          <EmptyState title="尚无结果" description="任务还在执行或尚未上报最终结果。" />
+          <EmptyState title="尚无结果" />
         )}
       </Card>
 
-      <Card title="日志预览" subtitle="agent 仅上报核心切片，完整日志保留在节点本地。">
+      <Card title="日志预览">
         {detail.logs.length === 0 ? (
-          <EmptyState title="尚无日志" description="任务还没有产生日志切片。" />
+          <EmptyState title="尚无日志" />
         ) : (
           <div className={styles.logStack}>
             {detail.logs.map((log) => (
@@ -230,7 +230,7 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
 
       <Card title="产物" bodyFlush={detail.artifacts.length > 0}>
         {detail.artifacts.length === 0 ? (
-          <EmptyState title="尚无产物" description="任务尚未上传任何产物。" />
+          <EmptyState title="尚无产物" />
         ) : (
           <ul className={styles.artifactList}>
             {detail.artifacts.map((artifact) => (

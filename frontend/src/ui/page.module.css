@@ -10,9 +10,8 @@
   gap: 24px;
   flex-wrap: wrap;
   align-items: flex-end;
-  padding-bottom: 16px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 0;
 }
 
 .titleBlock {
@@ -32,17 +31,6 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
-}
-
-.eyebrow::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .title {
@@ -50,25 +38,16 @@
   font-size: var(--fs-28);
   font-weight: 700;
   color: var(--text);
-  letter-spacing: var(--tr-tight);
+  letter-spacing: var(--tr-tightest);
   line-height: var(--lh-tight);
   font-family: var(--font-display);
   font-variation-settings: "opsz" 28;
-}
-
-.lede {
-  margin: 4px 0 0;
-  color: var(--text-mute);
-  font-size: var(--fs-14);
-  max-width: 76ch;
-  line-height: var(--lh-snug);
 }
 
 .actions {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 4px;
 }
 
 .statusRow {

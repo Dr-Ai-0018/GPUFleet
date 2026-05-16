@@ -1,57 +1,105 @@
 /* ============================================================
- * Fleet
+ * Fleet — command oversight surface
  * ============================================================ */
 
-/* Filter bar */
+.page {
+  display: grid;
+  gap: 24px;
+  animation: fade-rise var(--dur-base) var(--ease-out) both;
+}
 
-.filterBar {
+/* Hero with KPI band integrated */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 32px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.heroLeft {
+  display: grid;
+  gap: 8px;
+}
+
+.heroEyebrow {
+  font-size: var(--fs-11);
+  letter-spacing: var(--tr-widest);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.heroEyebrowDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: var(--fs-28);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: var(--tr-tightest);
+  line-height: 1.05;
+  font-family: var(--font-display);
+}
+
+.heroActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Strip: filters + view toggle + count, no card frame */
+
+.strip {
   display: flex;
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 8px 12px;
-  background: var(--bg-canvas);
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
 }
 
-.filterGroup {
+.stripGroup {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
 }
 
-.filterLabel {
-  font-size: var(--fs-11);
-  color: var(--text-mute);
+.stripLabel {
+  font-size: var(--fs-10);
+  color: var(--text-faint);
   font-family: var(--font-mono);
-  letter-spacing: var(--tr-wide);
+  letter-spacing: var(--tr-widest);
   text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.filterDivider {
-  width: 1px;
-  height: 18px;
-  background: var(--border);
 }
 
 .searchWrap {
   position: relative;
-  flex: 1 1 220px;
-  min-width: 180px;
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 360px;
 }
 
 .searchInput {
   width: 100%;
-  height: 28px;
-  padding: 0 10px 0 28px;
+  height: 32px;
+  padding: 0 12px 0 32px;
   border-radius: var(--r-2);
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: var(--text);
-  font-size: var(--fs-12);
+  font-size: var(--fs-13);
   outline: none;
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -60,43 +108,208 @@
 
 .searchInput:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--ring-focus);
 }
 
 .searchIcon {
   position: absolute;
-  left: 8px;
+  left: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-faint);
   pointer-events: none;
 }
 
-.filterCount {
+.stripCount {
   font-size: var(--fs-12);
   color: var(--text-mute);
   font-variant-numeric: tabular-nums;
   margin-left: auto;
+  font-family: var(--font-mono);
+  letter-spacing: var(--tr-snug);
 }
 
-/* ---------- Grid of node cards ---------- */
+.stripCount strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* View toggle */
+
+.viewToggle {
+  display: inline-flex;
+  border-radius: var(--r-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  height: 32px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.viewBtn {
+  padding: 0 10px;
+  font-size: var(--fs-11);
+  font-weight: 500;
+  color: var(--text-mute);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--r-1);
+  font-family: var(--font-mono);
+  letter-spacing: var(--tr-wide);
+}
+
+.viewBtn:hover { color: var(--text); }
+
+.viewBtnActive {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+
+/* ============================================================
+ * Oversight table — primary view
+ * ============================================================ */
+
+.tableWrap {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-13);
+}
+
+.table thead th {
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-10);
+  letter-spacing: var(--tr-widest);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  background: var(--bg-canvas);
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--text-soft);
+}
+
+.table tbody tr:last-child td { border-bottom: 0; }
+
+.row {
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.row:hover { background: var(--bg-hover); }
+
+.cellNode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+
+.cellNodeName {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--tr-snug);
+}
+
+.cellNodeId {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-mute);
+}
+
+.cellMeta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-soft);
+  letter-spacing: var(--tr-snug);
+}
+
+.cellMetaSub {
+  display: block;
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.cellTime {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cellHostname {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-soft);
+}
+
+.statusStack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 220px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  height: 18px;
+  border-radius: var(--r-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  font-size: var(--fs-10);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+
+/* ============================================================
+ * Grid view (secondary)
+ * ============================================================ */
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
 }
 
 .card {
   display: grid;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 14px;
+  padding: 16px 18px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--r-3);
   transition:
     border-color var(--dur-fast) var(--ease-out),
     background var(--dur-fast) var(--ease-out);
+  cursor: pointer;
 }
 
 .card:hover {
@@ -115,7 +328,7 @@
 .cardTitleBlock {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 3px;
 }
 
 .cardTitle {
@@ -152,14 +365,15 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0 6px;
-  height: 18px;
+  padding: 0 7px;
+  height: 20px;
   border-radius: var(--r-1);
   background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: var(--fs-11);
+  letter-spacing: var(--tr-snug);
 }
 
 .cardSpec {
@@ -173,7 +387,7 @@
 }
 
 .specCell {
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--bg-canvas);
   display: grid;
   gap: 2px;
@@ -181,7 +395,7 @@
 
 .specLabel {
   font-size: var(--fs-10);
-  letter-spacing: var(--tr-wide);
+  letter-spacing: var(--tr-widest);
   text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 500;
@@ -192,31 +406,32 @@
   font-size: var(--fs-12);
   color: var(--text);
   font-variant-numeric: tabular-nums;
-}
-
-.cardFoot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.tagRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 6px;
-  height: 18px;
-  border-radius: var(--r-1);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
-  color: var(--accent);
-  font-size: var(--fs-10);
   font-family: var(--font-mono);
-  letter-spacing: 0;
+}
+
+/* ============================================================
+ * Empty state — quiet, no card framing
+ * ============================================================ */
+
+.empty {
+  padding: 56px 24px;
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-3);
+  display: grid;
+  gap: 12px;
+  place-items: center;
+}
+
+.emptyTitle {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.emptyMeta {
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  letter-spacing: var(--tr-wide);
 }

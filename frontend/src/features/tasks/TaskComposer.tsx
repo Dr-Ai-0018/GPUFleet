@@ -169,9 +169,6 @@ export function TaskComposer({ node }: Props): JSX.Element {
         <Button type="submit" variant="accent" disabled={submitting}>
           {submitting ? "下发中…" : "下发任务"}
         </Button>
-        <span className={`${forms.hint} ${forms.hintInline}`}>
-          目标 {node.display_name} · <span className="mono">{node.node_id}</span>
-        </span>
       </div>
     </form>
   );

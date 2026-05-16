@@ -78,8 +78,8 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
       store.setRecentOnboarding(response);
       toast.push({
         tone: "success",
-        title: "节点已创建",
-        description: `请将下方接入包发到 ${response.display_name}。`,
+        title: "节点已登记",
+        description: response.display_name,
       });
       void store.refresh({ silent: true });
       setForm(buildInitialForm());
@@ -102,19 +102,16 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
   const formValid = form.display_name.trim().length > 0 && form.node_id.trim().length >= 3;
 
   return (
-    <Card
-      title="创建节点"
-      subtitle="先在控制面登记节点元数据并下发接入密钥；节点真正在线发生在首次签名心跳到达之后。"
-    >
+    <Card title="登记节点">
       <form className={forms.stack} onSubmit={onSubmit}>
         <div className={forms.row}>
           <label className={forms.field}>
-            <span className={forms.label}>节点显示名</span>
+            <span className={forms.label}>显示名</span>
             <input
               className={forms.input}
               value={form.display_name}
               onChange={(event) => update("display_name", event.target.value)}
-              placeholder="例如：办公室 RTX5080"
+              placeholder="办公室 RTX5080"
               required
             />
           </label>
@@ -131,25 +128,24 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
               required
               minLength={3}
             />
-            <span className={forms.hint}>唯一标识，建议小写字母与短横线。</span>
           </label>
         </div>
 
         <div className={forms.row}>
           <label className={forms.field}>
-            <span className={forms.label}>节点角色</span>
+            <span className={forms.label}>角色</span>
             <select
               className={forms.select}
               value={form.node_type}
               onChange={(event) => update("node_type", event.target.value as NodeType)}
             >
-              <option value="physical">physical · 物理 GPU 节点</option>
-              <option value="modal_runner">modal_runner · Modal 代理</option>
-              <option value="control_plane">control_plane · 控制面自身</option>
+              <option value="physical">physical</option>
+              <option value="modal_runner">modal_runner</option>
+              <option value="control_plane">control_plane</option>
             </select>
           </label>
           <label className={forms.field}>
-            <span className={forms.label}>操作系统</span>
+            <span className={forms.label}>OS</span>
             <select
               className={forms.select}
               value={form.os_type}
@@ -159,15 +155,12 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
               <option value="windows">windows</option>
               <option value="linux">linux</option>
             </select>
-            {form.node_type === "modal_runner" ? (
-              <span className={forms.hint}>Modal 代理仅支持 Linux 宿主。</span>
-            ) : null}
           </label>
         </div>
 
         <div className={forms.row}>
           <label className={forms.field}>
-            <span className={forms.label}>心跳间隔（秒）</span>
+            <span className={forms.label}>心跳间隔 (秒)</span>
             <input
               className={forms.input}
               type="number"
@@ -176,7 +169,6 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
               value={form.heartbeat_interval_sec}
               onChange={(event) => update("heartbeat_interval_sec", Number(event.target.value || 5))}
             />
-            <span className={forms.hint}>控制面以 3× 心跳为离线阈值。</span>
           </label>
           <label className={forms.field}>
             <span className={forms.label}>标签</span>
@@ -187,7 +179,7 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
                 setTouchedTags(true);
                 update("tags", event.target.value);
               }}
-              placeholder="逗号分隔，例如：desktop, 24x7"
+              placeholder="desktop, 24x7"
             />
           </label>
         </div>
@@ -204,18 +196,14 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
             }}
             placeholder="每行一个绝对路径"
           />
-          <span className={forms.hint}>任务的 workdir 必须落在白名单内。</span>
         </label>
 
         {error ? <div className={forms.error}>{error}</div> : null}
 
         <div className={forms.actions}>
           <Button type="submit" variant="accent" size="md" disabled={submitting || !formValid}>
-            {submitting ? "创建中…" : "创建节点并生成接入包"}
+            {submitting ? "登记中…" : "登记并下发密钥"}
           </Button>
-          <span className={`${forms.hint} ${forms.hintInline}`}>
-            创建成功后右侧立即出现可复制的 .env 与启动命令。
-          </span>
         </div>
       </form>
     </Card>
