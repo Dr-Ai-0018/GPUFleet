@@ -259,7 +259,12 @@ async def heartbeat(
                 dumps_json(payload.cpu.model_dump()),
                 dumps_json(payload.memory.model_dump()),
                 dumps_json([item.model_dump() for item in payload.disks]),
-                dumps_json([item.model_dump() for item in payload.gpus]),
+                dumps_json(
+                    {
+                        "gpus": [item.model_dump() for item in payload.gpus],
+                        "nvidia": payload.nvidia.model_dump(),
+                    }
+                ),
                 dumps_json(payload.python_env.model_dump()),
                 dumps_json(payload.task_runtime.model_dump()),
                 dumps_json(payload.model_dump()),

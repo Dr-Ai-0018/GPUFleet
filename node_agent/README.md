@@ -13,6 +13,7 @@ Planned contents:
 - `src/` for node agent runtime code
 - `configs/` for node configuration templates
 - `scripts/` for install/start helpers
+- `templates/` for reusable Modal or task templates
 - `README.md` for node deployment instructions
 
 ## Current Status
@@ -27,13 +28,13 @@ The first node-side scaffold now exists with:
 - `src/gpufleet_node_agent/main.py`
 - `.env.example`
 
-This is intentionally minimal and currently focuses on:
+This is intentionally lightweight and currently focuses on:
 
 - local runtime directory structure
 - node signing logic
 - heartbeat payload construction
 - signed heartbeat POST to the control plane
-- minimal task execution for `health_check`, `shell`, and `python_script`
+- single-node task execution and recovery in phase 1
 - result/log/artifact upload back to the control plane
 
 ## Tonight's Goal
@@ -88,5 +89,58 @@ The immediate target is the first local chain:
 - `health_check`
 - `shell`
 - `python_script`
+- `pip_install`
+- `git_pull`
+- `download_file`
+- `file_mkdir`
+- `file_write`
+- `file_patch_text`
+- `file_move`
+- `file_delete`
+- `file_preview`
+- `file_extract`
+- `upload_and_unpack`
+- `modal_command`
 
-The MVP task runner currently executes one returned task at a time, writes local logs under `runtime/runs/`, uploads stdout/stderr in chunks after process completion, and then uploads a `result_summary.json` artifact.
+The phase-1 task runner currently executes one platform task at a time, writes local logs under `runtime/runs/`, uploads stdout/stderr incrementally, and then uploads a `result_summary.json` artifact.
+
+## Modal Runner Notes
+
+For Modal-enabled nodes, prefer running the agent through the `uv` environment created by `uv sync`, because the Modal CLI dependency is installed there:
+
+```bash
+uv run gpufleet-agent heartbeat-once
+uv run gpufleet-agent heartbeat-loop
+```
+
+If this node is used as a `modal_runner`, keep all real Modal credentials local to that host.
+
+Recommended supporting files:
+
+- example credential pool: [configs/modal_credentials.example.json](E:\Project\GPUFleet\node_agent\configs\modal_credentials.example.json)
+- base broad-coverage image template: [templates/modal/modal_base_ml_template.py](E:\Project\GPUFleet\node_agent\templates\modal\modal_base_ml_template.py)
+- deployment mode guide: [GPUFleet_Node_Deployment_Modes.md](E:\Project\GPUFleet\docs\GPUFleet_Node_Deployment_Modes.md)
+
+Ready-made env templates:
+
+- [configs/node.windows_server.env.example](E:\Project\GPUFleet\node_agent\configs\node.windows_server.env.example)
+- [configs/node.linux_server.env.example](E:\Project\GPUFleet\node_agent\configs\node.linux_server.env.example)
+- [configs/node.modal_runner.env.example](E:\Project\GPUFleet\node_agent\configs\node.modal_runner.env.example)
+
+Recommended local-only config:
+
+- `GPUFLEET_AGENT_MODAL_CREDENTIALS_PATH`
+- `GPUFLEET_AGENT_MODAL_DEFAULT_CREDENTIAL_NAME`
+- `GPUFLEET_AGENT_MODAL_DEFAULT_ENVIRONMENT`
+- `GPUFLEET_AGENT_MODAL_DEFAULT_WORKSPACE`
+
+Current `modal_command` support:
+
+- raw `payload.command`
+- structured `payload.script_path`
+- structured `payload.module_path`
+- optional `payload.entrypoint`
+- optional `payload.args`
+- optional `payload.write_result_path`
+
+The node agent now injects the selected Modal credential pair into the task environment at runtime and records the chosen credential logical name in the task result summary. Do not commit real token pairs into this repository.

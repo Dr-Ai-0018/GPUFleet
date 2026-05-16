@@ -19,6 +19,17 @@ from app.security import derive_node_signing_key, generate_node_secret
 router = APIRouter(prefix="/api/admin/nodes", tags=["admin-nodes"])
 
 
+def _decode_gpu_snapshot(raw_gpu_json: str) -> tuple[list[dict[str, object]], dict[str, object]]:
+    parsed = json.loads(raw_gpu_json)
+    if isinstance(parsed, list):
+        return parsed, {}
+    if isinstance(parsed, dict):
+        gpus = parsed.get("gpus", [])
+        nvidia = parsed.get("nvidia", {})
+        return gpus if isinstance(gpus, list) else [], nvidia if isinstance(nvidia, dict) else {}
+    return [], {}
+
+
 def _row_to_node_response(row: object) -> NodeResponse:
     return NodeResponse(
         node_id=row["node_id"],
@@ -300,12 +311,15 @@ def get_latest_status(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No status snapshot found")
 
+    gpus, nvidia = _decode_gpu_snapshot(row["gpu_json"])
+
     return NodeStatusPreview(
         reported_at=row["reported_at"],
         cpu=json.loads(row["cpu_json"]),
         memory=json.loads(row["memory_json"]),
         disks=json.loads(row["disk_json"]),
-        gpus=json.loads(row["gpu_json"]),
+        gpus=gpus,
+        nvidia=nvidia,
         python_env=json.loads(row["python_env_json"]),
         task_runtime=json.loads(row["task_runtime_json"]),
     )

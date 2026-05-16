@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,8 +18,17 @@ from gpufleet_node_agent.api_client import (
     send_task_log_chunk,
     send_task_result,
 )
-from gpufleet_node_agent.collect import get_boot_id
+from gpufleet_node_agent.collect import (
+    collect_cpu,
+    collect_disks,
+    collect_gpus,
+    collect_memory,
+    collect_nvidia,
+    collect_python_env,
+    get_boot_id,
+)
 from gpufleet_node_agent.config import AgentSettings
+from gpufleet_node_agent.modal_support import build_modal_env_overrides, collect_modal_runtime_status
 from gpufleet_node_agent.state import load_json, save_json
 
 
@@ -47,18 +57,98 @@ def _resolve_workdir(settings: AgentSettings, task: dict[str, Any], run_dir: Pat
     return run_dir
 
 
-def _build_env(settings: AgentSettings, task: dict[str, Any], run_dir: Path) -> dict[str, str]:
+def _build_env(
+    settings: AgentSettings,
+    task: dict[str, Any],
+    run_dir: Path,
+    *,
+    modal_env_overrides: dict[str, str] | None = None,
+) -> dict[str, str]:
     env = os.environ.copy()
     env.update({str(key): str(value) for key, value in task.get("env", {}).items()})
     env.setdefault("GPUFLEET_TASK_ID", task["task_id"])
     env.setdefault("GPUFLEET_RUN_DIR", str(run_dir))
     env.setdefault("GPUFLEET_AGENT_ROOT", str(settings.agent_root.resolve()))
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
     if task.get("requested_gpu_ids"):
         env.setdefault("CUDA_VISIBLE_DEVICES", ",".join(str(item) for item in task["requested_gpu_ids"]))
+    if task.get("type") == "modal_command":
+        env.update(modal_env_overrides or {})
     return env
 
 
-def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path) -> tuple[list[str], Path | None]:
+def _task_extra_roots(task: dict[str, Any]) -> list[str]:
+    return [str(task.get("workdir"))] if task.get("workdir") else []
+
+
+def _build_modal_command(settings: AgentSettings, task: dict[str, Any], workdir: Path) -> list[str]:
+    payload = task.get("payload", {})
+    extra_roots = _task_extra_roots(task)
+    modal_exe = shutil.which("modal")
+    if not modal_exe:
+        raise ValueError("modal CLI not found on this node")
+
+    raw_command = str(payload.get("command", "")).strip()
+    if raw_command:
+        if os.name == "nt":
+            shell_exe = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
+            return [shell_exe, "-NoProfile", "-Command", raw_command]
+        return ["/bin/bash", "-lc", raw_command]
+
+    script_path = payload.get("script_path")
+    module_path = payload.get("module_path")
+    entrypoint = str(payload.get("entrypoint", "")).strip()
+    args = payload.get("args", [])
+    if args is not None and not isinstance(args, list):
+        raise ValueError("modal_command payload.args must be a list")
+
+    command = [modal_exe, "run"]
+    if payload.get("detach"):
+        command.append("--detach")
+    if payload.get("interactive"):
+        command.append("--interactive")
+    if payload.get("quiet"):
+        command.append("--quiet")
+    if payload.get("timestamps"):
+        command.append("--timestamps")
+
+    modal_env = str(payload.get("modal_env", "")).strip()
+    if modal_env:
+        command.extend(["--env", modal_env])
+
+    write_result_path = payload.get("write_result_path")
+    if write_result_path:
+        raw_result_path = Path(str(write_result_path))
+        if not raw_result_path.is_absolute():
+            raw_result_path = workdir / raw_result_path
+        result_path = _resolve_safe_path(settings, str(raw_result_path), extra_roots=extra_roots)
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        command.extend(["--write-result", str(result_path)])
+
+    if module_path:
+        command.append("-m")
+        target_ref = str(module_path).strip()
+        if not target_ref:
+            raise ValueError("modal_command payload.module_path must not be empty")
+    elif script_path:
+        raw_script_path = Path(str(script_path))
+        if not raw_script_path.is_absolute():
+            raw_script_path = workdir / raw_script_path
+        script_ref = _resolve_safe_path(settings, str(raw_script_path), allow_missing=False, extra_roots=extra_roots)
+        target_ref = str(script_ref)
+    else:
+        raise ValueError("modal_command requires payload.command or payload.script_path/module_path")
+
+    if entrypoint:
+        target_ref = f"{target_ref}::{entrypoint}"
+
+    command.append(target_ref)
+    command.extend(str(item) for item in (args or []))
+    return command
+
+
+def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path, workdir: Path) -> tuple[list[str], Path | None]:
     task_type = task["type"]
     payload = task.get("payload", {})
     if task_type == "health_check":
@@ -137,13 +227,7 @@ def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path)
         return ["git", "-C", str(repo_path), "pull"], None
 
     if task_type == "modal_command":
-        command_text = str(payload.get("command", "")).strip()
-        if not command_text:
-            raise ValueError("modal_command task missing payload.command")
-        if os.name == "nt":
-            shell_exe = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
-            return [shell_exe, "-NoProfile", "-Command", command_text], None
-        return ["/bin/bash", "-lc", command_text], None
+        return _build_modal_command(settings, task, workdir), None
 
     raise ValueError(f"Unsupported task type for node agent MVP: {task_type}")
 
@@ -182,7 +266,20 @@ def _resolve_safe_path(
 def _execute_native_task(settings: AgentSettings, task: dict[str, Any], run_dir: Path) -> dict[str, Any] | None:
     task_type = task["type"]
     payload = task.get("payload", {})
-    extra_roots = [str(task.get("workdir"))] if task.get("workdir") else []
+    extra_roots = _task_extra_roots(task)
+    if task_type == "health_check":
+        return {
+            "ok": True,
+            "deployment_mode": settings.deployment_mode,
+            "effective_deployment_mode": settings.effective_deployment_mode(),
+            "cpu": collect_cpu(),
+            "memory": collect_memory(),
+            "disks": collect_disks(settings),
+            "gpus": collect_gpus(),
+            "nvidia": collect_nvidia(),
+            "python_env": collect_python_env(settings),
+            "modal_runtime": collect_modal_runtime_status(settings),
+        }
     if task_type == "file_mkdir":
         target = _resolve_safe_path(settings, str(payload["path"]), extra_roots=extra_roots)
         target.mkdir(parents=True, exist_ok=True)
@@ -318,6 +415,26 @@ def _write_local_logs(run_dir: Path, stdout_text: str, stderr_text: str) -> None
     (run_dir / "stderr.log").write_text(stderr_text, encoding="utf-8")
 
 
+def _build_result_summary(task: dict[str, Any], run_dir: Path, workdir: Path, command: list[str], stdout_text: str, stderr_text: str) -> dict[str, Any]:
+    combined = "\n".join(part for part in [stdout_text, stderr_text] if part)
+    modal_app_urls = re.findall(r"https://modal\.com/apps/\S+", combined)
+    cache_hit_count = combined.count("cache hit")
+    return {
+        "run_dir": str(run_dir),
+        "workdir": str(workdir),
+        "command": command,
+        "stdout_preview": stdout_text[-500:] if stdout_text else "",
+        "stderr_preview": stderr_text[-500:] if stderr_text else "",
+        "modal": {
+            "app_urls": modal_app_urls,
+            "cache_hit_count": cache_hit_count,
+            "credential_name": task.get("modal_context", {}).get("credential_name"),
+            "workspace": task.get("modal_context", {}).get("workspace"),
+            "environment": task.get("modal_context", {}).get("environment"),
+        } if task.get("type") == "modal_command" else None,
+    }
+
+
 def _upload_log_text(settings: AgentSettings, task_id: str, stream: str, text: str) -> None:
     offset = 0
     chunk_size = 3500
@@ -449,8 +566,12 @@ def _start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dic
     run_dir = _prepare_run_dir(settings, task_id)
     workdir = _resolve_workdir(settings, task, run_dir)
     workdir.mkdir(parents=True, exist_ok=True)
-    env = _build_env(settings, task, run_dir)
-    command, inline_script_path = _build_command(settings, task, run_dir)
+    modal_context = {}
+    modal_env: dict[str, str] = {}
+    if task.get("type") == "modal_command":
+        modal_env, modal_context = build_modal_env_overrides(settings, task.get("payload", {}))
+    env = _build_env(settings, task, run_dir, modal_env_overrides=modal_env)
+    command, inline_script_path = _build_command(settings, task, run_dir, workdir)
     stdout_path = run_dir / "stdout.log"
     stderr_path = run_dir / "stderr.log"
     stdout_path.write_text("", encoding="utf-8")
@@ -463,6 +584,7 @@ def _start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dic
         "workdir": str(workdir),
         "command": command,
         "inline_script_path": str(inline_script_path) if inline_script_path else None,
+        "modal_context": modal_context,
     }
     save_json(run_dir / "task_metadata.json", metadata)
     send_task_event(
@@ -503,6 +625,7 @@ def _start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dic
         "command": command,
         "timeout_sec": int(task.get("timeout_sec", 3600)),
         "kill_grace_sec": int(task.get("kill_grace_sec", 15)),
+        "modal_context": modal_context,
         "stdout_path": str(stdout_path),
         "stderr_path": str(stderr_path),
         "stdout_offset": 0,
@@ -530,13 +653,14 @@ def _finalize_background_task(
             "task_id": state["task_id"],
             "final_status": final_status,
             "exit_code": exit_code,
-            "summary": {
-                "run_dir": state.get("run_dir"),
-                "workdir": state.get("workdir"),
-                "command": state.get("command", []),
-                "stdout_preview": stdout_text[-500:] if stdout_text else "",
-                "stderr_preview": stderr_text[-500:] if stderr_text else "",
-            },
+            "summary": _build_result_summary(
+                {"type": state.get("type"), "modal_context": state.get("modal_context", {})},
+                Path(state.get("run_dir") or "."),
+                Path(state.get("workdir") or "."),
+                list(state.get("command", [])),
+                stdout_text,
+                stderr_text,
+            ),
             "boot_id": state.get("boot_id"),
             "pid": state.get("pid"),
             "pgid_or_job_id": str(state.get("pid")) if state.get("pid") else None,
@@ -706,9 +830,13 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
 
         workdir = _resolve_workdir(settings, task, run_dir)
         workdir.mkdir(parents=True, exist_ok=True)
-        env = _build_env(settings, task, run_dir)
+        modal_context = {}
+        modal_env: dict[str, str] = {}
+        if task.get("type") == "modal_command":
+            modal_env, modal_context = build_modal_env_overrides(settings, task.get("payload", {}))
+        env = _build_env(settings, task, run_dir, modal_env_overrides=modal_env)
 
-        command, inline_script_path = _build_command(settings, task, run_dir)
+        command, inline_script_path = _build_command(settings, task, run_dir, workdir)
         metadata = {
             "task_id": task_id,
             "type": task["type"],
@@ -717,6 +845,7 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
             "workdir": str(workdir),
             "command": command,
             "inline_script_path": str(inline_script_path) if inline_script_path else None,
+            "modal_context": modal_context,
         }
         save_json(run_dir / "task_metadata.json", metadata)
 
@@ -772,13 +901,14 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
         _upload_log_text(settings, task_id, "stderr", stderr_text)
         _clear_current_task(settings)
 
-    result_summary = {
-        "run_dir": str(run_dir),
-        "workdir": str(workdir),
-        "command": command,
-        "stdout_preview": stdout_text[-500:] if stdout_text else "",
-        "stderr_preview": stderr_text[-500:] if stderr_text else "",
-    }
+    result_summary = _build_result_summary(
+        {**task, "modal_context": metadata.get("modal_context", {}) if "metadata" in locals() else {}},
+        run_dir,
+        workdir,
+        command,
+        stdout_text,
+        stderr_text,
+    )
     send_task_result(
         settings,
         {

@@ -1,17 +1,21 @@
 # Dependencies
 node_modules/
 vendor/
+frontend/node_modules/
+frontend/.pnpm-store/
 
 # Build output
 dist/
 build/
 out/
+frontend/dist/
 *.tsbuildinfo
 
 # Environment files
 .env
 .env.*
 !.env.example
+!node_agent/.env.local-test.example
 
 # OS files
 Thumbs.db
@@ -24,8 +28,11 @@ Desktop.ini
 *.swp
 *.swo
 
-# Logs
+# Logs / PIDs
 *.log
+*.out.log
+*.err.log
+*.pid
 
 # Python
 __pycache__/
@@ -34,11 +41,12 @@ __pycache__/
 .venv/
 venv/
 data/
+runtime/
+storage/
 *.egg-info/
+
+# Node agent local-only runtime
 node_agent/.venv-py/
 node_agent/runtime/
 node_agent/src/*.egg-info/
-frontend/.pnpm-store/
 
-# Docs
-docs/

@@ -10,11 +10,13 @@ from gpufleet_node_agent.collect import (
     collect_disks,
     collect_gpus,
     collect_memory,
+    collect_nvidia,
     collect_python_env,
     collect_task_runtime,
     get_boot_id,
 )
 from gpufleet_node_agent.config import AgentSettings
+from gpufleet_node_agent.modal_support import collect_modal_runtime_status
 
 
 def build_heartbeat_payload(settings: AgentSettings) -> dict[str, Any]:
@@ -27,11 +29,15 @@ def build_heartbeat_payload(settings: AgentSettings) -> dict[str, Any]:
         "memory": collect_memory(),
         "disks": collect_disks(settings),
         "gpus": collect_gpus(),
+        "nvidia": collect_nvidia(),
         "python_env": collect_python_env(settings),
         "task_runtime": collect_task_runtime(settings),
         "extra": {
             "agent_root": str(Path(settings.agent_root).resolve()),
             "platform": platform.platform(),
+            "deployment_mode": settings.deployment_mode,
+            "effective_deployment_mode": settings.effective_deployment_mode(),
+            "modal_runtime": collect_modal_runtime_status(settings),
         },
     }
 

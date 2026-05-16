@@ -96,6 +96,13 @@ class HeartbeatGpu(BaseModel):
     temperature_c: float | None = None
 
 
+class HeartbeatNvidia(BaseModel):
+    driver_version: str | None = None
+    cuda_version: str | None = None
+    nvcc_version: str | None = None
+    nvidia_smi_path: str | None = None
+
+
 class HeartbeatPythonEnv(BaseModel):
     python_executable: str | None = None
     venv_path: str | None = None
@@ -118,6 +125,7 @@ class HeartbeatRequest(BaseModel):
     memory: HeartbeatMemory = Field(default_factory=HeartbeatMemory)
     disks: list[HeartbeatDisk] = Field(default_factory=list)
     gpus: list[HeartbeatGpu] = Field(default_factory=list)
+    nvidia: HeartbeatNvidia = Field(default_factory=HeartbeatNvidia)
     python_env: HeartbeatPythonEnv = Field(default_factory=HeartbeatPythonEnv)
     task_runtime: HeartbeatTaskRuntime = Field(default_factory=HeartbeatTaskRuntime)
     extra: dict[str, Any] = Field(default_factory=dict)
@@ -222,6 +230,7 @@ class NodeStatusPreview(BaseModel):
     memory: dict[str, Any]
     disks: list[dict[str, Any]]
     gpus: list[dict[str, Any]]
+    nvidia: dict[str, Any] = Field(default_factory=dict)
     python_env: dict[str, Any]
     task_runtime: dict[str, Any]
 

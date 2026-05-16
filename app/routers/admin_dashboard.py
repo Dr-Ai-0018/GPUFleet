@@ -13,6 +13,17 @@ from app.schemas import DashboardNodeCard, DashboardOverview, DashboardTaskSumma
 router = APIRouter(prefix="/api/admin/dashboard", tags=["admin-dashboard"])
 
 
+def _decode_gpu_snapshot(raw_gpu_json: str) -> tuple[list[dict[str, object]], dict[str, object]]:
+    parsed = json.loads(raw_gpu_json)
+    if isinstance(parsed, list):
+        return parsed, {}
+    if isinstance(parsed, dict):
+        gpus = parsed.get("gpus", [])
+        nvidia = parsed.get("nvidia", {})
+        return gpus if isinstance(gpus, list) else [], nvidia if isinstance(nvidia, dict) else {}
+    return [], {}
+
+
 def _parse_iso_or_none(raw: str | None) -> datetime | None:
     if not raw:
         return None
@@ -97,12 +108,14 @@ def get_overview(
 
             latest_status = None
             if latest is not None:
+                gpus, nvidia = _decode_gpu_snapshot(latest["gpu_json"])
                 latest_status = NodeStatusPreview(
                     reported_at=latest["reported_at"],
                     cpu=json.loads(latest["cpu_json"]),
                     memory=json.loads(latest["memory_json"]),
                     disks=json.loads(latest["disk_json"]),
-                    gpus=json.loads(latest["gpu_json"]),
+                    gpus=gpus,
+                    nvidia=nvidia,
                     python_env=json.loads(latest["python_env_json"]),
                     task_runtime=json.loads(latest["task_runtime_json"]),
                 )

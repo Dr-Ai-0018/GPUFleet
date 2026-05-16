@@ -19,13 +19,13 @@ This project uses a `node actively reports -> center returns tasks` architecture
 
 ## Current Status
 
-The repository is currently in design-freeze stage for `MVP v0.1`.
+The repository is now in a usable `Phase 1 / MVP v0.1` implementation stage.
 
 See the detailed architecture and frozen decisions here:
 
 - [docs/GPUFleet_MVP_v0.1_Architecture.md](docs/GPUFleet_MVP_v0.1_Architecture.md)
 
-The first backend skeleton is now in place for:
+Already implemented:
 
 - admin login
 - manual node registration
@@ -33,7 +33,10 @@ The first backend skeleton is now in place for:
 - SQLite persistence for node and status data
 - manual task creation, cancellation, status lookup, log preview, and task result ingestion
 - task artifact upload and artifact listing
-- React console dashboard for login, node overview, task submission, task detail, log preview, and artifact summary
+- React console dashboard for login, node overview, task submission, task detail, log preview, artifact summary, audit events, and security warnings
+- node-side task execution for physical nodes and Modal runner nodes
+- Modal runner credential-pool support and structured `modal_command` execution
+- NVIDIA driver / CUDA capability snapshot in heartbeat
 
 ## MVP Principles
 
@@ -54,6 +57,13 @@ Build a control console that the owner can reliably use for:
 - incremental log viewing
 - task cancellation and real process cleanup
 - state recovery after node restart or temporary disconnect
+
+Additional local design notes for current development:
+
+- [docs/GPUFleet_Node_Deployment_Modes.md](docs/GPUFleet_Node_Deployment_Modes.md)
+- [docs/GPUFleet_ModalRunner_Design.md](docs/GPUFleet_ModalRunner_Design.md)
+- [docs/Modal_Credential_Pool_Design.md](docs/Modal_Credential_Pool_Design.md)
+- [docs/Modal_Official_Dev_Notes.md](docs/Modal_Official_Dev_Notes.md)
 
 ## Quick Start
 

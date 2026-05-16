@@ -4,6 +4,7 @@ import json
 import ctypes
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -244,6 +245,52 @@ def collect_gpus() -> list[dict[str, Any]]:
         except ValueError:
             continue
     return gpus
+
+
+def collect_nvidia() -> dict[str, Any]:
+    nvidia_smi = shutil.which("nvidia-smi")
+    nvcc = shutil.which("nvcc")
+    driver_version: str | None = None
+    cuda_version: str | None = None
+    nvcc_version: str | None = None
+
+    if nvidia_smi:
+        driver_output = _run_command(
+            [
+                nvidia_smi,
+                "--query-gpu=driver_version",
+                "--format=csv,noheader",
+            ]
+        )
+        if driver_output:
+            first_line = next((line.strip() for line in driver_output.splitlines() if line.strip()), None)
+            if first_line:
+                driver_version = first_line
+
+        banner_output = _run_command([nvidia_smi])
+        if banner_output:
+            driver_match = re.search(r"Driver Version:\s*([0-9.]+)", banner_output)
+            cuda_match = re.search(r"CUDA Version:\s*([0-9.]+)", banner_output)
+            if driver_match and not driver_version:
+                driver_version = driver_match.group(1)
+            if cuda_match:
+                cuda_version = cuda_match.group(1)
+
+    if nvcc:
+        nvcc_output = _run_command([nvcc, "--version"])
+        if nvcc_output:
+            release_match = re.search(r"release\s+([0-9.]+)", nvcc_output)
+            if release_match:
+                nvcc_version = release_match.group(1)
+            if not cuda_version and nvcc_version:
+                cuda_version = nvcc_version
+
+    return {
+        "driver_version": driver_version,
+        "cuda_version": cuda_version,
+        "nvcc_version": nvcc_version,
+        "nvidia_smi_path": nvidia_smi,
+    }
 
 
 def collect_python_env(settings: AgentSettings) -> dict[str, Any]:
