@@ -1,129 +1,211 @@
 import { useMemo } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
-import { LineChart } from "echarts/charts";
-import { GridComponent, TooltipComponent } from "echarts/components";
+import { LineChart, BarChart, PieChart } from "echarts/charts";
+import { GridComponent, TooltipComponent, LegendComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { navigate } from "../../lib/routing";
 import { StatusPill } from "../../ui/StatusPill";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
-import { formatRelative } from "../../lib/format";
+import { formatRelative, bytesToReadable } from "../../lib/format";
 
-echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
-const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)] hover:border-white/[0.08]";
-const badgeCls = "px-2.5 py-0.5 text-xs font-mono font-medium border rounded-md flex items-center gap-1.5";
+const sectionCls = "rounded-xl bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
 
 export function OverviewView(): JSX.Element {
   const store = useConsoleStore();
   const overview = store.overview;
   const nodeCounts = overview?.node_counts ?? { total: 0, online: 0, offline: 0, disabled: 0, never_seen: 0 };
-  const taskCounts = overview?.task_counts ?? {};
+  const taskCounts = overview?.task_counts ?? {} as Record<string, number>;
   const recentTasks = overview?.recent_tasks ?? [];
 
   const gpuStats = useMemo(() => {
-    if (!overview) return { totalGpus: 0, avgUtil: 0 };
-    let totalGpus = 0; let totalUtil = 0;
+    if (!overview) return { totalGpus: 0, avgUtil: 0, totalVram: 0, usedVram: 0 };
+    let totalGpus = 0, totalUtil = 0, totalVram = 0, usedVram = 0;
     for (const node of overview.nodes) {
       if (!node.latest_status) continue;
       for (const gpu of node.latest_status.gpus) {
         const g = gpu as Record<string, unknown>;
         totalGpus++; totalUtil += Number(g.utilization_percent ?? 0);
+        totalVram += Number(g.total_vram_mb ?? 0); usedVram += Number(g.used_vram_mb ?? 0);
       }
     }
-    return { totalGpus, avgUtil: totalGpus > 0 ? Math.round(totalUtil / totalGpus) : 0 };
+    return { totalGpus, avgUtil: totalGpus > 0 ? Math.round(totalUtil / totalGpus) : 0, totalVram, usedVram };
   }, [overview]);
 
-  const totalTasks = Object.values(taskCounts).reduce((a, b) => a + b, 0);
+  const totalTasks = Object.values(taskCounts).reduce((a: number, b: number) => a + (b as number), 0);
   const succeededTasks = (taskCounts as Record<string, number>).succeeded ?? 0;
-  const successRate = totalTasks > 0 ? Math.round((succeededTasks / totalTasks) * 100) : 0;
+  const failedTasks = ((taskCounts as Record<string, number>).failed ?? 0) + ((taskCounts as Record<string, number>).timeout ?? 0);
+  const runningTasks = ((taskCounts as Record<string, number>).running ?? 0) + ((taskCounts as Record<string, number>).claimed ?? 0);
 
+  // Chart: throughput timeline
   const lineOption = useMemo(() => ({
     tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 } },
-    grid: { left: 0, right: 0, top: 10, bottom: 0, containLabel: false },
-    xAxis: { type: "category" as const, show: false, data: Array.from({ length: 20 }, (_, i) => `${i}`) },
-    yAxis: { type: "value" as const, show: false },
-    series: [{ type: "line" as const, smooth: true, symbol: "circle", symbolSize: 4, lineStyle: { color: "#06b6d4", width: 2 }, itemStyle: { color: "#06b6d4" }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.15)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: Array.from({ length: 20 }, () => Math.round(Math.random() * 60 + 20)) }],
+    grid: { left: 40, right: 20, top: 20, bottom: 30 },
+    xAxis: { type: "category" as const, data: Array.from({ length: 24 }, (_, i) => `${i}:00`), axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } }, axisLabel: { color: "#4a5568", fontSize: 10 } },
+    yAxis: { type: "value" as const, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 10 } },
+    series: [{ type: "line" as const, smooth: true, symbol: "circle", symbolSize: 3, lineStyle: { color: "#06b6d4", width: 2 }, itemStyle: { color: "#06b6d4" }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.12)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: Array.from({ length: 24 }, () => Math.round(Math.random() * 50 + 10)) }],
   }), []);
 
+  // Chart: task status distribution (horizontal bar)
+  const taskBarOption = useMemo(() => {
+    const entries = Object.entries(taskCounts);
+    const colors: Record<string, string> = { pending: "#4a5568", claimed: "#06b6d4", running: "#06b6d4", succeeded: "#10b981", failed: "#ef4444", timeout: "#ef4444", cancelled: "#6b7280", lost: "#ef4444" };
+    return {
+      tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 } },
+      grid: { left: 80, right: 20, top: 10, bottom: 20 },
+      xAxis: { type: "value" as const, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 10 } },
+      yAxis: { type: "category" as const, data: entries.map(([k]) => taskStatusLabel[k] ?? k), axisLabel: { color: "#8b949e", fontSize: 11 }, axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } } },
+      series: [{ type: "bar" as const, data: entries.map(([k, v]) => ({ value: v, itemStyle: { color: colors[k] ?? "#06b6d4", borderRadius: [0, 3, 3, 0] } })), barWidth: 14 }],
+    };
+  }, [taskCounts]);
+
+  // Chart: GPU utilization per node
+  const gpuBarOption = useMemo(() => {
+    if (!overview) return null;
+    const nodes = overview.nodes.filter((n) => n.latest_status && n.latest_status.gpus.length > 0);
+    if (nodes.length === 0) return null;
+    return {
+      tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 } },
+      grid: { left: 100, right: 20, top: 10, bottom: 20 },
+      xAxis: { type: "value" as const, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 10, formatter: "{value}%" } },
+      yAxis: { type: "category" as const, data: nodes.map((n) => n.display_name), axisLabel: { color: "#8b949e", fontSize: 11 }, axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } } },
+      series: [{ type: "bar" as const, data: nodes.map((n) => { const g = n.latest_status!.gpus[0] as Record<string, unknown>; return { value: Number(g.utilization_percent ?? 0), itemStyle: { color: "#06b6d4", borderRadius: [0, 3, 3, 0] } }; }), barWidth: 16 }],
+    };
+  }, [overview]);
+
   return (
-    <div className="max-w-[1300px] mx-auto space-y-6">
+    <div className="max-w-[1300px] mx-auto space-y-8">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold tracking-tight text-white font-mono">Fleet Overview</h1>
-        <span className={`${badgeCls} bg-cyan-950/40 text-cyan-400 border-cyan-800/30`}>{overview?.server_time ? new Date(overview.server_time).toLocaleString("zh-CN") : "—"}</span>
+        <h1 className="text-2xl font-bold tracking-tight text-white">Fleet Overview</h1>
+        <span className="text-[12px] font-mono text-cyan-400">{overview?.server_time ? new Date(overview.server_time).toLocaleString("zh-CN") : "—"}</span>
       </div>
 
-      {/* KPI Grid */}
+      {/* KPI Grid — bigger numbers */}
       <div className="grid grid-cols-6 gap-4">
         {[
-          { label: "节点总数", val: String(nodeCounts.total) },
-          { label: "在线节点", val: String(nodeCounts.online), color: "text-emerald-400" },
-          { label: "GPU 总数量", val: String(gpuStats.totalGpus) },
-          { label: "算力利用率", val: `${gpuStats.avgUtil}%`, progress: gpuStats.avgUtil },
-          { label: "活动任务数", val: String(totalTasks) },
-          { label: "安全告警", val: String(store.warnings.length), color: store.warnings.length > 0 ? "text-red-400" : undefined },
+          { label: "节点总数", val: nodeCounts.total },
+          { label: "在线节点", val: nodeCounts.online, color: "text-emerald-400" },
+          { label: "GPU 总数", val: gpuStats.totalGpus },
+          { label: "GPU 利用率", val: `${gpuStats.avgUtil}%`, progress: gpuStats.avgUtil },
+          { label: "运行中任务", val: runningTasks, color: "text-cyan-400" },
+          { label: "安全告警", val: store.warnings.length, color: store.warnings.length > 0 ? "text-red-400" : undefined },
         ].map((stat, i) => (
-          <div key={i} className={`${cardCls} py-4 px-5`}>
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider font-mono font-semibold mb-2">{stat.label}</div>
-            <div className={`text-2xl font-bold font-mono tracking-tight ${stat.color || "text-white"}`}>{stat.val}</div>
-            {stat.progress !== undefined ? (
-              <div className="w-full bg-white/5 h-1 rounded-full mt-3 overflow-hidden"><div className="bg-cyan-500 h-1 rounded-full" style={{ width: `${stat.progress}%` }} /></div>
-            ) : null}
+          <div key={i} className={`${sectionCls} py-5 px-5`}>
+            <div className="text-[11px] text-gray-500 uppercase tracking-wider font-mono mb-3">{stat.label}</div>
+            <div className={`text-3xl font-bold font-mono tracking-tight ${stat.color || "text-white"}`}>{stat.val}</div>
+            {stat.progress !== undefined ? <div className="w-full bg-white/5 h-1.5 rounded-full mt-3 overflow-hidden"><div className="bg-cyan-500 h-1.5 rounded-full" style={{ width: `${stat.progress}%` }} /></div> : null}
           </div>
         ))}
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-3 gap-6">
-        <div className={`${cardCls} col-span-2 h-[340px] flex flex-col justify-between`}>
-          <div className="flex justify-between items-center">
-            <span className="text-[13px] font-bold tracking-wide text-gray-400 font-mono uppercase">吞吐趋势 (Throughput Timeline)</span>
-            <span className={`${badgeCls} bg-white/5 text-gray-400 border-white/5`}>实时</span>
+      {/* Row: Throughput + Task Status */}
+      <div className="grid grid-cols-[2fr_1fr] gap-6">
+        <div className={`${sectionCls} p-5`}>
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide">吞吐趋势 <span className="text-gray-500 font-normal">(Throughput Timeline)</span></span>
+            <span className="text-[10px] font-mono text-gray-500 px-2 py-1 bg-white/5 rounded">实时</span>
           </div>
-          <div className="flex-1 mt-4">
-            <ReactEChartsCore echarts={echarts} option={lineOption} style={{ height: "100%", width: "100%" }} opts={{ renderer: "canvas" }} />
+          <ReactEChartsCore echarts={echarts} option={lineOption} style={{ height: 220 }} opts={{ renderer: "canvas" }} />
+        </div>
+
+        <div className={`${sectionCls} p-5`}>
+          <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide block mb-4">任务状态分布</span>
+          {Object.keys(taskCounts).length > 0 ? (
+            <ReactEChartsCore echarts={echarts} option={taskBarOption} style={{ height: 220 }} opts={{ renderer: "canvas" }} />
+          ) : (
+            <div className="h-[220px] flex items-center justify-center text-gray-600 text-[12px]">暂无数据</div>
+          )}
+        </div>
+      </div>
+
+      {/* Row: GPU utilization per node + VRAM summary + Task summary */}
+      <div className="grid grid-cols-3 gap-6">
+        <div className={`${sectionCls} p-5 col-span-1`}>
+          <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide block mb-4">GPU 集群利用率</span>
+          {gpuBarOption ? (
+            <ReactEChartsCore echarts={echarts} option={gpuBarOption} style={{ height: 160 }} opts={{ renderer: "canvas" }} />
+          ) : (
+            <div className="h-[160px] flex items-center justify-center text-gray-600 text-[12px]">无 GPU 数据</div>
+          )}
+        </div>
+
+        <div className={`${sectionCls} p-5 col-span-1`}>
+          <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide block mb-4">显存使用</span>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-[12px] mb-1.5"><span className="text-gray-400">已用 / 总量</span><span className="text-white font-mono font-bold">{gpuStats.usedVram} / {gpuStats.totalVram} MB</span></div>
+              <div className="h-3 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full" style={{ width: `${gpuStats.totalVram > 0 ? (gpuStats.usedVram / gpuStats.totalVram) * 100 : 0}%` }} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-white/5">
+              <div><span className="text-[10px] text-gray-500 font-mono uppercase block mb-1">Total VRAM</span><span className="text-lg font-bold font-mono text-white">{bytesToReadable(gpuStats.totalVram * 1024 * 1024)}</span></div>
+              <div><span className="text-[10px] text-gray-500 font-mono uppercase block mb-1">Used</span><span className="text-lg font-bold font-mono text-cyan-400">{bytesToReadable(gpuStats.usedVram * 1024 * 1024)}</span></div>
+            </div>
           </div>
         </div>
 
-        <div className={`${cardCls} col-span-1 h-[340px] flex flex-col justify-between`}>
-          <span className="text-[13px] font-bold tracking-wide text-gray-400 font-mono uppercase">任务流统计</span>
-          <div className="flex-1 flex items-center justify-center">
-            <div className="w-32 h-32 rounded-full border-[14px] border-[#08090C] flex flex-col items-center justify-center" style={{ borderTopColor: "#10b981", borderRightColor: successRate > 50 ? "#10b981" : "#08090C", borderBottomColor: successRate > 75 ? "#10b981" : "#08090C", borderLeftColor: successRate > 25 ? "#10b981" : "#08090C" }}>
-              <span className="text-xl font-mono font-bold text-white">{successRate}%</span>
-              <span className="text-[10px] text-gray-500">已完成</span>
-            </div>
+        <div className={`${sectionCls} p-5 col-span-1`}>
+          <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide block mb-4">任务统计</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div><span className="text-[10px] text-gray-500 font-mono uppercase block mb-1">Total</span><span className="text-2xl font-bold font-mono text-white">{totalTasks}</span></div>
+            <div><span className="text-[10px] text-gray-500 font-mono uppercase block mb-1">Succeeded</span><span className="text-2xl font-bold font-mono text-emerald-400">{succeededTasks}</span></div>
+            <div><span className="text-[10px] text-gray-500 font-mono uppercase block mb-1">Failed</span><span className="text-2xl font-bold font-mono text-red-400">{failedTasks}</span></div>
+            <div><span className="text-[10px] text-gray-500 font-mono uppercase block mb-1">Running</span><span className="text-2xl font-bold font-mono text-cyan-400">{runningTasks}</span></div>
           </div>
         </div>
       </div>
 
-      {/* Recent tasks table */}
-      <div className={`${cardCls} p-0`}>
-        <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center bg-[#090A0D]/50">
-          <span className="text-[13px] font-bold tracking-wide text-gray-400 font-mono uppercase">Recent Active Tasks (近线任务)</span>
+      {/* Node health bars */}
+      {overview && overview.nodes.length > 0 ? (
+        <div className={`${sectionCls} p-5`}>
+          <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide block mb-4">节点健康度</span>
+          <div className="space-y-3">
+            {overview.nodes.map((node) => {
+              const cpu = node.latest_status?.cpu as { usage_percent?: number } | undefined;
+              const mem = node.latest_status?.memory as { usage_percent?: number } | undefined;
+              const gpu = node.latest_status?.gpus?.[0] as { utilization_percent?: number } | undefined;
+              const cpuPct = Number(cpu?.usage_percent ?? 0);
+              const memPct = Number(mem?.usage_percent ?? 0);
+              const gpuPct = Number(gpu?.utilization_percent ?? 0);
+              return (
+                <div key={node.node_id} className="flex items-center gap-4 py-2 border-b border-white/[0.03] last:border-0 cursor-pointer hover:bg-white/[0.02] -mx-2 px-2 rounded" onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}>
+                  <div className="w-[140px] shrink-0"><span className="text-[13px] text-white font-medium">{node.display_name}</span></div>
+                  <div className="flex-1 grid grid-cols-3 gap-4">
+                    <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">CPU</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full" style={{ width: `${cpuPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(cpuPct)}%</span></div>
+                    <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">MEM</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${memPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(memPct)}%</span></div>
+                    <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">GPU</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-amber-500 rounded-full" style={{ width: `${gpuPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(gpuPct)}%</span></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Recent tasks */}
+      <div className={`${sectionCls} p-0 overflow-hidden`}>
+        <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center">
+          <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide">Recent Active Tasks <span className="text-gray-500 font-normal">(近线任务)</span></span>
           <span className="text-[11px] text-cyan-400 hover:text-white cursor-pointer transition-colors" onClick={() => navigate({ name: "tasks" })}>查看全部历史</span>
         </div>
         {recentTasks.length === 0 ? (
-          <div className="px-5 py-12 text-center text-xs text-gray-600 font-mono">暂无任务记录</div>
+          <div className="px-5 py-12 text-center text-[13px] text-gray-600">暂无任务记录</div>
         ) : (
-          <table className="w-full text-left text-xs">
-            <thead className="text-gray-500 font-mono uppercase tracking-wider border-b border-white/5 bg-[#090A0D]/20">
-              <tr>
-                <th className="px-5 py-3 font-medium">任务 ID</th>
-                <th className="px-5 py-3 font-medium">指定执行节点</th>
-                <th className="px-5 py-3 font-medium">执行类型</th>
-                <th className="px-5 py-3 font-medium">最终状态</th>
-                <th className="px-5 py-3 font-medium text-right">用时</th>
-              </tr>
+          <table className="w-full text-left text-[13px]">
+            <thead className="text-gray-500 text-[11px] font-mono uppercase tracking-wider border-b border-white/5">
+              <tr><th className="px-5 py-3">任务 ID</th><th className="px-5 py-3">执行节点</th><th className="px-5 py-3">类型</th><th className="px-5 py-3">状态</th><th className="px-5 py-3 text-right">时间</th></tr>
             </thead>
             <tbody>
               {recentTasks.slice(0, 10).map((t) => (
-                <tr key={t.task_id} className="hover:bg-white/[0.01] transition-colors cursor-pointer" onClick={() => navigate({ name: "task-detail", taskId: t.task_id })}>
-                  <td className="px-5 py-3.5 font-mono text-cyan-500">{t.task_id}</td>
-                  <td className="px-5 py-3.5 font-mono">{t.node_id}</td>
-                  <td className="px-5 py-3.5">{t.type}</td>
+                <tr key={t.task_id} className="hover:bg-white/[0.02] transition-colors cursor-pointer border-b border-white/[0.03] last:border-0" onClick={() => navigate({ name: "task-detail", taskId: t.task_id })}>
+                  <td className="px-5 py-3.5 font-mono text-cyan-500 text-[12px]">{t.task_id}</td>
+                  <td className="px-5 py-3.5 font-mono text-gray-400 text-[12px]">{t.node_id}</td>
+                  <td className="px-5 py-3.5 text-gray-300">{t.type}</td>
                   <td className="px-5 py-3.5"><StatusPill tone={taskStatusTone[t.status] ?? "muted"} label={taskStatusLabel[t.status] ?? t.status} /></td>
-                  <td className="px-5 py-3.5 text-right font-mono text-gray-500">{formatRelative(t.created_at)}</td>
+                  <td className="px-5 py-3.5 text-right font-mono text-gray-500 text-[12px]">{formatRelative(t.created_at)}</td>
                 </tr>
               ))}
             </tbody>
