@@ -57,3 +57,5 @@ node_agent/src/*.egg-info/
 # Cache directories
 .ruff_cache/
 .mypy_cache/
+
+references/

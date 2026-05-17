@@ -1,88 +1,87 @@
 /* =========================================================
  * GPUFleet · Design Tokens
- * Clean dark theme. No glow, no glass, no gradients.
- * Inspired by shadcn/Vercel dark mode.
+ * Dark teal/cyan accent theme — matches Gemini redesign
  * ========================================================= */
 
 :root {
   color-scheme: dark;
 
-  /* ---------- Surfaces — solid colors, no transparency ---------- */
-  --bg-app: #09090b;
-  --bg-canvas: #0c0c0f;
-  --bg-surface: #111113;
-  --bg-surface-2: #18181b;
-  --bg-elev: #1c1c20;
-  --bg-elev-2: #222226;
-  --bg-input: #0c0c0f;
-  --bg-terminal: #09090b;
+  /* ---------- Surfaces ---------- */
+  --bg-app: #0a0e14;
+  --bg-canvas: #0d1117;
+  --bg-surface: #161b22;
+  --bg-surface-2: #1c2128;
+  --bg-elev: #21262d;
+  --bg-elev-2: #282e36;
+  --bg-input: #0d1117;
+  --bg-terminal: #090c10;
 
   --bg-hover: rgba(255, 255, 255, 0.04);
-  --bg-active: rgba(255, 255, 255, 0.06);
-  --bg-selected: rgba(99, 152, 255, 0.08);
+  --bg-active: rgba(15, 240, 179, 0.08);
+  --bg-selected: rgba(15, 240, 179, 0.06);
 
-  /* ---------- Borders — simple, consistent ---------- */
-  --border: #27272a;
-  --border-strong: #3f3f46;
-  --border-muted: #1e1e22;
-  --border-focus: #6b9eff;
+  /* ---------- Borders ---------- */
+  --border: #1e2a3a;
+  --border-strong: #30363d;
+  --border-muted: #151d28;
+  --border-focus: #0ff0b3;
 
-  /* ---------- Text — 4 levels, that's it ---------- */
-  --text: #fafafa;
-  --text-soft: #a1a1aa;
-  --text-mute: #71717a;
-  --text-faint: #52525b;
-  --text-disabled: #3f3f46;
+  /* ---------- Text ---------- */
+  --text: #f0f6fc;
+  --text-soft: #c9d1d9;
+  --text-mute: #8b949e;
+  --text-faint: #4a5568;
+  --text-disabled: #30363d;
 
-  /* ---------- Accent ---------- */
-  --accent: #6b9eff;
-  --accent-hover: #7daaff;
-  --accent-active: #5a8ef0;
-  --accent-fg: #ffffff;
-  --accent-soft: rgba(107, 158, 255, 0.10);
-  --accent-border: rgba(107, 158, 255, 0.25);
-  --accent-glow: none;
+  /* ---------- Accent — cyan/teal ---------- */
+  --accent: #0ff0b3;
+  --accent-hover: #33f5c4;
+  --accent-active: #0cd9a0;
+  --accent-fg: #0d1117;
+  --accent-soft: rgba(15, 240, 179, 0.10);
+  --accent-border: rgba(15, 240, 179, 0.25);
+  --accent-glow: 0 0 12px rgba(15, 240, 179, 0.15);
 
   /* ---------- Status ---------- */
-  --c-online: #22c55e;
-  --c-online-fg: #4ade80;
-  --c-online-soft: rgba(34, 197, 94, 0.10);
-  --c-online-border: rgba(34, 197, 94, 0.25);
+  --c-online: #0ff0b3;
+  --c-online-fg: #0ff0b3;
+  --c-online-soft: rgba(15, 240, 179, 0.10);
+  --c-online-border: rgba(15, 240, 179, 0.25);
 
-  --c-waiting: #eab308;
-  --c-waiting-fg: #facc15;
-  --c-waiting-soft: rgba(234, 179, 8, 0.10);
-  --c-waiting-border: rgba(234, 179, 8, 0.25);
+  --c-waiting: #f0b040;
+  --c-waiting-fg: #f5d070;
+  --c-waiting-soft: rgba(240, 176, 64, 0.10);
+  --c-waiting-border: rgba(240, 176, 64, 0.25);
 
-  --c-offline: #71717a;
-  --c-offline-soft: rgba(113, 113, 122, 0.10);
-  --c-offline-border: rgba(113, 113, 122, 0.20);
+  --c-offline: #8b949e;
+  --c-offline-soft: rgba(139, 148, 158, 0.10);
+  --c-offline-border: rgba(139, 148, 158, 0.20);
 
-  --c-danger: #ef4444;
-  --c-danger-fg: #f87171;
-  --c-danger-soft: rgba(239, 68, 68, 0.10);
-  --c-danger-border: rgba(239, 68, 68, 0.25);
+  --c-danger: #f85149;
+  --c-danger-fg: #f85149;
+  --c-danger-soft: rgba(248, 81, 73, 0.10);
+  --c-danger-border: rgba(248, 81, 73, 0.25);
 
-  --c-running: #6b9eff;
-  --c-running-soft: rgba(107, 158, 255, 0.10);
-  --c-running-border: rgba(107, 158, 255, 0.25);
+  --c-running: #58a6ff;
+  --c-running-soft: rgba(88, 166, 255, 0.10);
+  --c-running-border: rgba(88, 166, 255, 0.25);
 
   /* ---------- Radii ---------- */
   --r-xs: 4px;
   --r-sm: 6px;
-  --r-md: 8px;
-  --r-lg: 12px;
-  --r-xl: 16px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 18px;
   --r-pill: 999px;
 
-  /* ---------- Shadows — minimal ---------- */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* ---------- Shadows ---------- */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
   --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.6);
 
-  /* No more glass/inset highlights */
+  /* Compat aliases */
   --glass-bg: var(--bg-surface);
   --glass-bg-strong: var(--bg-surface-2);
   --glass-blur: none;
@@ -95,7 +94,7 @@
 
   /* ---------- Typography ---------- */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", Consolas, monospace;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
 
   --fs-10: 10px;
   --fs-11: 11px;
@@ -112,11 +111,11 @@
   --fs-32: 32px;
 
   /* ---------- Layout ---------- */
-  --sidebar-w: 220px;
-  --topbar-h: 48px;
-  --content-max: 1280px;
-  --content-pad: 24px;
-  --page-gap: 20px;
+  --sidebar-w: 250px;
+  --topbar-h: 56px;
+  --content-max: 1400px;
+  --content-pad: 28px;
+  --page-gap: 24px;
 
   /* ---------- Motion ---------- */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

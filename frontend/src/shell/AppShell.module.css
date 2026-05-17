@@ -1,54 +1,87 @@
-/* AppShell — clean layout, no blur/glass */
+/* ============================================================
+ * AppShell — Gemini-inspired redesign
+ * Dark teal accent, clean structure, branded sidebar
+ * ============================================================ */
 
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: 250px 1fr;
   min-height: 100vh;
 }
 
-/* Sidebar */
+/* ─── Sidebar ─── */
+
 .sidebar {
   position: sticky;
   top: 0;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 14px 10px;
-  border-right: 1px solid var(--border);
-  background: var(--bg-canvas);
+  padding: 20px 14px 14px;
+  background: #0d1117;
+  border-right: 1px solid #1e2a3a;
   overflow-y: auto;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 2px 10px 16px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
+  gap: 12px;
+  padding: 0 10px 20px;
 }
 
 .brandMark {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-sm);
-  background: var(--text);
-  color: var(--bg-app);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0ff0b3 0%, #00c9ff 100%);
   display: grid;
   place-items: center;
-  font-weight: 800;
-  font-size: var(--fs-12);
   flex-shrink: 0;
 }
 
+.brandMarkIcon {
+  color: #0d1117;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+}
+
 .brandName {
-  font-weight: 700;
-  font-size: var(--fs-14);
-  color: var(--text);
+  font-weight: 800;
+  font-size: 16px;
+  color: #f0f6fc;
   letter-spacing: -0.02em;
 }
 
-/* Nav */
+.brandSub {
+  font-size: 10px;
+  color: #0ff0b3;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Nav section */
+
+.navSection {
+  margin-top: 8px;
+}
+
+.navSectionLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: #4a5568;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+
 .nav {
   display: flex;
   flex-direction: column;
@@ -56,93 +89,129 @@
 }
 
 .navItem {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 0 12px;
-  height: 34px;
-  border-radius: var(--r-sm);
-  color: var(--text-mute);
-  font-size: var(--fs-13);
+  height: 40px;
+  border-radius: 10px;
+  color: #8b949e;
+  font-size: 14px;
   font-weight: 500;
   text-decoration: none;
-  transition: color 0.1s, background 0.1s;
+  transition: background 0.12s, color 0.12s;
 }
 
-.navItem:hover { color: var(--text-soft); background: var(--bg-hover); }
+.navItem:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #c9d1d9;
+}
 
 .navActive {
-  background: var(--bg-active);
-  color: var(--text);
+  background: rgba(15, 240, 179, 0.08);
+  color: #f0f6fc;
   font-weight: 600;
 }
 
 .navIcon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
-.navActive .navIcon { opacity: 1; }
+.navActive .navIcon { opacity: 1; color: #0ff0b3; }
 
-.navLabel {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.navLabel { flex: 1; }
 
 .badge {
-  font-size: var(--fs-10);
+  font-size: 10px;
   font-weight: 600;
-  min-width: 18px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: var(--r-xs);
-  background: var(--c-waiting-soft);
-  color: var(--c-waiting-fg);
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: rgba(15, 240, 179, 0.12);
+  color: #0ff0b3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.badgeMute { background: var(--c-offline-soft); color: var(--c-offline); }
-.badgeDanger { background: var(--c-danger-soft); color: var(--c-danger-fg); }
+.badgeMute { background: rgba(139, 148, 158, 0.12); color: #8b949e; }
+.badgeDanger { background: rgba(248, 81, 73, 0.12); color: #f85149; }
 
-/* Sidebar footer */
+/* Sidebar footer — user */
+
 .sidebarFoot {
   margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  border-top: 1px solid #1e2a3a;
 }
 
-.stats {
+.userBlock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.userAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #21262d;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.userInfo {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 1px;
+  min-width: 0;
 }
 
-.statRow {
+.userName {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.userStatus {
+  font-size: 11px;
+  color: #0ff0b3;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: var(--fs-12);
-  color: var(--text-mute);
+  gap: 5px;
 }
 
-.statValue { font-weight: 600; color: var(--text); }
-.statOnline { color: var(--c-online-fg); }
+.userStatusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0ff0b3;
+}
 
-/* Main */
+.stats { display: none; }
+.statRow { display: none; }
+.statValue { display: none; }
+.statOnline { display: none; }
+
+/* ─── Main ─── */
+
 .main {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  background: #0a0e14;
 }
 
 .topbar {
@@ -152,96 +221,100 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 0 var(--content-pad);
-  height: var(--topbar-h);
-  background: var(--bg-canvas);
-  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  padding: 0 28px;
+  height: 56px;
+  background: #0d1117;
+  border-bottom: 1px solid #1e2a3a;
 }
 
 .topbarRight {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .sync {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--fs-11);
-  color: var(--text-mute);
-  padding: 0 10px;
-  height: 26px;
-  border-radius: var(--r-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  gap: 8px;
+  font-size: 12px;
+  color: #8b949e;
+  padding: 6px 14px;
+  height: 32px;
+  border-radius: 8px;
+  background: #161b22;
+  border: 1px solid #21262d;
 }
 
 .syncDot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--c-online);
+  background: #0ff0b3;
 }
 
 /* Breadcrumb */
+
 .breadcrumb {
   display: flex;
   align-items: center;
-  font-size: var(--fs-13);
-  color: var(--text-mute);
+  font-size: 14px;
+  color: #8b949e;
   font-weight: 500;
 }
 
 .crumbItem { display: inline-flex; align-items: center; }
-.crumbLink { color: var(--text-mute); padding: 2px 4px; border-radius: var(--r-xs); }
-.crumbLink:hover { color: var(--text); }
-.crumbCurrent { color: var(--text); font-weight: 600; }
-.crumbSep { color: var(--text-faint); margin: 0 6px; user-select: none; }
+.crumbLink { color: #8b949e; padding: 2px 4px; border-radius: 4px; }
+.crumbLink:hover { color: #f0f6fc; }
+.crumbCurrent { color: #f0f6fc; font-weight: 600; }
+.crumbSep { color: #4a5568; margin: 0 8px; }
 
 /* Error banner */
+
 .errorBanner {
-  margin: 12px var(--content-pad) 0;
-  padding: 10px 14px;
-  border-radius: var(--r-md);
-  font-size: var(--fs-12);
-  background: var(--c-danger-soft);
-  border: 1px solid var(--c-danger-border);
-  color: var(--c-danger-fg);
+  margin: 14px 28px 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.2);
+  color: #f85149;
   display: flex;
   gap: 10px;
   align-items: center;
 }
 
-.errorBanner code { font-size: var(--fs-11); opacity: 0.8; }
+.errorBanner code { font-size: 12px; opacity: 0.8; }
 
 /* Content */
+
 .content {
-  padding: var(--content-pad);
+  padding: 28px;
   padding-bottom: 48px;
   flex: 1;
-  max-width: var(--content-max);
+  max-width: 1400px;
   width: 100%;
-  margin: 0 auto;
 }
 
-/* Responsive */
+/* ─── Responsive ─── */
+
 @media (max-width: 1024px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar {
     position: relative;
     height: auto;
     border-right: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid #1e2a3a;
     flex-direction: row;
     align-items: center;
     flex-wrap: wrap;
-    padding: 10px 16px;
+    padding: 12px 16px;
     gap: 8px;
   }
-  .brand { padding: 0 8px 0 0; border-bottom: 0; margin-bottom: 0; }
+  .brand { padding: 0 8px 0 0; }
   .nav { flex-direction: row; flex-wrap: wrap; gap: 2px; }
+  .navSectionLabel { display: none; }
   .sidebarFoot { display: none; }
 }
 
