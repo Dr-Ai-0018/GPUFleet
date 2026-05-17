@@ -129,7 +129,7 @@ def _build_venv_env(venv_python: Path) -> dict[str, str]:
 
 
 def _conda_run_prefix(executable: str, workdir: Path, *, flag: str, target: str) -> list[str]:
-    return [executable, "run", "--cwd", str(workdir), flag, target, "--"]
+    return [executable, "run", "--cwd", str(workdir), flag, target]
 
 
 def detect_python_env(settings: AgentSettings) -> dict[str, Any]:

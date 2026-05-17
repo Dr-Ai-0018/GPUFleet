@@ -60,6 +60,7 @@ Build a control console that the owner can reliably use for:
 
 Additional local design notes for current development:
 
+- [docs/GPUFleet_Deployment_And_Smoke_Test.md](docs/GPUFleet_Deployment_And_Smoke_Test.md)
 - [docs/GPUFleet_Node_Deployment_Modes.md](docs/GPUFleet_Node_Deployment_Modes.md)
 - [docs/GPUFleet_ModalRunner_Design.md](docs/GPUFleet_ModalRunner_Design.md)
 - [docs/Modal_Credential_Pool_Design.md](docs/Modal_Credential_Pool_Design.md)

@@ -51,3 +51,5 @@ node_agent/runtime/
 node_agent/src/*.egg-info/
 
 .playwright-cli
+
+.tmp
