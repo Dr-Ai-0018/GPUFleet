@@ -119,6 +119,19 @@ class HeartbeatPythonEnv(BaseModel):
     venv_path: str | None = None
     pip_available: bool = False
     python_version: str | None = None
+    python_resolution_error: str | None = None
+    active_environment_kind: str | None = None
+    active_environment_name: str | None = None
+    conda_prefix: str | None = None
+    conda_default_env: str | None = None
+    mamba_root_prefix: str | None = None
+    uv_available: bool = False
+    uv_executable: str | None = None
+    conda_available: bool = False
+    conda_executable: str | None = None
+    micromamba_available: bool = False
+    micromamba_executable: str | None = None
+    supported_backends: list[str] = Field(default_factory=list)
 
 
 class HeartbeatTaskRuntime(BaseModel):

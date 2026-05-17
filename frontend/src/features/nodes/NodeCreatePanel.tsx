@@ -59,7 +59,7 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
     setSubmitting(true);
     setError(null);
     try {
-      const response = await api.createNode(store.token, {
+      const response = await store.callApi((token) => api.createNode(token, {
         node_id: form.node_id.trim(),
         display_name: form.display_name.trim(),
         node_type: form.node_type,
@@ -73,7 +73,7 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
           .split(/[,，]/)
           .map((line) => line.trim())
           .filter(Boolean),
-      });
+      }));
       onCreated(response);
       store.setRecentOnboarding(response);
       toast.push({
@@ -87,10 +87,6 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
       setTouchedDirs(false);
       setTouchedTags(false);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        store.signalAuthFailure();
-        return;
-      }
       const message =
         err instanceof ApiError ? err.body || err.message : err instanceof Error ? err.message : "创建节点失败";
       setError(message);

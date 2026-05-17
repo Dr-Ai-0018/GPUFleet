@@ -25,6 +25,9 @@ class AgentSettings(BaseSettings):
 
     python_executable: str | None = None
     venv_path: str | None = None
+    uv_executable: str | None = None
+    conda_executable: str | None = None
+    micromamba_executable: str | None = None
     modal_credentials_path: Path | None = None
     modal_default_credential_name: str | None = None
     modal_default_environment: str | None = None

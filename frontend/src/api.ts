@@ -1,4 +1,5 @@
 import type {
+  AdminProfile,
   AdminTaskDetail,
   AdminTaskListItem,
   AuditEventView,
@@ -6,6 +7,8 @@ import type {
   NodeCreatePayload,
   NodeCreateResponse,
   NodeResponse,
+  NodeStatusPreview,
+  NodeUpdatePayload,
   SecurityWarningView,
   TaskCreatePayload,
   TokenPair,
@@ -61,6 +64,17 @@ export const api = {
     });
   },
 
+  refresh(refreshToken: string): Promise<TokenPair> {
+    return request<TokenPair>("/api/admin/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  },
+
+  getMe(token: string): Promise<AdminProfile> {
+    return request<AdminProfile>("/api/admin/me", {}, token);
+  },
+
   getOverview(token: string): Promise<DashboardOverview> {
     return request<DashboardOverview>("/api/admin/dashboard/overview", {}, token);
   },
@@ -69,10 +83,26 @@ export const api = {
     return request<NodeResponse[]>("/api/admin/nodes", {}, token);
   },
 
+  getNode(token: string, nodeId: string): Promise<NodeResponse> {
+    return request<NodeResponse>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}`,
+      {},
+      token,
+    );
+  },
+
   createNode(token: string, payload: NodeCreatePayload): Promise<NodeCreateResponse> {
     return request<NodeCreateResponse>(
       "/api/admin/nodes",
       { method: "POST", body: JSON.stringify(payload) },
+      token,
+    );
+  },
+
+  updateNode(token: string, nodeId: string, payload: NodeUpdatePayload): Promise<NodeResponse> {
+    return request<NodeResponse>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
       token,
     );
   },
@@ -89,6 +119,14 @@ export const api = {
     return request<NodeResponse>(
       `/api/admin/nodes/${encodeURIComponent(nodeId)}/disable`,
       { method: "POST" },
+      token,
+    );
+  },
+
+  getLatestNodeStatus(token: string, nodeId: string): Promise<NodeStatusPreview> {
+    return request<NodeStatusPreview>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}/status/latest`,
+      {},
       token,
     );
   },

@@ -18,7 +18,7 @@ export type Route =
   | { name: "task-detail"; taskId: string }
   | { name: "security" };
 
-const DEFAULT_HASH = "#/overview";
+const DEFAULT_HASH = "#/onboarding";
 
 function parseHash(raw: string): Route {
   const trimmed = raw.replace(/^#\/?/, "").trim();

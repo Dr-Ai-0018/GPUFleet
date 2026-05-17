@@ -120,6 +120,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
         <header className={styles.topbar}>
           <Breadcrumb route={route} />
           <div className={styles.topbarRight}>
+            {store.me ? <span className={styles.sync}>{store.me.username}</span> : null}
             <SyncChip now={now.getTime()} />
             <Button
               variant="ghost"

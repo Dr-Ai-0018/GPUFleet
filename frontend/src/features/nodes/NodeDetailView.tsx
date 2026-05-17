@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../../api";
 import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
@@ -19,8 +19,9 @@ import {
 } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 import { TaskComposer } from "../tasks/TaskComposer";
-import type { DashboardNodeCard, NodeResponse } from "../../types";
+import type { DashboardNodeCard, NodeResponse, NodeStatusPreview, OsType } from "../../types";
 import page from "../../ui/page.module.css";
+import forms from "../../ui/forms.module.css";
 import styles from "./NodeDetailView.module.css";
 
 type Props = { nodeId: string };
@@ -28,14 +29,107 @@ type Props = { nodeId: string };
 export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const store = useConsoleStore();
   const toast = useToast();
-  const node = store.nodes.find((n) => n.node_id === nodeId) ?? null;
+  const storeNode = store.nodes.find((n) => n.node_id === nodeId) ?? null;
   const overviewNode = store.overview?.nodes.find((n) => n.node_id === nodeId) ?? null;
+  const [node, setNode] = useState<NodeResponse | null>(storeNode);
+  const [latestStatus, setLatestStatus] = useState<NodeStatusPreview | null>(overviewNode?.latest_status ?? null);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isEditDirty, setIsEditDirty] = useState(false);
+  const [editHydratedNodeId, setEditHydratedNodeId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    display_name: "",
+    hostname: "",
+    os_type: "windows" as OsType,
+    heartbeat_interval_sec: 5,
+    allowed_workdirs: "",
+    tags: "",
+  });
+
+  useEffect(() => {
+    setNode(storeNode);
+  }, [storeNode]);
+
+  useEffect(() => {
+    setLatestStatus(overviewNode?.latest_status ?? null);
+  }, [overviewNode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [freshNode, status] = await Promise.allSettled([
+          store.callApi((token) => api.getNode(token, nodeId)),
+          store.callApi((token) => api.getLatestNodeStatus(token, nodeId)),
+        ]);
+        if (cancelled) return;
+        if (freshNode.status === "fulfilled") {
+          setNode(freshNode.value);
+        }
+        if (status.status === "fulfilled") {
+          setLatestStatus(status.value);
+        } else if (status.reason instanceof ApiError && status.reason.status === 404) {
+          setLatestStatus(null);
+        }
+      } catch {
+        /* keep store fallback */
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [nodeId, store.callApi]);
+
+  useEffect(() => {
+    if (!node) return;
+    if (isEditDirty && editHydratedNodeId === node.node_id) return;
+    const nextOsType: OsType = node.os_type === "linux" ? "linux" : "windows";
+    setEditForm({
+      display_name: node.display_name,
+      hostname: node.hostname ?? "",
+      os_type: nextOsType,
+      heartbeat_interval_sec: node.heartbeat_interval_sec,
+      allowed_workdirs: node.allowed_workdirs.join("\n"),
+      tags: node.tags.join(", "),
+    });
+    setEditError(null);
+    setIsEditDirty(false);
+    setEditHydratedNodeId(node.node_id);
+  }, [node, isEditDirty, editHydratedNodeId]);
+
+  function updateEditForm(
+    updater: (prev: typeof editForm) => typeof editForm,
+  ) {
+    setIsEditDirty(true);
+    setEditForm((prev) => updater(prev));
+  }
 
   const recentTasks = useMemo(
     () => store.tasks.filter((task) => task.node_id === nodeId).slice(0, 8),
     [store.tasks, nodeId],
   );
+
+  const runtimeCard = useMemo<DashboardNodeCard | null>(() => {
+    if (!node) return null;
+    return {
+      node_id: node.node_id,
+      display_name: node.display_name,
+      node_type: node.node_type,
+      os_type: node.os_type,
+      hostname: node.hostname,
+      tags: node.tags,
+      is_enabled: node.is_enabled,
+      heartbeat_interval_sec: node.heartbeat_interval_sec,
+      first_seen_at: node.first_seen_at,
+      last_seen_at: node.last_seen_at,
+      online_status: overviewNode?.online_status ?? (node.connection_status as DashboardNodeCard["online_status"]),
+      onboarding_status: node.onboarding_status,
+      latest_status: latestStatus,
+      active_task: overviewNode?.active_task ?? null,
+    };
+  }, [node, overviewNode, latestStatus]);
 
   if (!node) {
     return (
@@ -58,18 +152,16 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     setBusy(true);
     try {
       if (node.is_enabled) {
-        await api.disableNode(store.token, node.node_id);
+        const updated = await store.callApi((token) => api.disableNode(token, node.node_id));
+        setNode(updated);
         toast.push({ tone: "warning", title: "节点已停用", description: node.display_name });
       } else {
-        await api.enableNode(store.token, node.node_id);
+        const updated = await store.callApi((token) => api.enableNode(token, node.node_id));
+        setNode(updated);
         toast.push({ tone: "success", title: "节点已启用", description: node.display_name });
       }
       await store.refresh({ silent: true });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        store.signalAuthFailure();
-        return;
-      }
       toast.push({
         tone: "error",
         title: "操作失败",
@@ -77,6 +169,39 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
       });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleSaveConfig() {
+    if (!node) return;
+    setSaving(true);
+    setEditError(null);
+    try {
+      const updated = await store.callApi((token) =>
+        api.updateNode(token, node.node_id, {
+          display_name: editForm.display_name.trim(),
+          hostname: editForm.hostname.trim() || null,
+          os_type: editForm.os_type,
+          heartbeat_interval_sec: Number(editForm.heartbeat_interval_sec),
+          allowed_workdirs: editForm.allowed_workdirs
+            .split(/\r?\n/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+          tags: editForm.tags
+            .split(/[,，]/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }),
+      );
+      setNode(updated);
+      setIsEditDirty(false);
+      setEditHydratedNodeId(updated.node_id);
+      toast.push({ tone: "success", title: "节点配置已更新", description: updated.display_name });
+      await store.refresh({ silent: true });
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -119,6 +244,85 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
       <ConnectionSlab node={node} />
 
       <section className={styles.layout}>
+        <Card title="节点配置">
+          <form className={forms.stack} onSubmit={(event) => { event.preventDefault(); void handleSaveConfig(); }}>
+            <div className={forms.row}>
+              <label className={forms.field}>
+                <span className={forms.label}>显示名</span>
+                <input
+                  className={forms.input}
+                  value={editForm.display_name}
+                  onChange={(event) => updateEditForm((prev) => ({ ...prev, display_name: event.target.value }))}
+                />
+              </label>
+              <label className={forms.field}>
+                <span className={forms.label}>主机名</span>
+                <input
+                  className={`${forms.input} ${forms.mono}`}
+                  value={editForm.hostname}
+                  onChange={(event) => updateEditForm((prev) => ({ ...prev, hostname: event.target.value }))}
+                  placeholder="可留空"
+                />
+              </label>
+            </div>
+
+            <div className={forms.row}>
+              <label className={forms.field}>
+                <span className={forms.label}>OS</span>
+                <select
+                  className={forms.select}
+                  value={editForm.os_type}
+                  onChange={(event) => updateEditForm((prev) => ({ ...prev, os_type: event.target.value as OsType }))}
+                >
+                  <option value="windows">windows</option>
+                  <option value="linux">linux</option>
+                </select>
+              </label>
+              <label className={forms.field}>
+                <span className={forms.label}>心跳间隔（秒）</span>
+                <input
+                  className={forms.input}
+                  type="number"
+                  min={3}
+                  max={3600}
+                  value={editForm.heartbeat_interval_sec}
+                  onChange={(event) =>
+                    updateEditForm((prev) => ({ ...prev, heartbeat_interval_sec: Number(event.target.value || 5) }))
+                  }
+                />
+              </label>
+            </div>
+
+            <label className={forms.field}>
+              <span className={forms.label}>允许的工作目录</span>
+              <textarea
+                className={forms.textarea}
+                rows={4}
+                value={editForm.allowed_workdirs}
+                onChange={(event) => updateEditForm((prev) => ({ ...prev, allowed_workdirs: event.target.value }))}
+              />
+            </label>
+
+            <label className={forms.field}>
+              <span className={forms.label}>标签</span>
+              <input
+                className={forms.input}
+                value={editForm.tags}
+                onChange={(event) => updateEditForm((prev) => ({ ...prev, tags: event.target.value }))}
+                placeholder="用逗号分隔"
+              />
+            </label>
+
+            {editError ? <div className={forms.error}>{editError}</div> : null}
+
+            <div className={forms.actions}>
+              <Button type="submit" variant="accent" disabled={saving}>
+                {saving ? "保存中…" : "保存配置"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+
         <Card title="允许的工作目录">
           {node.allowed_workdirs.length === 0 ? (
             <EmptyState title="尚未配置" description="任务下发会被拒绝。" />
@@ -183,7 +387,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         )}
       </Card>
 
-      <NodeRuntimeBlock card={overviewNode} />
+      <NodeRuntimeBlock card={runtimeCard} />
     </div>
   );
 }
@@ -343,7 +547,13 @@ function NodeRuntimeBlock({ card }: { card: DashboardNodeCard | null }): JSX.Ele
   const status = card.latest_status;
   const cpu = status.cpu as { model?: string; logical_cores?: number; usage_percent?: number };
   const memory = status.memory as { total_bytes?: number; used_bytes?: number; usage_percent?: number };
-  const pythonEnv = status.python_env as { python_version?: string; python_executable?: string };
+  const pythonEnv = status.python_env as {
+    python_version?: string;
+    python_executable?: string;
+    active_environment_kind?: string;
+    active_environment_name?: string;
+    supported_backends?: string[];
+  };
   const gpus = status.gpus;
   const cpuUse = Number(cpu.usage_percent ?? 0);
   const memUse = Number(
@@ -366,6 +576,17 @@ function NodeRuntimeBlock({ card }: { card: DashboardNodeCard | null }): JSX.Ele
           </div>
           {pythonEnv.python_version ? (
             <div className={styles.snapshotPython}>Python {pythonEnv.python_version}</div>
+          ) : null}
+          {pythonEnv.active_environment_kind ? (
+            <div className={styles.snapshotPython}>
+              active {pythonEnv.active_environment_kind}
+              {pythonEnv.active_environment_name ? ` · ${pythonEnv.active_environment_name}` : ""}
+            </div>
+          ) : null}
+          {Array.isArray(pythonEnv.supported_backends) && pythonEnv.supported_backends.length > 0 ? (
+            <div className={styles.snapshotPython}>
+              backends {pythonEnv.supported_backends.join(", ")}
+            </div>
           ) : null}
         </div>
       </div>

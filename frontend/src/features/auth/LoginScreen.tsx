@@ -2,10 +2,11 @@ import { type FormEvent, useCallback, useRef, useState } from "react";
 import { ApiError, api } from "../../api";
 import { motion } from "motion/react";
 import { ParticleField } from "../../ui/ParticleField";
+import type { TokenPair } from "../../types";
 import styles from "./LoginScreen.module.css";
 
 type Props = {
-  onAuthenticated: (token: string) => void;
+  onAuthenticated: (token: TokenPair) => void;
 };
 
 export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
@@ -29,7 +30,7 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
     setError(null);
     try {
       const pair = await api.login(username, password);
-      onAuthenticated(pair.access_token);
+      onAuthenticated(pair);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("账号或密码不正确");

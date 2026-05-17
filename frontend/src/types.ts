@@ -4,6 +4,13 @@ export type TokenPair = {
   token_type: "bearer";
 };
 
+export type AdminProfile = {
+  id: number;
+  username: string;
+  is_active: boolean;
+  last_login_at: string | null;
+};
+
 export type NodeOnboardingPackage = {
   control_plane_url: string;
   env_template: string;
@@ -177,10 +184,23 @@ export type NodeCreatePayload = {
   tags?: string[];
 };
 
+export type NodeUpdatePayload = {
+  display_name?: string;
+  os_type?: OsType | null;
+  hostname?: string | null;
+  heartbeat_interval_sec?: number;
+  allowed_workdirs?: string[];
+  tags?: string[];
+  is_enabled?: boolean;
+};
+
 export type TaskCreatePayload = {
   node_id: string;
   type: string;
   payload: Record<string, unknown>;
+  task_id?: string | null;
+  revision?: number;
+  idempotency_key?: string | null;
   workdir?: string | null;
   env?: Record<string, string>;
   requested_gpu_ids?: number[];

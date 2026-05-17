@@ -7,12 +7,12 @@ import platform
 import re
 import shutil
 import subprocess
-import sys
 import uuid
 from pathlib import Path
 from typing import Any
 
 from gpufleet_node_agent.config import AgentSettings
+from gpufleet_node_agent.execution import detect_python_env, resolve_default_python
 from gpufleet_node_agent.state import load_json, save_json
 
 
@@ -294,27 +294,23 @@ def collect_nvidia() -> dict[str, Any]:
 
 
 def collect_python_env(settings: AgentSettings) -> dict[str, Any]:
+    python_env = detect_python_env(settings)
     pip_available = False
-    detected_venv = settings.venv_path
-    if not detected_venv and sys.prefix != getattr(sys, "base_prefix", sys.prefix):
-        detected_venv = sys.prefix
     try:
+        python_executable = resolve_default_python(settings)
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "--version"],
+            [python_executable, "-m", "pip", "--version"],
             capture_output=True,
             text=True,
             check=False,
         )
         pip_available = result.returncode == 0
-    except OSError:
+    except (OSError, ValueError):
         pip_available = False
 
-    return {
-        "python_executable": settings.python_executable or sys.executable,
-        "venv_path": detected_venv,
-        "pip_available": pip_available,
-        "python_version": platform.python_version(),
-    }
+    python_env["pip_available"] = pip_available
+    python_env["python_version"] = platform.python_version()
+    return python_env
 
 
 def collect_task_runtime(settings: AgentSettings) -> dict[str, Any]:

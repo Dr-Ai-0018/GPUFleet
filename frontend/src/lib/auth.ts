@@ -1,22 +1,34 @@
-const TOKEN_KEY = "gpufleet-console-token";
+import type { TokenPair } from "../types";
 
-export function loadToken(): string {
+const TOKEN_KEY = "gpufleet-console-auth";
+
+export function loadAuth(): TokenPair | null {
   try {
-    return localStorage.getItem(TOKEN_KEY) ?? "";
+    const raw = localStorage.getItem(TOKEN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<TokenPair>;
+    if (
+      typeof parsed.access_token !== "string" ||
+      typeof parsed.refresh_token !== "string" ||
+      parsed.token_type !== "bearer"
+    ) {
+      return null;
+    }
+    return parsed as TokenPair;
   } catch {
-    return "";
+    return null;
   }
 }
 
-export function saveToken(token: string): void {
+export function saveAuth(auth: TokenPair): void {
   try {
-    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_KEY, JSON.stringify(auth));
   } catch {
     /* ignore */
   }
 }
 
-export function clearToken(): void {
+export function clearAuth(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
   } catch {

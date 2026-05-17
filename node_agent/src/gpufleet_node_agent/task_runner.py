@@ -28,6 +28,7 @@ from gpufleet_node_agent.collect import (
     get_boot_id,
 )
 from gpufleet_node_agent.config import AgentSettings
+from gpufleet_node_agent.execution import prepare_python_command, prepare_shell_command
 from gpufleet_node_agent.modal_support import build_modal_env_overrides, collect_modal_runtime_status
 from gpufleet_node_agent.state import load_json, save_json
 
@@ -41,6 +42,13 @@ def _now_iso() -> str:
 
 def _safe_task_name(task_id: str) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in task_id)
+
+
+def _payload_value(payload: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in payload:
+            return payload[key]
+    return None
 
 
 def _prepare_run_dir(settings: AgentSettings, task_id: str) -> Path:
@@ -148,7 +156,12 @@ def _build_modal_command(settings: AgentSettings, task: dict[str, Any], workdir:
     return command
 
 
-def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path, workdir: Path) -> tuple[list[str], Path | None]:
+def _build_command(
+    settings: AgentSettings,
+    task: dict[str, Any],
+    run_dir: Path,
+    workdir: Path,
+) -> tuple[list[str], Path | None, dict[str, str], dict[str, Any]]:
     task_type = task["type"]
     payload = task.get("payload", {})
     if task_type == "health_check":
@@ -166,16 +179,14 @@ def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path,
                 "}, ensure_ascii=False))"
             ),
         ]
-        return command, None
+        return command, None, {}, {"backend": "default"}
 
     if task_type == "shell":
         command_text = str(payload.get("command", "")).strip()
         if not command_text:
             raise ValueError("shell task missing payload.command")
-        if os.name == "nt":
-            shell_exe = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
-            return [shell_exe, "-NoProfile", "-Command", command_text], None
-        return ["/bin/bash", "-lc", command_text], None
+        prepared = prepare_shell_command(settings, payload, command_text, workdir=workdir)
+        return prepared.command, None, prepared.env_overrides, prepared.summary
 
     if task_type == "python_script":
         script_text = str(payload.get("script", "")).strip()
@@ -183,7 +194,8 @@ def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path,
             raise ValueError("python_script task missing payload.script")
         script_path = run_dir / "inline_task.py"
         script_path.write_text(script_text + "\n", encoding="utf-8")
-        return [settings.python_executable or sys.executable, str(script_path)], script_path
+        prepared = prepare_python_command(settings, payload, [str(script_path)], workdir=workdir)
+        return prepared.command, script_path, prepared.env_overrides, prepared.summary
 
     if task_type == "pip_install":
         packages = payload.get("packages")
@@ -197,14 +209,13 @@ def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path,
         if any(Path(item).exists() for item in package_values):
             if "--no-build-isolation" not in normalized_extra_args:
                 normalized_extra_args.append("--no-build-isolation")
-        return [
-            settings.python_executable or sys.executable,
-            "-m",
-            "pip",
-            "install",
-            *package_values,
-            *normalized_extra_args,
-        ], None
+        prepared = prepare_python_command(
+            settings,
+            payload,
+            ["-m", "pip", "install", *package_values, *normalized_extra_args],
+            workdir=workdir,
+        )
+        return prepared.command, None, prepared.env_overrides, prepared.summary
 
     if task_type == "git_pull":
         repo_url = str(payload.get("repo_url", "")).strip()
@@ -221,13 +232,13 @@ def _build_command(settings: AgentSettings, task: dict[str, Any], run_dir: Path,
             clone_cmd = ["git", "clone", repo_url, str(repo_path)]
             if branch:
                 clone_cmd = ["git", "clone", "--branch", branch, repo_url, str(repo_path)]
-            return clone_cmd, None
+            return clone_cmd, None, {}, {"backend": "native"}
         if branch:
-            return ["git", "-C", str(repo_path), "pull", "origin", branch], None
-        return ["git", "-C", str(repo_path), "pull"], None
+            return ["git", "-C", str(repo_path), "pull", "origin", branch], None, {}, {"backend": "native"}
+        return ["git", "-C", str(repo_path), "pull"], None, {}, {"backend": "native"}
 
     if task_type == "modal_command":
-        return _build_modal_command(settings, task, workdir), None
+        return _build_modal_command(settings, task, workdir), None, {}, {"backend": "modal"}
 
     raise ValueError(f"Unsupported task type for node agent MVP: {task_type}")
 
@@ -281,22 +292,31 @@ def _execute_native_task(settings: AgentSettings, task: dict[str, Any], run_dir:
             "modal_runtime": collect_modal_runtime_status(settings),
         }
     if task_type == "file_mkdir":
-        target = _resolve_safe_path(settings, str(payload["path"]), extra_roots=extra_roots)
+        target_raw = _payload_value(payload, "path", "target_path")
+        if not target_raw:
+            raise ValueError("file_mkdir task requires payload.path")
+        target = _resolve_safe_path(settings, str(target_raw), extra_roots=extra_roots)
         target.mkdir(parents=True, exist_ok=True)
         return {"path": str(target), "created": True}
 
     if task_type == "file_write":
-        target = _resolve_safe_path(settings, str(payload["path"]), extra_roots=extra_roots)
+        target_raw = _payload_value(payload, "path", "target_path")
+        if not target_raw:
+            raise ValueError("file_write task requires payload.path")
+        target = _resolve_safe_path(settings, str(target_raw), extra_roots=extra_roots)
         target.parent.mkdir(parents=True, exist_ok=True)
         content = str(payload.get("content", ""))
         target.write_text(content, encoding=str(payload.get("encoding", "utf-8")))
         return {"path": str(target), "bytes": len(content.encode("utf-8"))}
 
     if task_type == "file_patch_text":
-        target = _resolve_safe_path(settings, str(payload["path"]), allow_missing=False, extra_roots=extra_roots)
+        target_raw = _payload_value(payload, "path", "target_path")
+        if not target_raw:
+            raise ValueError("file_patch_text task requires payload.path")
+        target = _resolve_safe_path(settings, str(target_raw), allow_missing=False, extra_roots=extra_roots)
         source = target.read_text(encoding=str(payload.get("encoding", "utf-8")))
-        old_text = str(payload.get("old_text", ""))
-        new_text = str(payload.get("new_text", ""))
+        old_text = str(_payload_value(payload, "old_text", "anchor") or "")
+        new_text = str(_payload_value(payload, "new_text", "replacement") or "")
         if old_text not in source:
             raise ValueError("old_text not found in file")
         updated = source.replace(old_text, new_text, 1 if not payload.get("replace_all") else -1)
@@ -304,14 +324,21 @@ def _execute_native_task(settings: AgentSettings, task: dict[str, Any], run_dir:
         return {"path": str(target), "replaced": True}
 
     if task_type == "file_move":
-        source = _resolve_safe_path(settings, str(payload["source"]), allow_missing=False, extra_roots=extra_roots)
-        target = _resolve_safe_path(settings, str(payload["target"]), extra_roots=extra_roots)
+        source_raw = _payload_value(payload, "source", "source_path")
+        target_raw = _payload_value(payload, "target", "target_path")
+        if not source_raw or not target_raw:
+            raise ValueError("file_move task requires payload.source and payload.target")
+        source = _resolve_safe_path(settings, str(source_raw), allow_missing=False, extra_roots=extra_roots)
+        target = _resolve_safe_path(settings, str(target_raw), extra_roots=extra_roots)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(source), str(target))
         return {"source": str(source), "target": str(target)}
 
     if task_type == "file_delete":
-        target = _resolve_safe_path(settings, str(payload["path"]), allow_missing=False, extra_roots=extra_roots)
+        target_raw = _payload_value(payload, "path", "target_path")
+        if not target_raw:
+            raise ValueError("file_delete task requires payload.path")
+        target = _resolve_safe_path(settings, str(target_raw), allow_missing=False, extra_roots=extra_roots)
         if target.is_dir():
             shutil.rmtree(target)
             kind = "directory"
@@ -322,7 +349,10 @@ def _execute_native_task(settings: AgentSettings, task: dict[str, Any], run_dir:
 
     if task_type == "file_extract":
         archive = _resolve_safe_path(settings, str(payload["archive_path"]), allow_missing=False, extra_roots=extra_roots)
-        target_dir = _resolve_safe_path(settings, str(payload["target_dir"]), extra_roots=extra_roots)
+        target_dir_raw = _payload_value(payload, "target_dir", "target_path")
+        if not target_dir_raw:
+            raise ValueError("file_extract task requires payload.target_dir")
+        target_dir = _resolve_safe_path(settings, str(target_dir_raw), extra_roots=extra_roots)
         target_dir.mkdir(parents=True, exist_ok=True)
         if archive.suffix.lower() == ".zip":
             with zipfile.ZipFile(archive, "r") as zf:
@@ -332,7 +362,10 @@ def _execute_native_task(settings: AgentSettings, task: dict[str, Any], run_dir:
         return {"archive_path": str(archive), "target_dir": str(target_dir)}
 
     if task_type == "file_preview":
-        target = _resolve_safe_path(settings, str(payload["path"]), allow_missing=False, extra_roots=extra_roots)
+        target_raw = _payload_value(payload, "path", "target_path")
+        if not target_raw:
+            raise ValueError("file_preview task requires payload.path")
+        target = _resolve_safe_path(settings, str(target_raw), allow_missing=False, extra_roots=extra_roots)
         if target.is_dir():
             entries = []
             for item in sorted(target.iterdir(), key=lambda path: path.name.lower())[: int(payload.get("limit", 50))]:
@@ -355,7 +388,7 @@ def _execute_native_task(settings: AgentSettings, task: dict[str, Any], run_dir:
             )
             return {"path": str(target), "entry_count": len(entries)}
         text = target.read_text(encoding=str(payload.get("encoding", "utf-8")), errors="replace")
-        max_chars = int(payload.get("max_chars", 4000))
+        max_chars = int(_payload_value(payload, "max_chars", "max_bytes") or 4000)
         preview_text = text[:max_chars]
         send_artifact_file(
             settings,
@@ -571,7 +604,13 @@ def _start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dic
     if task.get("type") == "modal_command":
         modal_env, modal_context = build_modal_env_overrides(settings, task.get("payload", {}))
     env = _build_env(settings, task, run_dir, modal_env_overrides=modal_env)
-    command, inline_script_path = _build_command(settings, task, run_dir, workdir)
+    command, inline_script_path, execution_env_overrides, execution_summary = _build_command(
+        settings,
+        task,
+        run_dir,
+        workdir,
+    )
+    env.update(execution_env_overrides)
     stdout_path = run_dir / "stdout.log"
     stderr_path = run_dir / "stderr.log"
     stdout_path.write_text("", encoding="utf-8")
@@ -584,6 +623,7 @@ def _start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dic
         "workdir": str(workdir),
         "command": command,
         "inline_script_path": str(inline_script_path) if inline_script_path else None,
+        "execution": execution_summary,
         "modal_context": modal_context,
     }
     save_json(run_dir / "task_metadata.json", metadata)
@@ -625,6 +665,7 @@ def _start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dic
         "command": command,
         "timeout_sec": int(task.get("timeout_sec", 3600)),
         "kill_grace_sec": int(task.get("kill_grace_sec", 15)),
+        "execution": execution_summary,
         "modal_context": modal_context,
         "stdout_path": str(stdout_path),
         "stderr_path": str(stderr_path),
@@ -647,20 +688,22 @@ def _finalize_background_task(
     state = _upload_incremental_logs(settings, state, final=True)
     stdout_text = Path(state["stdout_path"]).read_text(encoding="utf-8", errors="replace") if state.get("stdout_path") else ""
     stderr_text = Path(state["stderr_path"]).read_text(encoding="utf-8", errors="replace") if state.get("stderr_path") else ""
+    result_summary = _build_result_summary(
+        {"type": state.get("type"), "modal_context": state.get("modal_context", {})},
+        Path(state.get("run_dir") or "."),
+        Path(state.get("workdir") or "."),
+        list(state.get("command", [])),
+        stdout_text,
+        stderr_text,
+    )
+    result_summary["execution"] = state.get("execution", {"backend": "default"})
     send_task_result(
         settings,
         {
             "task_id": state["task_id"],
             "final_status": final_status,
             "exit_code": exit_code,
-            "summary": _build_result_summary(
-                {"type": state.get("type"), "modal_context": state.get("modal_context", {})},
-                Path(state.get("run_dir") or "."),
-                Path(state.get("workdir") or "."),
-                list(state.get("command", [])),
-                stdout_text,
-                stderr_text,
-            ),
+            "summary": result_summary,
             "boot_id": state.get("boot_id"),
             "pid": state.get("pid"),
             "pgid_or_job_id": str(state.get("pid")) if state.get("pid") else None,
@@ -788,6 +831,7 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
     process: subprocess.Popen[str] | None = None
     command: list[str] = []
     workdir = run_dir
+    execution_summary: dict[str, Any] = {"backend": "default"}
     try:
         native_result = _execute_native_task(settings, task, run_dir)
         if native_result is not None:
@@ -836,7 +880,13 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
             modal_env, modal_context = build_modal_env_overrides(settings, task.get("payload", {}))
         env = _build_env(settings, task, run_dir, modal_env_overrides=modal_env)
 
-        command, inline_script_path = _build_command(settings, task, run_dir, workdir)
+        command, inline_script_path, execution_env_overrides, execution_summary = _build_command(
+            settings,
+            task,
+            run_dir,
+            workdir,
+        )
+        env.update(execution_env_overrides)
         metadata = {
             "task_id": task_id,
             "type": task["type"],
@@ -845,6 +895,7 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
             "workdir": str(workdir),
             "command": command,
             "inline_script_path": str(inline_script_path) if inline_script_path else None,
+            "execution": execution_summary,
             "modal_context": modal_context,
         }
         save_json(run_dir / "task_metadata.json", metadata)
@@ -909,6 +960,7 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
         stdout_text,
         stderr_text,
     )
+    result_summary["execution"] = execution_summary
     send_task_result(
         settings,
         {

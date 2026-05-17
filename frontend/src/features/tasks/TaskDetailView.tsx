@@ -32,7 +32,7 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
       if (!store.token) return;
       if (!silent) setLoadState("loading");
       try {
-        const next = await api.getTaskDetail(store.token, taskId);
+        const next = await store.callApi((token) => api.getTaskDetail(token, taskId));
         if (!cancelled) {
           setDetail(next);
           setLoadState("ready");
@@ -42,10 +42,6 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
           setLoadState("missing");
-          return;
-        }
-        if (err instanceof ApiError && err.status === 401) {
-          store.signalAuthFailure();
           return;
         }
         setLoadState("error");
@@ -58,21 +54,17 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [store.token, taskId, store]);
+  }, [store.token, taskId, store.callApi]);
 
   async function handleCancel() {
     if (!detail) return;
     setBusy(true);
     try {
-      const updated = await api.cancelTask(store.token, detail.task_id);
+      const updated = await store.callApi((token) => api.cancelTask(token, detail.task_id));
       setDetail(updated);
       toast.push({ tone: "warning", title: "已请求取消", description: detail.task_id });
       void store.refresh({ silent: true });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        store.signalAuthFailure();
-        return;
-      }
       toast.push({
         tone: "error",
         title: "取消失败",
@@ -124,6 +116,10 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
   if (!detail) return <div className={page.page} />;
 
   const isActive = ACTIVE_STATUSES.has(detail.status) || detail.status === "cancel_requested";
+  const executionSummary =
+    detail.result && typeof detail.result.summary.execution === "object" && detail.result.summary.execution !== null
+      ? (detail.result.summary.execution as Record<string, unknown>)
+      : null;
 
   return (
     <div className={page.page}>
@@ -198,6 +194,10 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
                     ? `${formatTime(detail.result.finished_at)} · ${formatRelative(detail.result.finished_at)}`
                     : "—"
                 }
+              />
+              <Field
+                label="执行后端"
+                value={typeof executionSummary?.backend === "string" ? executionSummary.backend : "—"}
               />
             </FieldGrid>
             <div style={{ marginTop: 12 }}>
