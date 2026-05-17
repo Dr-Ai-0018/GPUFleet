@@ -98,6 +98,12 @@ export type NodeCreateResponse = NodeResponse & {
   onboarding: NodeOnboardingPackage;
 };
 
+export type NodeResetSecretResponse = NodeResponse & {
+  node_secret: string;
+  signing_hint: string;
+  onboarding: NodeOnboardingPackage;
+};
+
 export type AdminTaskListItem = {
   task_id: string;
   revision: number;

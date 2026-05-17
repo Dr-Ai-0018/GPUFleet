@@ -341,3 +341,55 @@
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
 }
+
+/* Secret reset result panel */
+
+.secretPanel {
+  background: var(--c-danger-soft);
+  border: 1px solid var(--c-danger-border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.secretPanelHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--c-danger-border);
+  gap: 12px;
+}
+
+.secretPanelTitle {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  color: var(--c-danger-fg);
+}
+
+.secretPanelClose {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--c-danger-fg);
+  font-size: var(--fs-13);
+  padding: 2px 6px;
+  border-radius: var(--r-xs);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.secretPanelClose:hover {
+  background: var(--c-danger-border);
+}
+
+.secretPanelHint {
+  padding: 10px 14px;
+  font-size: var(--fs-12);
+  color: var(--c-danger-fg);
+  border-top: 1px solid var(--c-danger-border);
+}
+
+.secretPanelHint code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}

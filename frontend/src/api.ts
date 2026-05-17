@@ -6,6 +6,7 @@ import type {
   DashboardOverview,
   NodeCreatePayload,
   NodeCreateResponse,
+  NodeResetSecretResponse,
   NodeResponse,
   NodeStatusPreview,
   NodeUpdatePayload,
@@ -165,6 +166,22 @@ export const api = {
     return request<NodeStatusPreview>(
       `/api/admin/nodes/${encodeURIComponent(nodeId)}/status/latest`,
       {},
+      token,
+    );
+  },
+
+  resetNodeSecret(token: string, nodeId: string): Promise<NodeResetSecretResponse> {
+    return request<NodeResetSecretResponse>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}/reset-secret`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  deleteNode(token: string, nodeId: string): Promise<void> {
+    return request<void>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}`,
+      { method: "DELETE" },
       token,
     );
   },

@@ -20,7 +20,7 @@ import {
 } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 import { TaskComposer } from "../tasks/TaskComposer";
-import type { DashboardNodeCard, NodeResponse, NodeStatusPreview, OsType } from "../../types";
+import type { DashboardNodeCard, NodeResetSecretResponse, NodeResponse, NodeStatusPreview, OsType } from "../../types";
 import page from "../../ui/page.module.css";
 import forms from "../../ui/forms.module.css";
 import styles from "./NodeDetailView.module.css";
@@ -40,6 +40,9 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const [isEditDirty, setIsEditDirty] = useState(false);
   const [editHydratedNodeId, setEditHydratedNodeId] = useState<string | null>(null);
   const [confirmToggleOpen, setConfirmToggleOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmResetSecretOpen, setConfirmResetSecretOpen] = useState(false);
+  const [resetSecretResult, setResetSecretResult] = useState<NodeResetSecretResponse | null>(null);
   const [editForm, setEditForm] = useState({
     display_name: "",
     hostname: "",
@@ -174,8 +177,44 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     }
   }
 
-  async function handleSaveConfig() {
+  async function handleDelete() {
     if (!node) return;
+    setBusy(true);
+    try {
+      await store.callApi((token) => api.deleteNode(token, node.node_id));
+      toast.push({ tone: "success", title: "节点已删除", description: node.display_name });
+      await store.refresh({ silent: true });
+      navigate({ name: "fleet" });
+    } catch (err) {
+      toast.push({
+        tone: "error",
+        title: "删除失败",
+        description: err instanceof Error ? err.message : "未知错误",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResetSecret() {
+    if (!node) return;
+    setBusy(true);
+    try {
+      const result = await store.callApi((token) => api.resetNodeSecret(token, node.node_id));
+      setResetSecretResult(result);
+      toast.push({ tone: "success", title: "密钥已重置", description: "请立即复制新密钥，关闭后无法再次查看。" });
+    } catch (err) {
+      toast.push({
+        tone: "error",
+        title: "重置失败",
+        description: err instanceof Error ? err.message : "未知错误",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveConfig() {    if (!node) return;
     setSaving(true);
     setEditError(null);
     try {
@@ -233,6 +272,20 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         </div>
         <div className={page.actions}>
           <Button
+            variant="ghost"
+            onClick={() => setConfirmResetSecretOpen(true)}
+            disabled={busy}
+          >
+            重置密钥
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setConfirmDeleteOpen(true)}
+            disabled={busy}
+          >
+            删除节点
+          </Button>
+          <Button
             variant={node.is_enabled ? "ghost" : "accent"}
             onClick={() => setConfirmToggleOpen(true)}
             disabled={busy}
@@ -259,6 +312,55 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         }}
         onCancel={() => setConfirmToggleOpen(false)}
       />
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="确认删除节点"
+        message={`删除节点 "${node.display_name}"（${node.node_id}）后，该节点的所有配置将被永久移除，此操作不可撤销。`}
+        confirmLabel="永久删除"
+        cancelLabel="取消"
+        variant="danger"
+        onConfirm={() => {
+          setConfirmDeleteOpen(false);
+          void handleDelete();
+        }}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmResetSecretOpen}
+        title="确认重置节点密钥"
+        message={`重置节点 "${node.display_name}" 的密钥后，当前正在运行的 Agent 将立即无法通过认证，需要用新密钥重新配置 .env 并重启 Agent。`}
+        confirmLabel="重置密钥"
+        cancelLabel="取消"
+        variant="danger"
+        onConfirm={() => {
+          setConfirmResetSecretOpen(false);
+          void handleResetSecret();
+        }}
+        onCancel={() => setConfirmResetSecretOpen(false)}
+      />
+
+      {/* Reset secret result panel */}
+      {resetSecretResult ? (
+        <div className={styles.secretPanel}>
+          <div className={styles.secretPanelHead}>
+            <span className={styles.secretPanelTitle}>新密钥已生成 — 请立即复制，关闭后无法再次查看</span>
+            <button
+              type="button"
+              className={styles.secretPanelClose}
+              onClick={() => setResetSecretResult(null)}
+              aria-label="关闭"
+            >
+              ✕
+            </button>
+          </div>
+          <CodeBlock label=".env 配置模板" value={resetSecretResult.onboarding.env_template} maxHeight={240} />
+          <div className={styles.secretPanelHint}>
+            启动命令：<code>{resetSecretResult.onboarding.startup_command}</code>
+          </div>
+        </div>
+      ) : null}
 
       {/* Connection slab — primary panel, dominates the page */}
       <ConnectionSlab node={node} />

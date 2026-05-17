@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import styles from "./ConfirmDialog.module.css";
 
@@ -37,7 +38,6 @@ export function ConfirmDialog({
   useEffect(() => {
     if (open) {
       document.addEventListener("keydown", handleKeyDown);
-      // Focus the dialog for accessibility
       dialogRef.current?.focus();
       return () => document.removeEventListener("keydown", handleKeyDown);
     }
@@ -45,7 +45,7 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className={styles.overlay} onClick={onCancel} role="presentation">
       <div
         ref={dialogRef}
@@ -72,6 +72,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

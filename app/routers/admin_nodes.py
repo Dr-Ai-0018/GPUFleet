@@ -396,6 +396,102 @@ def _set_node_enabled(
     return _row_to_node_response(saved)
 
 
+@router.post("/{node_id}/reset-secret", response_model=NodeCreateResponse)
+def reset_node_secret(
+    node_id: str,
+    request: Request,
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> NodeCreateResponse:
+    now_iso = utc_now_iso()
+    node_secret = generate_node_secret()
+    derived_key = derive_node_signing_key(node_secret)
+
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+
+        node_columns = db.get_table_columns(conn, "nodes")
+        if "node_secret_hash" in node_columns:
+            conn.execute(
+                "UPDATE nodes SET node_secret_hash = ?, node_signing_key = ?, updated_at = ? WHERE node_id = ?",
+                (derived_key, derived_key, now_iso, node_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE nodes SET node_signing_key = ?, updated_at = ? WHERE node_id = ?",
+                (derived_key, now_iso, node_id),
+            )
+        conn.execute(
+            """
+            INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                str(admin["id"]),
+                "reset_node_secret",
+                "node",
+                node_id,
+                request.client.host if request.client else None,
+                dumps_json({}),
+                now_iso,
+            ),
+        )
+        saved = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+
+    # Re-build onboarding package using saved node data
+    from app.schemas import NodeCreateRequest as _NCR
+    fake_payload = _NCR(
+        node_id=saved["node_id"],
+        display_name=saved["display_name"],
+        node_type=saved["node_type"],
+        os_type=saved["os_type"],
+        hostname=saved["hostname"],
+        heartbeat_interval_sec=saved["heartbeat_interval_sec"],
+        allowed_workdirs=json.loads(saved["allowed_workdirs_json"]),
+        tags=json.loads(saved["tags_json"]),
+    )
+    base = _row_to_node_response(saved)
+    return NodeCreateResponse(
+        **base.model_dump(),
+        node_secret=node_secret,
+        onboarding=_build_onboarding_package(request, fake_payload, node_secret),
+    )
+
+
+@router.delete("/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_node(
+    node_id: str,
+    request: Request,
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> None:
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        row = conn.execute("SELECT 1 FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+        conn.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
+        conn.execute(
+            """
+            INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                str(admin["id"]),
+                "delete_node",
+                "node",
+                node_id,
+                request.client.host if request.client else None,
+                dumps_json({}),
+                now_iso,
+            ),
+        )
+
+
 @router.get("/{node_id}/status/latest", response_model=NodeStatusPreview)
 def get_latest_status(
     node_id: str,
