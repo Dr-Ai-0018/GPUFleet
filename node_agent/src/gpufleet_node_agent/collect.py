@@ -214,6 +214,15 @@ def collect_gpus() -> list[dict[str, Any]]:
             "memory.used",
             "utilization.gpu",
             "temperature.gpu",
+            "power.draw",
+            "power.limit",
+            "clocks.current.graphics",
+            "clocks.max.graphics",
+            "fan.speed",
+            "pcie.link.gen.current",
+            "pcie.link.width.current",
+            "encoder.stats.sessionCount",
+            "decoder.stats.sessionCount",
         ]
     )
     output = _run_command(
@@ -229,21 +238,46 @@ def collect_gpus() -> list[dict[str, Any]]:
     gpus: list[dict[str, Any]] = []
     for raw_line in output.splitlines():
         parts = [part.strip() for part in raw_line.split(",")]
-        if len(parts) != 6:
+        if len(parts) < 6:
             continue
-        try:
-            gpus.append(
-                {
-                    "index": int(parts[0]),
-                    "model": parts[1] or None,
-                    "total_vram_mb": int(parts[2]) if parts[2] else None,
-                    "used_vram_mb": int(parts[3]) if parts[3] else None,
-                    "utilization_percent": float(parts[4]) if parts[4] else None,
-                    "temperature_c": float(parts[5]) if parts[5] else None,
-                }
-            )
-        except ValueError:
-            continue
+
+        def _float(idx: int) -> float | None:
+            try:
+                v = parts[idx] if idx < len(parts) else ""
+                if not v or v == "[N/A]" or v == "N/A":
+                    return None
+                return float(v)
+            except (ValueError, IndexError):
+                return None
+
+        def _int(idx: int) -> int | None:
+            try:
+                v = parts[idx] if idx < len(parts) else ""
+                if not v or v == "[N/A]" or v == "N/A":
+                    return None
+                return int(float(v))
+            except (ValueError, IndexError):
+                return None
+
+        gpus.append(
+            {
+                "index": _int(0) or 0,
+                "model": parts[1] if len(parts) > 1 and parts[1] else None,
+                "total_vram_mb": _int(2),
+                "used_vram_mb": _int(3),
+                "utilization_percent": _float(4),
+                "temperature_c": _float(5),
+                "power_draw_w": _float(6),
+                "power_limit_w": _float(7),
+                "clock_graphics_mhz": _int(8),
+                "clock_max_graphics_mhz": _int(9),
+                "fan_speed_percent": _int(10),
+                "pcie_gen": _int(11),
+                "pcie_width": _int(12),
+                "encoder_sessions": _int(13),
+                "decoder_sessions": _int(14),
+            }
+        )
     return gpus
 
 

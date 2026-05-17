@@ -128,107 +128,158 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
 }
 
 
-/* ═══ MONITOR TAB ═══ */
+/* ═══ MONITOR TAB — nvitop-density hardware panel ═══ */
 function TabMonitor({ cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus, showJson, setShowJson }: {
   cpu: any; memory: any; pythonEnv: any; gpus: any[]; cpuUse: number; memUse: number;
   latestStatus: NodeStatusPreview | null; showJson: boolean; setShowJson: (v: boolean) => void;
 }): JSX.Element {
-  if (!latestStatus) return <div className="py-20 text-center text-gray-500 font-mono">等待节点首次心跳上报</div>;
+  if (!latestStatus) return <div className="py-20 text-center text-gray-500">等待节点首次心跳上报</div>;
 
   const coreCount = cpu?.logical_cores ?? 8;
-  const coreLoads = Array.from({ length: coreCount }, (_, i) => Math.round(Math.random() * 100));
+  const coreLoads = Array.from({ length: coreCount }, () => Math.round(Math.random() * 100));
+  const memTotal = memory?.total_bytes ?? 0;
+  const memUsed = memory?.used_bytes ?? 0;
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* CPU Panel */}
-        <div className={`${cardCls} col-span-1 space-y-5 flex flex-col justify-between`}>
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">System Processor</span>
-              <span className={`${badgeCls} bg-white/5 text-gray-400 border-white/5`}>CPU</span>
-            </div>
-            <h3 className="text-sm font-bold text-white mb-1">{cpu?.model ?? "—"}</h3>
-            <p className="text-[11px] text-gray-500 font-mono">Stepping · GenuineIntel</p>
-            <div className="grid grid-cols-2 gap-4 mt-6 border-y border-white/5 py-4">
-              <div>
-                <span className="text-[10px] text-gray-500 font-mono block mb-1">CPU UTIL</span>
-                <span className="text-xl font-mono font-bold text-white">{Math.round(cpuUse)}%</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-gray-500 font-mono block mb-1">MEM UTIL</span>
-                <span className="text-xl font-mono font-bold text-cyan-400">{Math.round(memUse)}%</span>
-                <span className="text-[10px] text-gray-500 block font-mono">{bytesToReadable(memory?.used_bytes)} / {bytesToReadable(memory?.total_bytes)}</span>
-              </div>
-            </div>
-          </div>
-          {/* Core thread matrix */}
-          <div>
-            <span className="text-[10px] text-gray-500 font-mono font-bold uppercase block mb-2.5">{coreCount}-Core Threads Monitor</span>
-            <div className="grid grid-cols-10 gap-1">
-              {coreLoads.map((val, idx) => {
-                let c = "bg-white/10";
-                if (val > 80) c = "bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.3)]";
-                else if (val > 50) c = "bg-cyan-500/70 shadow-[0_0_8px_rgba(6,182,212,0.3)]";
-                else if (val > 20) c = "bg-emerald-500/60";
-                return <div key={idx} title={`Core ${idx + 1}: ${val}%`} className={`h-4 rounded-[2px] cursor-help transition-all hover:scale-110 ${c}`} />;
-              })}
-            </div>
-            <div className="flex justify-between text-[9px] text-gray-600 font-mono mt-2"><span>Core 1</span><span>Core {coreCount}</span></div>
-          </div>
+    <div className="space-y-5">
+      {/* CPU + Memory row */}
+      <div className={`${cardCls} p-0 overflow-hidden`}>
+        <div className="px-5 py-3 border-b border-white/5 flex justify-between items-center">
+          <span className="text-[12px] font-bold font-mono text-gray-400 uppercase tracking-wide">System Processor & Memory</span>
+          <span className="text-[11px] text-gray-500 font-mono">{formatRelative(latestStatus.reported_at)}</span>
         </div>
-
-        {/* GPU Panel */}
-        <div className={`${cardCls} col-span-2 space-y-5`}>
-          <div className="flex justify-between items-center border-b border-white/5 pb-3">
-            <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">GPU Device Diagnostics (#0)</span>
-            <span className={`${badgeCls} bg-emerald-950/40 text-emerald-400 border-emerald-800/30`}>Active</span>
-          </div>
-          {gpus.length === 0 ? <div className="py-12 text-center text-gray-600 font-mono text-xs">无 GPU 设备</div> : gpus.map((gpu, idx) => {
-            const g = gpu as Record<string, unknown>;
-            const used = Number(g.used_vram_mb ?? 0);
-            const total = Number(g.total_vram_mb ?? 0);
-            const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
-            const util = Number(g.utilization_percent ?? 0);
-            return (
-              <div key={idx} className="space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-base font-bold text-white">{String(g.model ?? `GPU ${idx}`)}</h3>
-                    <p className="text-[11px] text-gray-500 font-mono mt-0.5">Device #{String(g.index ?? idx)}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-gray-500 font-mono block">VRAM SPEC</span>
-                    <span className="text-xs font-bold text-gray-200 font-mono">{total} MB</span>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-xs font-mono mb-1.5"><span className="text-gray-400">算力利用率 (Workload Utilization)</span><span className="text-white font-bold">{util}%</span></div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${util}%` }} /></div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-mono mb-1.5"><span className="text-gray-400">显存已用 (VRAM Allocated)</span><span className="text-white font-bold">{used} MB / {total} MB ({pct}%)</span></div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 rounded-full transition-all" style={{ width: `${pct}%` }} /></div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-4 gap-4 border-t border-white/5 pt-4">
-                  <div><span className="text-[10px] text-gray-500 font-mono block">TEMP</span><span className="text-sm font-bold font-mono text-white">{String(g.temperature_c ?? "—")}°C</span></div>
-                  <div><span className="text-[10px] text-gray-500 font-mono block">POWER</span><span className="text-sm font-bold font-mono text-white">{String(g.power_draw_w ?? "—")}W</span></div>
-                  <div><span className="text-[10px] text-gray-500 font-mono block">FAN</span><span className="text-sm font-bold font-mono text-white">{String(g.fan_speed_percent ?? "—")}%</span></div>
-                  <div><span className="text-[10px] text-gray-500 font-mono block">CLOCK</span><span className="text-sm font-bold font-mono text-white">{String(g.clock_mhz ?? "—")} MHz</span></div>
-                </div>
+        <div className="grid grid-cols-[1fr_1fr_auto] divide-x divide-white/5">
+          {/* CPU section */}
+          <div className="p-5 space-y-4">
+            <div>
+              <h3 className="text-[14px] font-bold text-white leading-tight">{cpu?.model ?? "Unknown CPU"}</h3>
+              <p className="text-[11px] text-gray-500 mt-0.5">{coreCount} logical cores</p>
+            </div>
+            <div className="flex items-end gap-6">
+              <div>
+                <span className="text-[10px] text-gray-500 font-mono uppercase block mb-1">CPU</span>
+                <span className="text-2xl font-bold font-mono text-white">{Math.round(cpuUse)}<span className="text-sm text-gray-500">%</span></span>
               </div>
-            );
-          })}
+              <div className="flex-1">
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${cpuUse}%` }} /></div>
+              </div>
+            </div>
+            {/* Core heatmap */}
+            <div>
+              <span className="text-[10px] text-gray-500 font-mono uppercase block mb-2">{coreCount}-Thread Heatmap</span>
+              <div className="grid grid-cols-10 gap-[3px]">
+                {coreLoads.map((val, idx) => {
+                  let c = "bg-white/10";
+                  if (val > 80) c = "bg-red-500/80";
+                  else if (val > 50) c = "bg-cyan-500/70";
+                  else if (val > 20) c = "bg-emerald-500/60";
+                  return <div key={idx} title={`Core ${idx + 1}: ${val}%`} className={`h-3.5 rounded-sm cursor-help ${c}`} />;
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Memory section */}
+          <div className="p-5 space-y-4">
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] text-gray-500 font-mono uppercase">Memory</span>
+              <span className="text-[11px] text-gray-500 font-mono">{bytesToReadable(memUsed)} / {bytesToReadable(memTotal)}</span>
+            </div>
+            <div className="flex items-end gap-4">
+              <span className="text-2xl font-bold font-mono text-cyan-400">{Math.round(memUse)}<span className="text-sm text-gray-500">%</span></span>
+              <div className="flex-1">
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 rounded-full transition-all" style={{ width: `${memUse}%` }} /></div>
+              </div>
+            </div>
+            {/* Memory bar visualization */}
+            <div className="h-6 bg-white/5 rounded-md overflow-hidden relative">
+              <div className="h-full bg-gradient-to-r from-cyan-600/60 to-cyan-400/40 rounded-md transition-all" style={{ width: `${memUse}%` }} />
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-mono text-white/70">{bytesToReadable(memUsed)} used</span>
+            </div>
+            {pythonEnv?.python_version ? <div className="text-[11px] text-gray-500 pt-2 border-t border-white/5"><span className="text-cyan-400">Python {pythonEnv.python_version}</span>{pythonEnv.active_environment_kind ? <span className="text-gray-600"> · {pythonEnv.active_environment_kind}</span> : null}</div> : null}
+          </div>
+
+          {/* Quick stats */}
+          <div className="p-5 w-[140px] space-y-3">
+            <div><span className="text-[9px] text-gray-600 font-mono uppercase block">Cores</span><span className="text-sm font-bold text-white font-mono">{coreCount}</span></div>
+            <div><span className="text-[9px] text-gray-600 font-mono uppercase block">RAM</span><span className="text-sm font-bold text-white font-mono">{bytesToReadable(memTotal)}</span></div>
+            <div><span className="text-[9px] text-gray-600 font-mono uppercase block">OS</span><span className="text-sm font-bold text-white font-mono">{typeof window !== "undefined" ? "Win" : "Linux"}</span></div>
+            {pythonEnv?.supported_backends ? <div><span className="text-[9px] text-gray-600 font-mono uppercase block">Backends</span><span className="text-[10px] text-gray-400 font-mono">{pythonEnv.supported_backends.length}</span></div> : null}
+          </div>
         </div>
       </div>
 
+      {/* GPU Cards */}
+      {gpus.length === 0 ? (
+        <div className={`${cardCls} p-8 text-center text-gray-600 text-xs`}>无 GPU 设备检测到</div>
+      ) : gpus.map((gpu, idx) => {
+        const g = gpu as Record<string, unknown>;
+        const used = Number(g.used_vram_mb ?? 0);
+        const total = Number(g.total_vram_mb ?? 0);
+        const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+        const util = Number(g.utilization_percent ?? 0);
+        const temp = g.temperature_c != null ? Number(g.temperature_c) : null;
+        const powerDraw = g.power_draw_w != null ? Number(g.power_draw_w) : null;
+        const powerLimit = g.power_limit_w != null ? Number(g.power_limit_w) : null;
+        const clockCur = g.clock_graphics_mhz != null ? Number(g.clock_graphics_mhz) : null;
+        const clockMax = g.clock_max_graphics_mhz != null ? Number(g.clock_max_graphics_mhz) : null;
+        const fan = g.fan_speed_percent != null ? Number(g.fan_speed_percent) : null;
+        const pcieGen = g.pcie_gen != null ? Number(g.pcie_gen) : null;
+        const pcieWidth = g.pcie_width != null ? Number(g.pcie_width) : null;
+
+        return (
+          <div key={idx} className={`${cardCls} p-0 overflow-hidden`}>
+            <div className="px-5 py-3 border-b border-white/5 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <span className="text-[12px] font-bold font-mono text-gray-400 uppercase">GPU #{g.index ?? idx}</span>
+                <span className="text-[13px] font-bold text-white">{String(g.model ?? "Unknown GPU")}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {pcieGen != null ? <span className="text-[10px] text-gray-500 font-mono">PCIe Gen{pcieGen} x{pcieWidth ?? "?"}</span> : null}
+                <span className="text-[10px] font-mono text-gray-500">{total} MB VRAM</span>
+                <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${util > 80 ? "bg-red-950/40 text-red-400 border-red-800/30" : util > 30 ? "bg-cyan-950/40 text-cyan-400 border-cyan-800/30" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/30"}`}>{util > 0 ? "Active" : "Idle"}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[1fr_1fr] divide-x divide-white/5">
+              {/* Utilization + VRAM */}
+              <div className="p-5 space-y-4">
+                <div>
+                  <div className="flex justify-between text-[11px] font-mono mb-1.5"><span className="text-gray-400">算力利用率 (Compute)</span><span className="text-white font-bold">{util}%</span></div>
+                  <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all ${util > 80 ? "bg-red-500" : "bg-cyan-500"}`} style={{ width: `${util}%` }} /></div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-[11px] font-mono mb-1.5"><span className="text-gray-400">显存占用 (VRAM)</span><span className="text-white font-bold">{used} / {total} MB ({pct}%)</span></div>
+                  <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all ${pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-cyan-400"}`} style={{ width: `${pct}%` }} /></div>
+                </div>
+                {powerDraw != null && powerLimit != null ? (
+                  <div>
+                    <div className="flex justify-between text-[11px] font-mono mb-1.5"><span className="text-gray-400">功耗 (Power)</span><span className="text-white font-bold">{powerDraw.toFixed(1)}W / {powerLimit}W</span></div>
+                    <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-amber-500/70 rounded-full transition-all" style={{ width: `${Math.min(100, (powerDraw / powerLimit) * 100)}%` }} /></div>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Hardware telemetry grid */}
+              <div className="p-5">
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">TEMP</span><span className="text-[15px] font-bold font-mono text-white">{temp != null ? `${temp}°C` : "—"}</span></div>
+                  <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">POWER</span><span className="text-[15px] font-bold font-mono text-white">{powerDraw != null ? `${powerDraw.toFixed(0)}W` : "—"}</span>{powerLimit != null ? <span className="text-[10px] text-gray-600 font-mono block">/ {powerLimit}W</span> : null}</div>
+                  <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">FAN</span><span className="text-[15px] font-bold font-mono text-white">{fan != null ? `${fan}%` : "—"}</span></div>
+                  <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">CLOCK</span><span className="text-[15px] font-bold font-mono text-white">{clockCur != null ? `${clockCur}` : "—"}<span className="text-[10px] text-gray-600"> MHz</span></span>{clockMax != null ? <span className="text-[10px] text-gray-600 font-mono block">max {clockMax}</span> : null}</div>
+                  <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">VRAM USED</span><span className="text-[15px] font-bold font-mono text-white">{pct}%</span><span className="text-[10px] text-gray-600 font-mono block">{used} MB</span></div>
+                  <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">COMPUTE</span><span className="text-[15px] font-bold font-mono text-white">{util}%</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
       {/* JSON toggle */}
       <div className={cardCls + " p-4"}>
-        <div onClick={() => setShowJson(!showJson)} className="flex justify-between items-center cursor-pointer text-xs font-mono text-gray-400 hover:text-white">
-          <span>{showJson ? "折叠原始 JSON" : "查看原始 JSON 数据"}</span>
-          <span>{showJson ? "▾" : "▸"}</span>
+        <div onClick={() => setShowJson(!showJson)} className="flex justify-between items-center cursor-pointer text-xs font-mono text-gray-400 hover:text-white select-none">
+          <span>{showJson ? "▾ 折叠原始 JSON" : "▸ 查看原始 JSON 数据 (Raw Snapshot)"}</span>
         </div>
         {showJson ? <div className="mt-4"><CodeBlock label="snapshot.json" value={prettyJson(latestStatus)} maxHeight={300} /></div> : null}
       </div>
