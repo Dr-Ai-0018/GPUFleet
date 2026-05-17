@@ -129,7 +129,19 @@ function WarningRow({ item, isExpanded, onToggle }: {
 }): JSX.Element {
   return (
     <>
-      <tr className={styles.row} onClick={onToggle}>
+      <tr
+        className={styles.row}
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle();
+          }
+        }}
+      >
         <td className={styles.cellTime}>{formatTime(item.created_at)}</td>
         <td>
           <StatusPill tone="danger" label={item.warning_type} />
@@ -193,7 +205,19 @@ function AuditRow({ item, isExpanded, onToggle }: {
 }): JSX.Element {
   return (
     <>
-      <tr className={styles.row} onClick={onToggle}>
+      <tr
+        className={styles.row}
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle();
+          }
+        }}
+      >
         <td className={styles.cellTime}>{formatTime(item.created_at)}</td>
         <td className={styles.cellMono}>{item.actor_type}</td>
         <td className={styles.cellAction}>{item.action}</td>

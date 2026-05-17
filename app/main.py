@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.responses import RedirectResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from app.background import lost_task_scanner
 from app.config import get_settings
 from app.db import Database, utc_now_iso
 from app.routers import admin_auth, admin_dashboard, admin_nodes, admin_observability, admin_tasks, node_api
@@ -41,10 +45,18 @@ async def lifespan(app: FastAPI):
     _bootstrap_admin(db)
     app.state.settings = settings
     app.state.db = db
+    scanner_task = asyncio.create_task(lost_task_scanner(db))
     yield
+    scanner_task.cancel()
+    try:
+        await scanner_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="GPUFleet Control Plane", version="0.1.0", lifespan=lifespan)
+app.state.limiter = admin_auth.limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allowed_origins,
@@ -75,6 +87,23 @@ def root():
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz() -> dict[str, str]:
+    """Readiness probe: verifies database is reachable and schema is initialized."""
+    settings = get_settings()
+    db = Database(settings.database_path)
+    try:
+        with db.connect() as conn:
+            conn.execute("SELECT 1 FROM admins LIMIT 1")
+    except Exception as exc:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "detail": str(exc)},
+        )
+    return {"status": "ready"}
 
 
 @app.get("/console")

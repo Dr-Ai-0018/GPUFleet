@@ -4,6 +4,7 @@ import { useConsoleStore } from "../../state/ConsoleStore";
 import type { NodeResponse, OnboardingStatus, OnlineStatus } from "../../types";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
+import { Skeleton } from "../../ui/Skeleton";
 import {
   connectionLabel,
   connectionTone,
@@ -111,16 +112,29 @@ export function FleetView(): JSX.Element {
 
       {/* Content */}
       {filtered.length === 0 ? (
-        <div className={styles.empty}>
-          <span className={styles.emptyText}>
-            {store.nodes.length === 0 ? "舰队为空" : "无匹配结果"}
-          </span>
-          {store.nodes.length === 0 ? (
-            <Button variant="accent" onClick={() => navigate({ name: "onboarding" })}>
-              去登记节点
-            </Button>
-          ) : null}
-        </div>
+        store.loading === "loading" && store.nodes.length === 0 ? (
+          <div className={styles.grid}>
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={idx} className={styles.skeletonCard}>
+                <Skeleton className={styles.skeletonTitle} />
+                <Skeleton className={styles.skeletonMeta} />
+                <Skeleton className={styles.skeletonMeta} />
+                <Skeleton className={styles.skeletonMeta} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.empty}>
+            <span className={styles.emptyText}>
+              {store.nodes.length === 0 ? "舰队为空" : "无匹配结果"}
+            </span>
+            {store.nodes.length === 0 ? (
+              <Button variant="accent" onClick={() => navigate({ name: "onboarding" })}>
+                去登记节点
+              </Button>
+            ) : null}
+          </div>
+        )
       ) : view === "table" ? (
         <FleetTable nodes={filtered} />
       ) : (

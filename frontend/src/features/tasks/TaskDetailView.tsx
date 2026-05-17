@@ -5,6 +5,7 @@ import { useConsoleStore } from "../../state/ConsoleStore";
 import type { AdminTaskDetail } from "../../types";
 import { Card, Field, FieldGrid } from "../../ui/Card";
 import { CodeBlock } from "../../ui/CodeBlock";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { EmptyState } from "../../ui/EmptyState";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
@@ -25,6 +26,7 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
   const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "missing" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,12 +146,26 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
         </div>
         <div className={page.actions}>
           {isActive ? (
-            <Button variant="danger" onClick={() => void handleCancel()} disabled={busy}>
+            <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={busy}>
               {busy ? "处理中…" : "请求取消"}
             </Button>
           ) : null}
         </div>
       </header>
+
+      <ConfirmDialog
+        open={confirmCancelOpen}
+        title="确认取消任务"
+        message={`确定要请求取消任务 ${detail.task_id} 吗？节点将收到终止信号，但进程可能不会立即停止。`}
+        confirmLabel="确认取消"
+        cancelLabel="返回"
+        variant="danger"
+        onConfirm={() => {
+          setConfirmCancelOpen(false);
+          void handleCancel();
+        }}
+        onCancel={() => setConfirmCancelOpen(false)}
+      />
 
       <Card title="时间线">
         <FieldGrid>

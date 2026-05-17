@@ -13,6 +13,7 @@ class AgentSettings(BaseSettings):
     node_id: str = "node-example"
     node_secret: str = "replace-me"
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
+    tls_skip_verify: bool = False
     deployment_mode: Literal["auto", "windows_server", "linux_server", "cloud_gpu_runner"] = "auto"
 
     agent_root: Path = Field(default=Path("./runtime"))

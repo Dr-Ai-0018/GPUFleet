@@ -511,6 +511,22 @@ async def artifact_upload(
     db: Annotated[Database, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings_dep)],
 ) -> dict[str, object]:
+    content_length = request.headers.get("Content-Length")
+    if content_length is not None:
+        try:
+            request_size = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Content-Length header",
+            ) from exc
+        max_encoded_bytes = (settings.max_artifact_bytes * 4 // 3) + 4096
+        if request_size > max_encoded_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Artifact request exceeds size limit ({settings.max_artifact_bytes} bytes decoded)",
+            )
+
     body = await request.body()
     node_id, _ = _authenticate_node(request, db, settings, body)
     try:
@@ -518,10 +534,28 @@ async def artifact_upload(
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid artifact upload payload") from exc
 
+    # Verify task ownership BEFORE decoding/writing content
+    with db.connect() as conn:
+        _load_task_for_node(conn, node_id, payload.task_id)
+
+    # Check size limit before decoding (base64 is ~4/3 of decoded size)
+    estimated_decoded_size = len(payload.content_base64) * 3 // 4
+    if estimated_decoded_size > settings.max_artifact_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
+        )
+
     try:
         content = b64decode(payload.content_base64.encode("utf-8"), validate=True)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 artifact content") from exc
+
+    if len(content) > settings.max_artifact_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
+        )
 
     now_iso = utc_now_iso()
     artifact_dir = settings.storage_path / "artifacts" / payload.task_id
@@ -531,7 +565,6 @@ async def artifact_upload(
     artifact_path.write_bytes(content)
 
     with db.connect() as conn:
-        _load_task_for_node(conn, node_id, payload.task_id)
         existing = conn.execute(
             """
             SELECT id

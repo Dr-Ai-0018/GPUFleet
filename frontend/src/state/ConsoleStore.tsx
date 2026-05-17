@@ -128,8 +128,8 @@ export function ConsoleStoreProvider({
         const [me, overview, nodes, tasks, audits, warnings] = await callApi((token) => Promise.all([
           api.getMe(token),
           api.getOverview(token),
-          api.getNodes(token),
-          api.listTasks(token),
+          api.listAllNodes(token),
+          api.listAllTasks(token),
           api.getAuditEvents(token, 50),
           api.getSecurityWarnings(token, 50),
         ]));

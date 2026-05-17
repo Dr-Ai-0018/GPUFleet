@@ -25,6 +25,7 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
         try:
             yield conn
             conn.commit()
@@ -183,6 +184,7 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_tasks_node_status_created_at ON tasks(node_id, status, created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_task_attempts_task_id_id ON task_attempts(task_id, id DESC);
                 CREATE INDEX IF NOT EXISTS idx_nonces_node_id_expires_at ON nonces(node_id, expires_at);
+                CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events(created_at);
                 """
             )
             self._migrate_schema(conn)

@@ -39,6 +39,7 @@ export function TaskComposer({ node }: Props): JSX.Element {
   const [envText, setEnvText] = useState<string>("{}");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ requestedGpuIds?: string; env?: string }>({});
 
   useEffect(() => {
     if (!types.includes(taskType)) {
@@ -63,8 +64,17 @@ export function TaskComposer({ node }: Props): JSX.Element {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    setFieldErrors({});
     try {
-      const env = envText.trim() ? (JSON.parse(envText) as Record<string, string>) : {};
+      let env: Record<string, string> = {};
+      if (envText.trim()) {
+        try {
+          env = JSON.parse(envText) as Record<string, string>;
+        } catch {
+          setFieldErrors({ env: "环境变量 JSON 格式无效，请检查语法" });
+          return;
+        }
+      }
       const payload = buildPayload(taskType, payloadText);
       if (
         supportsExecutionOverrides(taskType) &&
@@ -82,7 +92,8 @@ export function TaskComposer({ node }: Props): JSX.Element {
         .filter(Boolean)
         .map((item) => Number(item));
       if (gpuIds.some((item) => !Number.isInteger(item) || item < 0)) {
-        throw new Error("requested_gpu_ids 必须是非负整数列表");
+        setFieldErrors({ requestedGpuIds: "requested_gpu_ids 必须是逗号分隔的非负整数列表" });
+        return;
       }
       const created = await store.callApi((token) => api.createTask(token, {
         node_id: node.node_id,
@@ -225,6 +236,7 @@ export function TaskComposer({ node }: Props): JSX.Element {
             placeholder="如 0,1"
           />
           <span className={forms.hint}>为空表示不限制 GPU。多 GPU 机器可显式选择。</span>
+          {fieldErrors.requestedGpuIds ? <span className={forms.errorText}>{fieldErrors.requestedGpuIds}</span> : null}
         </label>
         <label className={forms.field}>
           <span className={forms.label}>kill_grace_sec</span>
@@ -318,6 +330,7 @@ export function TaskComposer({ node }: Props): JSX.Element {
           value={envText}
           onChange={(event) => setEnvText(event.target.value)}
         />
+        {fieldErrors.env ? <span className={forms.errorText}>{fieldErrors.env}</span> : null}
       </label>
 
       {error ? <div className={forms.error}>{error}</div> : null}

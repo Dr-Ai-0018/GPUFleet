@@ -4,7 +4,7 @@ import json
 import secrets
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_current_admin, get_db
@@ -247,10 +247,13 @@ def create_task(
 def list_tasks(
     _: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminTaskListItem]:
     with db.connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM tasks ORDER BY created_at DESC, id DESC",
+            "SELECT * FROM tasks ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+            (limit, offset),
         ).fetchall()
     return [_task_row_to_list_item(row) for row in rows]
 

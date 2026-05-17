@@ -102,6 +102,12 @@
   line-height: 1.4;
 }
 
+.errorText {
+  font-size: var(--fs-11);
+  color: var(--c-danger-fg);
+  line-height: 1.4;
+}
+
 .error {
   padding: 10px 12px;
   border-radius: var(--r-sm);

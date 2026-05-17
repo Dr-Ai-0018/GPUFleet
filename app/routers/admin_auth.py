@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.config import Settings
 from app.db import Database, utc_now_iso
@@ -16,10 +18,13 @@ from app.security import (
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin-auth"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/login", response_model=TokenPair)
+@limiter.limit("5/minute")
 def login(
+    request: Request,
     payload: LoginRequest,
     db: Annotated[Database, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings_dep)],

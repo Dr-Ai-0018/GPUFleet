@@ -320,6 +320,11 @@
 }
 
 .card:hover::before { opacity: 1; }
+.card:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(91, 141, 239, 0.3);
+}
 
 .card:hover {
   border-color: var(--border-strong);
@@ -379,4 +384,23 @@
   font-size: var(--fs-14);
   font-weight: 500;
   color: var(--text-mute);
+}
+
+.skeletonCard {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.skeletonTitle {
+  height: 18px;
+  width: 60%;
+}
+
+.skeletonMeta {
+  height: 14px;
+  width: 80%;
 }

@@ -5,7 +5,7 @@ from typing import Annotated
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_current_admin, get_db
@@ -94,11 +94,7 @@ def _build_onboarding_package(request: Request, payload: NodeCreateRequest, node
     if workdir_lines:
         env_lines.extend(["", "# Allowed workdirs configured on control plane:", workdir_lines])
 
-    startup_command = (
-        "uv run gpufleet-agent heartbeat-loop"
-        if payload.os_type == "linux" or payload.node_type == "modal_runner"
-        else "uv run gpufleet-agent heartbeat-loop"
-    )
+    startup_command = "uv run gpufleet-agent heartbeat-loop"
     steps = [
         "1. Copy the env template into the child node host-local .env file.",
         "2. Run uv sync in node_agent/ on the child node host.",
@@ -151,10 +147,15 @@ def _row_to_node_response(row: object, *, now_utc: datetime | None = None) -> No
 def list_nodes(
     _: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[NodeResponse]:
     now_utc = datetime.now(UTC)
     with db.connect() as conn:
-        rows = conn.execute("SELECT * FROM nodes ORDER BY created_at ASC").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM nodes ORDER BY created_at ASC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
     return [_row_to_node_response(row, now_utc=now_utc) for row in rows]
 
 

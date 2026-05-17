@@ -208,3 +208,8 @@ export type TaskCreatePayload = {
   kill_grace_sec?: number;
   danger_level?: string;
 };
+
+export type ListQuery = {
+  limit?: number;
+  offset?: number;
+};

@@ -11,6 +11,7 @@ import type {
   NodeUpdatePayload,
   SecurityWarningView,
   TaskCreatePayload,
+  ListQuery,
   TokenPair,
 } from "./types";
 
@@ -56,6 +57,39 @@ async function request<T>(
 
 export { ApiError };
 
+function buildListQuery(query?: ListQuery): string {
+  if (!query) return "";
+  const params = new URLSearchParams();
+  if (typeof query.limit === "number") params.set("limit", String(query.limit));
+  if (typeof query.offset === "number") params.set("offset", String(query.offset));
+  const search = params.toString();
+  return search ? `?${search}` : "";
+}
+
+const DEFAULT_PAGE_SIZE = 200;
+
+async function requestAllPages<T>(
+  token: string,
+  path: string,
+  limit = DEFAULT_PAGE_SIZE,
+): Promise<T[]> {
+  const items: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await request<T[]>(
+      `${path}${buildListQuery({ limit, offset })}`,
+      {},
+      token,
+    );
+    items.push(...page);
+    if (page.length < limit) {
+      return items;
+    }
+    offset += page.length;
+  }
+}
+
 export const api = {
   login(username: string, password: string): Promise<TokenPair> {
     return request<TokenPair>("/api/admin/login", {
@@ -79,8 +113,12 @@ export const api = {
     return request<DashboardOverview>("/api/admin/dashboard/overview", {}, token);
   },
 
-  getNodes(token: string): Promise<NodeResponse[]> {
-    return request<NodeResponse[]>("/api/admin/nodes", {}, token);
+  getNodes(token: string, query?: ListQuery): Promise<NodeResponse[]> {
+    return request<NodeResponse[]>(`/api/admin/nodes${buildListQuery(query)}`, {}, token);
+  },
+
+  listAllNodes(token: string): Promise<NodeResponse[]> {
+    return requestAllPages<NodeResponse>(token, "/api/admin/nodes");
   },
 
   getNode(token: string, nodeId: string): Promise<NodeResponse> {
@@ -131,8 +169,12 @@ export const api = {
     );
   },
 
-  listTasks(token: string): Promise<AdminTaskListItem[]> {
-    return request<AdminTaskListItem[]>("/api/admin/tasks", {}, token);
+  listTasks(token: string, query?: ListQuery): Promise<AdminTaskListItem[]> {
+    return request<AdminTaskListItem[]>(`/api/admin/tasks${buildListQuery(query)}`, {}, token);
+  },
+
+  listAllTasks(token: string): Promise<AdminTaskListItem[]> {
+    return requestAllPages<AdminTaskListItem>(token, "/api/admin/tasks");
   },
 
   getTaskDetail(token: string, taskId: string): Promise<AdminTaskDetail> {

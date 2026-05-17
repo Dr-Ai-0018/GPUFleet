@@ -4,6 +4,7 @@ import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { Card, Field, FieldGrid } from "../../ui/Card";
 import { CodeBlock } from "../../ui/CodeBlock";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { EmptyState } from "../../ui/EmptyState";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
@@ -38,6 +39,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const [editError, setEditError] = useState<string | null>(null);
   const [isEditDirty, setIsEditDirty] = useState(false);
   const [editHydratedNodeId, setEditHydratedNodeId] = useState<string | null>(null);
+  const [confirmToggleOpen, setConfirmToggleOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     display_name: "",
     hostname: "",
@@ -232,13 +234,31 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         <div className={page.actions}>
           <Button
             variant={node.is_enabled ? "ghost" : "accent"}
-            onClick={() => void handleToggleEnable()}
+            onClick={() => setConfirmToggleOpen(true)}
             disabled={busy}
           >
             {busy ? "处理中…" : node.is_enabled ? "停用节点" : "启用节点"}
           </Button>
         </div>
       </header>
+
+      <ConfirmDialog
+        open={confirmToggleOpen}
+        title={node.is_enabled ? "确认停用节点" : "确认启用节点"}
+        message={
+          node.is_enabled
+            ? `停用节点 "${node.display_name}" 后，该节点将不再接收新任务，且心跳会被拒绝。`
+            : `确定要重新启用节点 "${node.display_name}" 吗？`
+        }
+        confirmLabel={node.is_enabled ? "停用" : "启用"}
+        cancelLabel="取消"
+        variant={node.is_enabled ? "danger" : "accent"}
+        onConfirm={() => {
+          setConfirmToggleOpen(false);
+          void handleToggleEnable();
+        }}
+        onCancel={() => setConfirmToggleOpen(false)}
+      />
 
       {/* Connection slab — primary panel, dominates the page */}
       <ConnectionSlab node={node} />

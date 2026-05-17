@@ -5,6 +5,26 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+# All task types currently supported by the node agent
+TaskType = Literal[
+    "shell",
+    "python_script",
+    "health_check",
+    "git_pull",
+    "pip_install",
+    "download_file",
+    "upload_and_unpack",
+    "modal_command",
+    "file_mkdir",
+    "file_write",
+    "file_patch_text",
+    "file_move",
+    "file_delete",
+    "file_extract",
+    "file_preview",
+]
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -177,7 +197,7 @@ class TaskControlCommand(BaseModel):
 
 class AdminTaskCreateRequest(BaseModel):
     node_id: str
-    type: str
+    type: TaskType
     payload: dict[str, Any] = Field(default_factory=dict)
     task_id: str | None = None
     revision: int = 1

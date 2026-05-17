@@ -185,6 +185,12 @@
 
 .row:hover { background: var(--bg-hover); }
 .row:hover::before { opacity: 1; transform: scaleY(1); }
+.row:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 1px rgba(91, 141, 239, 0.4);
+}
+.row:focus-visible::before { opacity: 1; transform: scaleY(1); }
 
 .cellTime {
   font-size: var(--fs-12);

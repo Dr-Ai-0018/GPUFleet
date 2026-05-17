@@ -3,6 +3,7 @@ import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
+import { Skeleton } from "../../ui/Skeleton";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative, formatTime } from "../../lib/format";
 import styles from "./TasksView.module.css";
@@ -126,7 +127,22 @@ export function TasksView(): JSX.Element {
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {store.loading === "loading" && store.tasks.length === 0 ? (
+        <div className={styles.tableWrap}>
+          <div className={styles.skeletonTable}>
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={idx} className={styles.skeletonRow}>
+                <Skeleton className={styles.skeletonId} />
+                <Skeleton className={styles.skeletonCell} />
+                <Skeleton className={styles.skeletonCell} />
+                <Skeleton className={styles.skeletonPill} />
+                <Skeleton className={styles.skeletonTime} />
+                <Skeleton className={styles.skeletonTime} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className={styles.empty}>无匹配任务</div>
       ) : (
         <div className={styles.tableWrap}>
@@ -147,6 +163,14 @@ export function TasksView(): JSX.Element {
                   key={task.task_id}
                   className={styles.row}
                   onClick={() => navigate({ name: "task-detail", taskId: task.task_id })}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      navigate({ name: "task-detail", taskId: task.task_id });
+                    }
+                  }}
                 >
                   <td className={styles.cellId}>{task.task_id}</td>
                   <td className={styles.cellMono}>{task.node_id}</td>

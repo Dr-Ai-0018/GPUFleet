@@ -53,3 +53,7 @@ node_agent/src/*.egg-info/
 .playwright-cli
 
 .tmp
+
+# Cache directories
+.ruff_cache/
+.mypy_cache/
