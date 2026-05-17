@@ -1,3 +1,5 @@
+/* ConfirmDialog v2 — liquid glass, centered, smooth entrance */
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -5,54 +7,76 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  animation: fadeIn 0.12s var(--ease-out) both;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  animation: overlay-in 0.2s var(--ease-out) both;
 }
 
 .dialog {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-lg);
-  padding: 20px 22px 18px;
-  width: 420px;
-  max-width: calc(100vw - 32px);
+  position: relative;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--r-xl);
+  padding: 24px 26px 20px;
+  width: 440px;
+  max-width: calc(100vw - 40px);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 16px 48px rgba(0, 0, 0, 0.5),
-    0 4px 12px rgba(0, 0, 0, 0.3);
-  animation: scaleIn 0.14s var(--ease-out) both;
+    var(--shadow-overlay),
+    var(--glass-highlight),
+    0 0 80px rgba(107, 158, 255, 0.04);
+  animation: dialog-in 0.28s var(--ease-bounce) both;
   outline: none;
+  overflow: hidden;
+}
+
+/* Top edge shimmer */
+.dialog::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(107, 158, 255, 0.3), transparent);
+  opacity: 0.7;
 }
 
 .title {
-  font-size: var(--fs-15);
+  font-size: var(--fs-16);
   font-weight: 700;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   color: var(--text);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 .message {
   font-size: var(--fs-13);
   color: var(--text-soft);
-  margin: 0 0 20px;
-  line-height: 1.55;
+  margin: 0 0 22px;
+  line-height: 1.6;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
 }
 
-@keyframes fadeIn {
+@keyframes overlay-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.96) translateY(4px); }
-  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }

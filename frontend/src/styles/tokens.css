@@ -1,90 +1,100 @@
 /* =========================================================
- * GPUFleet · Design Tokens
+ * GPUFleet · Design Tokens v2
  *
- * Infrastructure control plane. Dark, calm, dense.
- * Subtle gradients, refined shadows, breathing space.
+ * Infrastructure control plane. Dark, immersive, liquid glass.
+ * Layered translucency, ambient glow, breathing surfaces.
  * ========================================================= */
 
 :root {
   color-scheme: dark;
 
   /* ---------- Surfaces ---------- */
-  --bg-app: #08090d;
-  --bg-canvas: #0b0d12;
-  --bg-surface: #101318;
-  --bg-surface-2: #14171d;
-  --bg-elev: #1a1d24;
-  --bg-elev-2: #21252d;
-  --bg-input: #0d0f14;
-  --bg-terminal: #070810;
+  --bg-app: #06070b;
+  --bg-canvas: #0a0c11;
+  --bg-surface: rgba(14, 17, 24, 0.72);
+  --bg-surface-2: rgba(20, 24, 32, 0.68);
+  --bg-elev: rgba(26, 30, 40, 0.65);
+  --bg-elev-2: rgba(34, 38, 50, 0.60);
+  --bg-input: rgba(8, 10, 16, 0.80);
+  --bg-terminal: #050608;
 
-  --bg-hover: rgba(255, 255, 255, 0.025);
-  --bg-active: rgba(255, 255, 255, 0.045);
-  --bg-selected: rgba(99, 152, 255, 0.07);
+  --bg-hover: rgba(255, 255, 255, 0.035);
+  --bg-active: rgba(255, 255, 255, 0.055);
+  --bg-selected: rgba(99, 152, 255, 0.09);
+
+  /* ---------- Glass ---------- */
+  --glass-bg: rgba(12, 14, 20, 0.55);
+  --glass-bg-strong: rgba(12, 14, 20, 0.72);
+  --glass-blur: blur(20px) saturate(160%);
+  --glass-blur-light: blur(12px) saturate(140%);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.12);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
 
   /* ---------- Borders ---------- */
-  --border: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.10);
-  --border-muted: rgba(255, 255, 255, 0.035);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-muted: rgba(255, 255, 255, 0.04);
   --border-focus: rgba(99, 152, 255, 0.6);
 
   /* ---------- Text ---------- */
-  --text: #edf0f7;
-  --text-soft: #b4b9c5;
-  --text-mute: #737882;
-  --text-faint: #4a4f59;
+  --text: #eef1f8;
+  --text-soft: #b8bdc9;
+  --text-mute: #6e7380;
+  --text-faint: #464b55;
   --text-disabled: #33363d;
 
   /* ---------- Accent ---------- */
-  --accent: #5b8def;
-  --accent-hover: #6d9cf5;
-  --accent-active: #4a7de0;
+  --accent: #6b9eff;
+  --accent-hover: #7daaff;
+  --accent-active: #5a8ef0;
   --accent-fg: #ffffff;
-  --accent-soft: rgba(91, 141, 239, 0.10);
-  --accent-border: rgba(91, 141, 239, 0.28);
-  --accent-glow: 0 0 12px rgba(91, 141, 239, 0.15);
+  --accent-soft: rgba(107, 158, 255, 0.10);
+  --accent-border: rgba(107, 158, 255, 0.28);
+  --accent-glow: 0 0 16px rgba(107, 158, 255, 0.18);
 
   /* ---------- Status semantics ---------- */
-  --c-online: #34c88a;
-  --c-online-fg: #7ee4b8;
-  --c-online-soft: rgba(52, 200, 138, 0.08);
-  --c-online-border: rgba(52, 200, 138, 0.22);
+  --c-online: #3dd99a;
+  --c-online-fg: #7eecc0;
+  --c-online-soft: rgba(61, 217, 154, 0.09);
+  --c-online-border: rgba(61, 217, 154, 0.24);
 
-  --c-waiting: #e8a832;
-  --c-waiting-fg: #f0c96e;
-  --c-waiting-soft: rgba(232, 168, 50, 0.08);
-  --c-waiting-border: rgba(232, 168, 50, 0.22);
+  --c-waiting: #f0b040;
+  --c-waiting-fg: #f5d070;
+  --c-waiting-soft: rgba(240, 176, 64, 0.09);
+  --c-waiting-border: rgba(240, 176, 64, 0.24);
 
   --c-offline: #6b7080;
-  --c-offline-soft: rgba(107, 112, 128, 0.08);
+  --c-offline-soft: rgba(107, 112, 128, 0.09);
   --c-offline-border: rgba(107, 112, 128, 0.20);
 
-  --c-danger: #ef5f5f;
-  --c-danger-fg: #f9a0a0;
-  --c-danger-soft: rgba(239, 95, 95, 0.08);
-  --c-danger-border: rgba(239, 95, 95, 0.24);
+  --c-danger: #f06060;
+  --c-danger-fg: #ffa0a0;
+  --c-danger-soft: rgba(240, 96, 96, 0.09);
+  --c-danger-border: rgba(240, 96, 96, 0.24);
 
-  --c-running: #5b8def;
-  --c-running-soft: rgba(91, 141, 239, 0.08);
-  --c-running-border: rgba(91, 141, 239, 0.24);
+  --c-running: #6b9eff;
+  --c-running-soft: rgba(107, 158, 255, 0.09);
+  --c-running-border: rgba(107, 158, 255, 0.24);
 
   /* ---------- Radii ---------- */
   --r-xs: 4px;
   --r-sm: 6px;
-  --r-md: 8px;
-  --r-lg: 12px;
-  --r-xl: 16px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 18px;
   --r-pill: 999px;
 
   /* ---------- Elevation ---------- */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.24);
-  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.28);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.30);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.36);
-  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.50), 0 0 0 1px var(--border-strong);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.34);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.40);
+  --shadow-overlay: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--glass-border-strong);
 
   /* Inset highlight for glass-like surfaces */
-  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 0 0 0.5px rgba(255, 255, 255, 0.03);
 
   /* ---------- Typography ---------- */
   --font-sans:
@@ -119,7 +129,10 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-bounce: cubic-bezier(0.22, 1.2, 0.36, 1);
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
+  --dur-enter: 280ms;
+  --dur-exit: 200ms;
 }

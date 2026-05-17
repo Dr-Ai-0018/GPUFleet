@@ -27,18 +27,18 @@
   width: 100%;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
   background: var(--bg-input);
   color: var(--text);
   outline: none;
   font-size: var(--fs-13);
   font-variant-numeric: tabular-nums;
-  box-shadow: var(--inset-highlight);
+  box-shadow: var(--glass-highlight);
   transition:
-    border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+    border-color var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
 }
 
 .input::placeholder,
@@ -51,11 +51,11 @@
   background: var(--bg-canvas);
 }
 
-/* Single clean focus state — just border color shift + subtle glow */
+/* Single clean focus state — border glow, no ring */
 .input:focus, .textarea:focus, .select:focus {
   border-color: var(--accent);
   background: var(--bg-canvas);
-  box-shadow: var(--inset-highlight), 0 0 0 3px rgba(91, 141, 239, 0.08);
+  box-shadow: var(--glass-highlight), 0 0 0 3px rgba(107, 158, 255, 0.08), 0 0 12px rgba(107, 158, 255, 0.06);
 }
 
 .input:disabled, .textarea:disabled, .select:disabled {

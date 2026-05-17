@@ -1,75 +1,129 @@
-/* Toast — with slide + glow entrance */
+/* Toast v2 — liquid glass, slide animation, progress bar */
 
 .stack {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 24px;
+  right: 24px;
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   pointer-events: none;
+  max-width: 380px;
 }
 
 .toast {
+  position: relative;
   display: flex;
-  align-items: stretch;
-  min-width: 280px;
-  max-width: 400px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  min-width: 300px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   pointer-events: auto;
-  opacity: 0;
-  transform: translateX(20px) scale(0.96);
-  transition:
-    opacity 0.3s var(--ease-out),
-    transform 0.3s var(--ease-spring);
   overflow: hidden;
+
+  /* Enter state */
+  opacity: 0;
+  transform: translateX(40px) scale(0.92);
+  transition:
+    opacity var(--dur-enter) var(--ease-out),
+    transform var(--dur-enter) var(--ease-bounce);
 }
 
-.open {
+.visible {
   opacity: 1;
   transform: translateX(0) scale(1);
 }
 
-.bar {
-  width: 3px;
-  flex-shrink: 0;
-  background: var(--text-faint);
+.exit {
+  opacity: 0;
+  transform: translateX(30px) scale(0.94);
+  transition:
+    opacity var(--dur-exit) var(--ease-out),
+    transform var(--dur-exit) var(--ease-out);
+  pointer-events: none;
 }
 
-.tone_success .bar { background: var(--c-online); box-shadow: 0 0 8px rgba(52, 200, 138, 0.3); }
-.tone_warning .bar { background: var(--c-waiting); box-shadow: 0 0 8px rgba(232, 168, 50, 0.3); }
-.tone_error .bar   { background: var(--c-danger); box-shadow: 0 0 8px rgba(239, 95, 95, 0.3); }
-.tone_info .bar    { background: var(--accent); box-shadow: 0 0 8px rgba(91, 141, 239, 0.3); }
+/* Icon */
+.icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-soft);
+}
 
+.tone_success .icon { color: var(--c-online); background: var(--c-online-soft); }
+.tone_warning .icon { color: var(--c-waiting); background: var(--c-waiting-soft); }
+.tone_error .icon   { color: var(--c-danger); background: var(--c-danger-soft); }
+.tone_info .icon    { color: var(--accent); background: var(--accent-soft); }
+
+/* Body */
 .body {
   flex: 1;
-  padding: 10px 12px;
   min-width: 0;
+  padding-top: 1px;
 }
 
 .title {
   font-size: var(--fs-13);
   font-weight: 600;
   color: var(--text);
+  line-height: 1.3;
 }
 
 .desc {
   font-size: var(--fs-12);
   color: var(--text-mute);
-  margin-top: 2px;
+  margin-top: 3px;
+  line-height: 1.4;
 }
 
+/* Close */
 .close {
-  padding: 0 10px;
-  color: var(--text-faint);
-  font-size: var(--fs-16);
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
-  transition: color 0.15s var(--ease-out);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  transition: color 0.15s, background 0.15s;
 }
 
-.close:hover { color: var(--text); }
+.close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Progress bar — bottom edge countdown */
+.progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  background: var(--text-faint);
+  transform-origin: left;
+  animation: progress-shrink linear forwards;
+}
+
+.tone_success .progress { background: var(--c-online); }
+.tone_warning .progress { background: var(--c-waiting); }
+.tone_error .progress   { background: var(--c-danger); }
+.tone_info .progress    { background: var(--accent); }
+
+@keyframes progress-shrink {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}

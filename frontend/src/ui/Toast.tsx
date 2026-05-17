@@ -41,9 +41,13 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
     const id = idRef.current;
     const ttl = toast.ttl ?? 4200;
     setItems((prev) => [...prev, { id, tone: toast.tone, title: toast.title, description: toast.description, ttl }]);
-    window.setTimeout(() => {
-      setItems((prev) => prev.filter((entry) => entry.id !== id));
-    }, ttl);
+  }, []);
+
+  const dismiss = useCallback((id: number) => {
+    setItems((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } as Toast & { exiting?: boolean } : t)));
+    setTimeout(() => {
+      setItems((prev) => prev.filter((t) => t.id !== id));
+    }, 220);
   }, []);
 
   const api = useMemo(() => ({ push }), [push]);
@@ -53,11 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
       {children}
       <div className={styles.stack} role="status" aria-live="polite">
         {items.map((entry) => (
-          <ToastItem
-            key={entry.id}
-            toast={entry}
-            onDismiss={() => setItems((prev) => prev.filter((it) => it.id !== entry.id))}
-          />
+          <ToastItem key={entry.id} toast={entry} onDismiss={() => dismiss(entry.id)} />
         ))}
       </div>
     </ToastCtx.Provider>
@@ -65,28 +65,59 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
 }
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }): JSX.Element {
-  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState<"enter" | "visible" | "exit">("enter");
+
   useEffect(() => {
-    const id = window.setTimeout(() => setOpen(true), 10);
-    return () => window.clearTimeout(id);
+    const enterTimer = setTimeout(() => setPhase("visible"), 20);
+    return () => clearTimeout(enterTimer);
   }, []);
+
+  useEffect(() => {
+    const exitTimer = setTimeout(() => {
+      setPhase("exit");
+      setTimeout(onDismiss, 220);
+    }, toast.ttl);
+    return () => clearTimeout(exitTimer);
+  }, [toast.ttl, onDismiss]);
+
   const cls = [
     styles.toast,
     styles[`tone_${toast.tone}`],
-    open ? styles.open : "",
+    phase === "visible" ? styles.visible : "",
+    phase === "exit" ? styles.exit : "",
   ]
     .filter(Boolean)
     .join(" ");
+
   return (
     <div className={cls}>
-      <span className={styles.bar} aria-hidden />
+      <div className={styles.icon} aria-hidden>
+        <ToastIcon tone={toast.tone} />
+      </div>
       <div className={styles.body}>
         <div className={styles.title}>{toast.title}</div>
         {toast.description ? <div className={styles.desc}>{toast.description}</div> : null}
       </div>
-      <button type="button" className={styles.close} onClick={onDismiss} aria-label="关闭">
-        ×
+      <button type="button" className={styles.close} onClick={() => { setPhase("exit"); setTimeout(onDismiss, 220); }} aria-label="关闭">
+        <svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+          <path d="M2 2l8 8M10 2l-8 8" />
+        </svg>
       </button>
+      <div className={styles.progress} style={{ animationDuration: `${toast.ttl}ms` }} />
     </div>
   );
+}
+
+function ToastIcon({ tone }: { tone: ToastTone }): JSX.Element {
+  const p = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (tone) {
+    case "success":
+      return <svg {...p}><circle cx="8" cy="8" r="6" /><path d="M5.5 8l1.5 1.5 3.5-3.5" /></svg>;
+    case "error":
+      return <svg {...p}><circle cx="8" cy="8" r="6" /><path d="M6 6l4 4M10 6l-4 4" /></svg>;
+    case "warning":
+      return <svg {...p}><path d="M8 2L14 13H2L8 2z" /><path d="M8 7v2.5" /><circle cx="8" cy="11.5" r="0.5" fill="currentColor" stroke="none" /></svg>;
+    default:
+      return <svg {...p}><circle cx="8" cy="8" r="6" /><path d="M8 5.5v3" /><circle cx="8" cy="10.5" r="0.5" fill="currentColor" stroke="none" /></svg>;
+  }
 }

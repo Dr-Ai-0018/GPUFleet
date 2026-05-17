@@ -17,9 +17,10 @@
   display: flex;
   flex-direction: column;
   padding: 16px 10px 14px;
-  border-right: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(11, 13, 18, 0.98) 0%, rgba(5, 6, 8, 0.99) 100%);
+  border-right: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   overflow-y: auto;
 }
 
@@ -105,18 +106,19 @@
   font-weight: 600;
 }
 
-/* Active item left accent glow */
+/* Active item glow dot (no left border!) */
 .navActive::after {
   content: "";
   position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  border-radius: 1px;
+  left: 12px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 8px rgba(91, 141, 239, 0.4);
-  animation: glow-pulse 2s var(--ease-in-out) infinite;
+  box-shadow: 0 0 8px rgba(107, 158, 255, 0.5), 0 0 16px rgba(107, 158, 255, 0.2);
+  transform: translateY(-50%);
+  animation: glow-pulse 2.5s var(--ease-in-out) infinite;
 }
 
 .navIcon {
@@ -212,10 +214,10 @@
   gap: 12px;
   padding: 0 var(--content-pad);
   height: var(--topbar-h);
-  background: rgba(8, 9, 13, 0.75);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .topbarRight {
