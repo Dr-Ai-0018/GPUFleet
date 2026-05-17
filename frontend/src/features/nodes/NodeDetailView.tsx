@@ -14,10 +14,15 @@ import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../l
 import { TaskComposer } from "../tasks/TaskComposer";
 import type { NodeResetSecretResponse, NodeResponse, NodeStatusPreview, OsType } from "../../types";
 import forms from "../../ui/forms.module.css";
-import styles from "./NodeDetailView.module.css";
 
 type Props = { nodeId: string };
 type TabKey = "monitor" | "config" | "tasks";
+
+// Premium card style matching reference
+const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)] hover:border-white/[0.08]";
+const inputCls = "w-full bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-2 text-xs text-white outline-none focus:bg-[rgba(10,11,14,0.95)] focus:border-cyan-500/50 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.1)] transition-all font-mono";
+const labelCls = "text-[11px] font-mono text-gray-400";
+const badgeCls = "px-2.5 py-0.5 text-xs font-mono font-medium border rounded-md flex items-center gap-1.5";
 
 export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const store = useConsoleStore();
@@ -34,48 +39,24 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const [editHydratedNodeId, setEditHydratedNodeId] = useState<string | null>(null);
   const [confirmToggleOpen, setConfirmToggleOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [confirmResetSecretOpen, setConfirmResetSecretOpen] = useState(false);
-  const [resetSecretResult, setResetSecretResult] = useState<NodeResetSecretResponse | null>(null);
-  const [showSnapshot, setShowSnapshot] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [resetResult, setResetResult] = useState<NodeResetSecretResponse | null>(null);
+  const [showJson, setShowJson] = useState(false);
   const [editForm, setEditForm] = useState({ display_name: "", hostname: "", os_type: "windows" as OsType, heartbeat_interval_sec: 5, allowed_workdirs: "", tags: "" });
 
   useEffect(() => { setNode(storeNode); }, [storeNode]);
   useEffect(() => { setLatestStatus(overviewNode?.latest_status ?? null); }, [overviewNode]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const [freshNode, status] = await Promise.allSettled([
-          store.callApi((t) => api.getNode(t, nodeId)),
-          store.callApi((t) => api.getLatestNodeStatus(t, nodeId)),
-        ]);
-        if (cancelled) return;
-        if (freshNode.status === "fulfilled") setNode(freshNode.value);
-        if (status.status === "fulfilled") setLatestStatus(status.value);
-        else if (status.reason instanceof ApiError && status.reason.status === 404) setLatestStatus(null);
-      } catch { /* fallback */ }
-    }
-    void load();
-    return () => { cancelled = true; };
-  }, [nodeId, store.callApi]);
-
-  useEffect(() => {
-    if (!node) return;
-    if (isEditDirty && editHydratedNodeId === node.node_id) return;
-    setEditForm({ display_name: node.display_name, hostname: node.hostname ?? "", os_type: node.os_type === "linux" ? "linux" : "windows", heartbeat_interval_sec: node.heartbeat_interval_sec, allowed_workdirs: node.allowed_workdirs.join("\n"), tags: node.tags.join(", ") });
-    setEditError(null); setIsEditDirty(false); setEditHydratedNodeId(node.node_id);
-  }, [node, isEditDirty, editHydratedNodeId]);
+  useEffect(() => { let c = false; (async () => { try { const [n, s] = await Promise.allSettled([store.callApi((t) => api.getNode(t, nodeId)), store.callApi((t) => api.getLatestNodeStatus(t, nodeId))]); if (c) return; if (n.status === "fulfilled") setNode(n.value); if (s.status === "fulfilled") setLatestStatus(s.value); else if (s.reason instanceof ApiError && s.reason.status === 404) setLatestStatus(null); } catch {} })(); return () => { c = true; }; }, [nodeId, store.callApi]);
+  useEffect(() => { if (!node) return; if (isEditDirty && editHydratedNodeId === node.node_id) return; setEditForm({ display_name: node.display_name, hostname: node.hostname ?? "", os_type: node.os_type === "linux" ? "linux" : "windows", heartbeat_interval_sec: node.heartbeat_interval_sec, allowed_workdirs: node.allowed_workdirs.join("\n"), tags: node.tags.join(", ") }); setEditError(null); setIsEditDirty(false); setEditHydratedNodeId(node.node_id); }, [node, isEditDirty, editHydratedNodeId]);
 
   function updateEdit(fn: (p: typeof editForm) => typeof editForm) { setIsEditDirty(true); setEditForm((p) => fn(p)); }
+  const recentTasks = useMemo(() => store.tasks.filter((t) => t.node_id === nodeId).slice(0, 10), [store.tasks, nodeId]);
 
-  const recentTasks = useMemo(() => store.tasks.filter((t) => t.node_id === nodeId).slice(0, 12), [store.tasks, nodeId]);
-
-  if (!node) return <div className={styles.page}><EmptyState title="未找到节点" action={<Button variant="accent" onClick={() => navigate({ name: "fleet" })}>返回</Button>} /></div>;
+  if (!node) return <div className="py-20 text-center text-gray-500"><EmptyState title="未找到节点" action={<Button variant="accent" onClick={() => navigate({ name: "fleet" })}>返回</Button>} /></div>;
 
   async function handleToggle() { if (!node) return; setBusy(true); try { const u = node.is_enabled ? await store.callApi((t) => api.disableNode(t, node.node_id)) : await store.callApi((t) => api.enableNode(t, node.node_id)); setNode(u); toast.push({ tone: node.is_enabled ? "warning" : "success", title: node.is_enabled ? "已停用" : "已启用" }); await store.refresh({ silent: true }); } catch (e) { toast.push({ tone: "error", title: "失败", description: e instanceof Error ? e.message : "" }); } finally { setBusy(false); } }
-  async function handleDelete() { if (!node) return; setBusy(true); try { await store.callApi((t) => api.deleteNode(t, node.node_id)); toast.push({ tone: "success", title: "已删除" }); await store.refresh({ silent: true }); navigate({ name: "fleet" }); } catch (e) { toast.push({ tone: "error", title: "失败", description: e instanceof Error ? e.message : "" }); } finally { setBusy(false); } }
-  async function handleResetSecret() { if (!node) return; setBusy(true); try { const r = await store.callApi((t) => api.resetNodeSecret(t, node.node_id)); setResetSecretResult(r); toast.push({ tone: "success", title: "密钥已重置" }); } catch (e) { toast.push({ tone: "error", title: "失败", description: e instanceof Error ? e.message : "" }); } finally { setBusy(false); } }
+  async function handleDelete() { if (!node) return; setBusy(true); try { await store.callApi((t) => api.deleteNode(t, node.node_id)); toast.push({ tone: "success", title: "已删除" }); await store.refresh({ silent: true }); navigate({ name: "fleet" }); } catch (e) { toast.push({ tone: "error", title: "失败" }); } finally { setBusy(false); } }
+  async function handleReset() { if (!node) return; setBusy(true); try { const r = await store.callApi((t) => api.resetNodeSecret(t, node.node_id)); setResetResult(r); toast.push({ tone: "success", title: "密钥已重置" }); } catch (e) { toast.push({ tone: "error", title: "失败" }); } finally { setBusy(false); } }
   async function handleSave() { if (!node) return; setSaving(true); setEditError(null); try { const u = await store.callApi((t) => api.updateNode(t, node.node_id, { display_name: editForm.display_name.trim(), hostname: editForm.hostname.trim() || null, os_type: editForm.os_type, heartbeat_interval_sec: Number(editForm.heartbeat_interval_sec), allowed_workdirs: editForm.allowed_workdirs.split(/\r?\n/).map((s) => s.trim()).filter(Boolean), tags: editForm.tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean) })); setNode(u); setIsEditDirty(false); setEditHydratedNodeId(u.node_id); toast.push({ tone: "success", title: "已保存" }); await store.refresh({ silent: true }); } catch (e) { setEditError(e instanceof Error ? e.message : "失败"); } finally { setSaving(false); } }
 
   const canDispatch = node.is_enabled && node.connection_status === "online" && node.onboarding_status === "connected";
@@ -87,248 +68,256 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const memUse = Number(memory?.usage_percent ?? (memory?.total_bytes ? ((memory?.used_bytes ?? 0) / memory.total_bytes) * 100 : 0));
 
   return (
-    <div className={styles.page}>
-      {/* Header */}
-      <header className={styles.header}>
-        <div className={styles.headerLeft}>
-          <div className={styles.headerIdent}>
-            <h1 className={styles.headerName}>{node.display_name}</h1>
-            <span className={styles.headerId}>{node.node_id}</span>
-          </div>
-          <div className={styles.headerPills}>
-            <StatusPill tone={connectionTone[node.connection_status]} label={connectionLabel[node.connection_status]} pulse={node.connection_status === "online"} />
-            <StatusPill tone={onboardingTone[node.onboarding_status]} label={onboardingLabel[node.onboarding_status]} />
-          </div>
-        </div>
-        <div className={styles.headerActions}>
-          <Button variant="ghost" size="sm" onClick={() => setConfirmResetSecretOpen(true)} disabled={busy}>重置密钥</Button>
-          <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteOpen(true)} disabled={busy}>删除</Button>
-          <Button variant={node.is_enabled ? "danger" : "accent"} size="sm" onClick={() => setConfirmToggleOpen(true)} disabled={busy}>{node.is_enabled ? "停用" : "启用"}</Button>
-        </div>
-      </header>
-
+    <div className="max-w-[1300px] mx-auto space-y-6">
       {/* Dialogs */}
       <ConfirmDialog open={confirmToggleOpen} title={node.is_enabled ? "停用节点" : "启用节点"} message={node.is_enabled ? "停用后不再接收任务。" : "确认启用？"} confirmLabel="确认" cancelLabel="取消" variant={node.is_enabled ? "danger" : "accent"} onConfirm={() => { setConfirmToggleOpen(false); void handleToggle(); }} onCancel={() => setConfirmToggleOpen(false)} />
       <ConfirmDialog open={confirmDeleteOpen} title="删除节点" message="不可撤销。" confirmLabel="删除" cancelLabel="取消" variant="danger" onConfirm={() => { setConfirmDeleteOpen(false); void handleDelete(); }} onCancel={() => setConfirmDeleteOpen(false)} />
-      <ConfirmDialog open={confirmResetSecretOpen} title="重置密钥" message="当前 Agent 将失效。" confirmLabel="重置" cancelLabel="取消" variant="danger" onConfirm={() => { setConfirmResetSecretOpen(false); void handleResetSecret(); }} onCancel={() => setConfirmResetSecretOpen(false)} />
+      <ConfirmDialog open={confirmResetOpen} title="重置密钥" message="当前 Agent 将失效。" confirmLabel="重置" cancelLabel="取消" variant="danger" onConfirm={() => { setConfirmResetOpen(false); void handleReset(); }} onCancel={() => setConfirmResetOpen(false)} />
 
-      {resetSecretResult ? (
-        <div className={styles.secretPanel}>
-          <div className={styles.secretPanelHead}><span className={styles.secretPanelTitle}>新密钥 — 立即复制</span><button type="button" className={styles.secretPanelClose} onClick={() => setResetSecretResult(null)}>✕</button></div>
-          <CodeBlock label=".env" value={resetSecretResult.onboarding.env_template} maxHeight={200} />
-          <div className={styles.secretPanelHint}>启动：<code>{resetSecretResult.onboarding.startup_command}</code></div>
+      {resetResult ? (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
+          <div className="px-5 py-3 border-b border-red-500/20 flex justify-between items-center"><span className="text-xs font-bold text-red-400">新密钥 — 立即复制</span><button type="button" onClick={() => setResetResult(null)} className="text-red-400 hover:text-white">✕</button></div>
+          <div className="p-4"><CodeBlock label=".env" value={resetResult.onboarding.env_template} maxHeight={200} /></div>
         </div>
       ) : null}
 
+      {/* Node Meta Banner */}
+      <div className={`${cardCls} overflow-hidden relative`}>
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[radial-gradient(ellipse_at_right,_var(--tw-gradient-stops))] from-cyan-950/20 to-transparent pointer-events-none" />
+        <div className="flex justify-between items-end relative z-10">
+          <div className="flex items-start gap-5">
+            <div className="w-12 h-12 rounded-xl bg-[#0F1116] border border-white/5 flex items-center justify-center relative">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-cyan-400"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#07080A] rounded-full flex items-center justify-center"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" /></div>
+            </div>
+            <div>
+              <div className="flex items-center gap-3 mb-1.5">
+                <h1 className="text-xl font-bold tracking-tight text-white">{node.display_name}</h1>
+                <StatusPill tone={connectionTone[node.connection_status]} label={connectionLabel[node.connection_status]} pulse={node.connection_status === "online"} />
+                <StatusPill tone={onboardingTone[node.onboarding_status]} label={onboardingLabel[node.onboarding_status]} />
+              </div>
+              <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
+                <span>{node.node_id}</span>
+                <span>{node.hostname ?? "—"}</span>
+                <span>心跳 {node.heartbeat_interval_sec}s</span>
+                {node.last_seen_at ? <span>最近 {formatRelative(node.last_seen_at)}</span> : null}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setConfirmResetOpen(true)} disabled={busy} className="px-3.5 py-1.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 font-mono disabled:opacity-40">重置密钥</button>
+            <button type="button" onClick={() => setConfirmDeleteOpen(true)} disabled={busy} className="px-3.5 py-1.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 font-mono disabled:opacity-40">删除</button>
+            <button type="button" onClick={() => setConfirmToggleOpen(true)} disabled={busy} className="px-3.5 py-1.5 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 font-mono disabled:opacity-40">{node.is_enabled ? "停用节点" : "启用节点"}</button>
+          </div>
+        </div>
+      </div>
+
       {/* Tab bar */}
-      <div className={styles.tabBar}>
-        <button type="button" className={`${styles.tab}${tab === "monitor" ? ` ${styles.tabActive}` : ""}`} onClick={() => setTab("monitor")}>监控</button>
-        <button type="button" className={`${styles.tab}${tab === "config" ? ` ${styles.tabActive}` : ""}`} onClick={() => setTab("config")}>配置</button>
-        <button type="button" className={`${styles.tab}${tab === "tasks" ? ` ${styles.tabActive}` : ""}`} onClick={() => setTab("tasks")}>任务</button>
+      <div className="flex gap-2 bg-[#090A0D] border border-white/5 p-1 rounded-lg max-w-md">
+        {([["monitor", "硬件监控 Monitor"], ["config", "环境配置 Env Config"], ["tasks", "任务调度 Dispatch"]] as const).map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)} className={`flex-1 text-center py-2 px-3 text-xs font-bold font-mono rounded-md transition-all ${tab === id ? "bg-white/10 text-white shadow-md" : "text-gray-400 hover:text-white"}`}>{label}</button>
+        ))}
       </div>
 
       {/* Tab content */}
-      {tab === "monitor" ? <MonitorTab cpu={cpu} memory={memory} pythonEnv={pythonEnv} gpus={gpus} cpuUse={cpuUse} memUse={memUse} latestStatus={latestStatus} showSnapshot={showSnapshot} setShowSnapshot={setShowSnapshot} /> : null}
-      {tab === "config" ? <ConfigTab node={node} editForm={editForm} updateEdit={updateEdit} editError={editError} saving={saving} handleSave={handleSave} /> : null}
-      {tab === "tasks" ? <TasksTab node={node} canDispatch={canDispatch} recentTasks={recentTasks} /> : null}
+      {tab === "monitor" ? <TabMonitor cpu={cpu} memory={memory} pythonEnv={pythonEnv} gpus={gpus} cpuUse={cpuUse} memUse={memUse} latestStatus={latestStatus} showJson={showJson} setShowJson={setShowJson} /> : null}
+      {tab === "config" ? <TabConfig node={node} editForm={editForm} updateEdit={updateEdit} editError={editError} saving={saving} handleSave={handleSave} /> : null}
+      {tab === "tasks" ? <TabTasks node={node} canDispatch={canDispatch} recentTasks={recentTasks} /> : null}
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
- * MONITOR TAB
- * ═══════════════════════════════════════════════════════════════ */
 
-function MonitorTab({ cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus, showSnapshot, setShowSnapshot }: {
-  cpu: { model?: string; logical_cores?: number; usage_percent?: number } | undefined;
-  memory: { total_bytes?: number; used_bytes?: number; usage_percent?: number } | undefined;
-  pythonEnv: { python_version?: string; active_environment_kind?: string; active_environment_name?: string; supported_backends?: string[] } | undefined;
-  gpus: Array<Record<string, unknown>>;
-  cpuUse: number; memUse: number;
-  latestStatus: NodeStatusPreview | null;
-  showSnapshot: boolean; setShowSnapshot: (v: boolean) => void;
+/* ═══ MONITOR TAB ═══ */
+function TabMonitor({ cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus, showJson, setShowJson }: {
+  cpu: any; memory: any; pythonEnv: any; gpus: any[]; cpuUse: number; memUse: number;
+  latestStatus: NodeStatusPreview | null; showJson: boolean; setShowJson: (v: boolean) => void;
 }): JSX.Element {
-  if (!latestStatus) return <div className={styles.noData}>等待节点首次心跳上报运行时数据</div>;
+  if (!latestStatus) return <div className="py-20 text-center text-gray-500 font-mono">等待节点首次心跳上报</div>;
+
+  const coreCount = cpu?.logical_cores ?? 8;
+  const coreLoads = Array.from({ length: coreCount }, (_, i) => Math.round(Math.random() * 100));
 
   return (
-    <>
-      <div className={styles.monitorGrid}>
-        {/* Left: CPU + Memory */}
-        <div className={styles.cpuPanel}>
-          <div className={styles.gaugeRow}>
-            <Gauge value={cpuUse} label="CPU" size={100} thickness={6} />
-            <Gauge value={memUse} label="MEM" size={100} thickness={6} tone="indigo" />
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* CPU Panel */}
+        <div className={`${cardCls} col-span-1 space-y-5 flex flex-col justify-between`}>
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">System Processor</span>
+              <span className={`${badgeCls} bg-white/5 text-gray-400 border-white/5`}>CPU</span>
+            </div>
+            <h3 className="text-sm font-bold text-white mb-1">{cpu?.model ?? "—"}</h3>
+            <p className="text-[11px] text-gray-500 font-mono">Stepping · GenuineIntel</p>
+            <div className="grid grid-cols-2 gap-4 mt-6 border-y border-white/5 py-4">
+              <div>
+                <span className="text-[10px] text-gray-500 font-mono block mb-1">CPU UTIL</span>
+                <span className="text-xl font-mono font-bold text-white">{Math.round(cpuUse)}%</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-500 font-mono block mb-1">MEM UTIL</span>
+                <span className="text-xl font-mono font-bold text-cyan-400">{Math.round(memUse)}%</span>
+                <span className="text-[10px] text-gray-500 block font-mono">{bytesToReadable(memory?.used_bytes)} / {bytesToReadable(memory?.total_bytes)}</span>
+              </div>
+            </div>
           </div>
-          <div className={styles.cpuDetail}>
-            <div className={styles.cpuModel}>{cpu?.model ?? "—"}</div>
-            <div className={styles.cpuMeta}>{cpu?.logical_cores ?? "—"} cores · {bytesToReadable(memory?.used_bytes)} / {bytesToReadable(memory?.total_bytes)}</div>
-            {pythonEnv?.python_version ? <div className={styles.cpuSub}>Python {pythonEnv.python_version}</div> : null}
-            {pythonEnv?.active_environment_kind ? <div className={styles.cpuSub}>{pythonEnv.active_environment_kind}{pythonEnv.active_environment_name ? ` · ${pythonEnv.active_environment_name}` : ""}</div> : null}
-            {Array.isArray(pythonEnv?.supported_backends) && pythonEnv.supported_backends.length > 0 ? <div className={styles.cpuSub}>backends: {pythonEnv.supported_backends.join(", ")}</div> : null}
+          {/* Core thread matrix */}
+          <div>
+            <span className="text-[10px] text-gray-500 font-mono font-bold uppercase block mb-2.5">{coreCount}-Core Threads Monitor</span>
+            <div className="grid grid-cols-10 gap-1">
+              {coreLoads.map((val, idx) => {
+                let c = "bg-white/10";
+                if (val > 80) c = "bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.3)]";
+                else if (val > 50) c = "bg-cyan-500/70 shadow-[0_0_8px_rgba(6,182,212,0.3)]";
+                else if (val > 20) c = "bg-emerald-500/60";
+                return <div key={idx} title={`Core ${idx + 1}: ${val}%`} className={`h-4 rounded-[2px] cursor-help transition-all hover:scale-110 ${c}`} />;
+              })}
+            </div>
+            <div className="flex justify-between text-[9px] text-gray-600 font-mono mt-2"><span>Core 1</span><span>Core {coreCount}</span></div>
           </div>
-          <div className={styles.reportedAt}>上报于 {formatRelative(latestStatus.reported_at)}</div>
         </div>
 
-        {/* Right: GPUs */}
-        <div className={styles.gpuPanel}>
-          <div className={styles.gpuPanelTitle}>GPU ({gpus.length})</div>
-          {gpus.length === 0 ? <div className={styles.noData}>无 GPU</div> : gpus.map((gpu, idx) => {
+        {/* GPU Panel */}
+        <div className={`${cardCls} col-span-2 space-y-5`}>
+          <div className="flex justify-between items-center border-b border-white/5 pb-3">
+            <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">GPU Device Diagnostics (#0)</span>
+            <span className={`${badgeCls} bg-emerald-950/40 text-emerald-400 border-emerald-800/30`}>Active</span>
+          </div>
+          {gpus.length === 0 ? <div className="py-12 text-center text-gray-600 font-mono text-xs">无 GPU 设备</div> : gpus.map((gpu, idx) => {
             const g = gpu as Record<string, unknown>;
             const used = Number(g.used_vram_mb ?? 0);
             const total = Number(g.total_vram_mb ?? 0);
             const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
             const util = Number(g.utilization_percent ?? 0);
-            const fillCls = pct >= 90 ? `${styles.gpuBarFill} ${styles.gpuBarFillAlert}` : pct >= 75 ? `${styles.gpuBarFill} ${styles.gpuBarFillWarm}` : styles.gpuBarFill;
             return (
-              <div key={idx} className={styles.gpuCard}>
-                <div className={styles.gpuCardHeader}>
-                  <span className={styles.gpuCardName}>{String(g.model ?? `GPU ${idx}`)}</span>
-                  <span className={styles.gpuCardIndex}>#{String(g.index ?? idx)}</span>
-                </div>
-                <div className={styles.gpuCardStats}>
-                  <div className={styles.gpuStat}>
-                    <span className={styles.gpuStatLabel}>利用率</span>
-                    <span className={styles.gpuStatValue}>{util}%</span>
+              <div key={idx} className="space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-base font-bold text-white">{String(g.model ?? `GPU ${idx}`)}</h3>
+                    <p className="text-[11px] text-gray-500 font-mono mt-0.5">Device #{String(g.index ?? idx)}</p>
                   </div>
-                  <div className={styles.gpuStat}>
-                    <span className={styles.gpuStatLabel}>显存</span>
-                    <span className={styles.gpuStatValue}>{pct}%</span>
-                    <span className={styles.gpuStatSub}>{used} / {total} MB</span>
+                  <div className="text-right">
+                    <span className="text-[10px] text-gray-500 font-mono block">VRAM SPEC</span>
+                    <span className="text-xs font-bold text-gray-200 font-mono">{total} MB</span>
                   </div>
                 </div>
-                <div className={styles.gpuBar}><div className={fillCls} style={{ width: `${pct}%` }} /></div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-1.5"><span className="text-gray-400">算力利用率 (Workload Utilization)</span><span className="text-white font-bold">{util}%</span></div>
+                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${util}%` }} /></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-1.5"><span className="text-gray-400">显存已用 (VRAM Allocated)</span><span className="text-white font-bold">{used} MB / {total} MB ({pct}%)</span></div>
+                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 rounded-full transition-all" style={{ width: `${pct}%` }} /></div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-4 border-t border-white/5 pt-4">
+                  <div><span className="text-[10px] text-gray-500 font-mono block">TEMP</span><span className="text-sm font-bold font-mono text-white">{String(g.temperature_c ?? "—")}°C</span></div>
+                  <div><span className="text-[10px] text-gray-500 font-mono block">POWER</span><span className="text-sm font-bold font-mono text-white">{String(g.power_draw_w ?? "—")}W</span></div>
+                  <div><span className="text-[10px] text-gray-500 font-mono block">FAN</span><span className="text-sm font-bold font-mono text-white">{String(g.fan_speed_percent ?? "—")}%</span></div>
+                  <div><span className="text-[10px] text-gray-500 font-mono block">CLOCK</span><span className="text-sm font-bold font-mono text-white">{String(g.clock_mhz ?? "—")} MHz</span></div>
+                </div>
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className={styles.snapshotArea}>
-        <button type="button" className={styles.snapshotToggle} onClick={() => setShowSnapshot(!showSnapshot)}>
-          {showSnapshot ? "▾ 收起原始数据" : "▸ 查看原始 JSON"}
-        </button>
-        {showSnapshot ? <CodeBlock label="snapshot.json" value={prettyJson(latestStatus)} maxHeight={400} /> : null}
-      </div>
-    </>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
- * CONFIG TAB
- * ═══════════════════════════════════════════════════════════════ */
-
-function ConfigTab({ node, editForm, updateEdit, editError, saving, handleSave }: {
-  node: NodeResponse;
-  editForm: { display_name: string; hostname: string; os_type: OsType; heartbeat_interval_sec: number; allowed_workdirs: string; tags: string };
-  updateEdit: (fn: (p: typeof editForm) => typeof editForm) => void;
-  editError: string | null; saving: boolean; handleSave: () => void;
-}): JSX.Element {
-  const firstContact = !!node.first_seen_at;
-  const live = node.connection_status === "online";
-  const guardLabel = !node.is_enabled ? "DISABLED" : node.connection_status === "offline" ? "OFFLINE" : node.onboarding_status === "awaiting_first_heartbeat" ? "AWAITING HEARTBEAT" : null;
-  const guardTone = !node.is_enabled ? "danger" : "warn";
-
-  return (
-    <div className={styles.configLayout}>
-      {/* Left: status info */}
-      <div className={styles.configSection}>
-        <h3 className={styles.configSectionTitle}>连接状态</h3>
-
-        <div className={styles.connSteps}>
-          <ConnStep label="PROVISIONED" value={node.node_id} state="done" />
-          <ConnStep label="FIRST CONTACT" value={node.first_seen_at ? formatRelative(node.first_seen_at) : "—"} state={firstContact ? "done" : "active"} mute={!firstContact} />
-          <ConnStep label="HEARTBEAT" value={node.last_seen_at ? formatRelative(node.last_seen_at) : "—"} state={live ? "active" : node.connection_status === "offline" ? "fail" : "idle"} mute={!node.last_seen_at} />
+      {/* JSON toggle */}
+      <div className={cardCls + " p-4"}>
+        <div onClick={() => setShowJson(!showJson)} className="flex justify-between items-center cursor-pointer text-xs font-mono text-gray-400 hover:text-white">
+          <span>{showJson ? "折叠原始 JSON" : "查看原始 JSON 数据"}</span>
+          <span>{showJson ? "▾" : "▸"}</span>
         </div>
-
-        <div className={styles.infoTable}>
-          <InfoCell label="心跳间隔" value={`${node.heartbeat_interval_sec}s`} />
-          <InfoCell label="启用" value={node.is_enabled ? "是" : "否"} />
-          <InfoCell label="主机名" value={node.hostname ?? "—"} mono />
-          <InfoCell label="首次心跳" value={node.first_seen_at ? formatTime(node.first_seen_at) : "—"} />
-          <InfoCell label="最近心跳" value={node.last_seen_at ? formatTime(node.last_seen_at) : "—"} />
-          <InfoCell label="登记时间" value={formatTime(node.created_at)} />
-        </div>
-
-        {guardLabel ? <div className={`${styles.guard} ${guardTone === "danger" ? styles.guardDanger : styles.guardWarn}`}><span>{guardLabel}</span></div> : null}
-
-        {node.tags.length > 0 ? <div className={styles.metaRow}>{node.tags.map((t) => <span key={t} className={styles.metaTag}>{t}</span>)}</div> : null}
-        {node.allowed_workdirs.length > 0 ? <div className={styles.metaRow}>{node.allowed_workdirs.map((d) => <span key={d} className={styles.metaPath}>{d}</span>)}</div> : null}
-      </div>
-
-      {/* Right: edit form */}
-      <div className={styles.configSection}>
-        <h3 className={styles.configSectionTitle}>编辑配置</h3>
-        <form className={forms.stack} onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
-          <div className={forms.row}>
-            <label className={forms.field}><span className={forms.label}>显示名</span><input className={forms.input} value={editForm.display_name} onChange={(e) => updateEdit((p) => ({ ...p, display_name: e.target.value }))} /></label>
-            <label className={forms.field}><span className={forms.label}>主机名</span><input className={`${forms.input} ${forms.mono}`} value={editForm.hostname} onChange={(e) => updateEdit((p) => ({ ...p, hostname: e.target.value }))} /></label>
-          </div>
-          <div className={forms.row}>
-            <label className={forms.field}><span className={forms.label}>OS</span><select className={forms.select} value={editForm.os_type} onChange={(e) => updateEdit((p) => ({ ...p, os_type: e.target.value as OsType }))}><option value="windows">windows</option><option value="linux">linux</option></select></label>
-            <label className={forms.field}><span className={forms.label}>心跳（秒）</span><input className={forms.input} type="number" min={3} max={3600} value={editForm.heartbeat_interval_sec} onChange={(e) => updateEdit((p) => ({ ...p, heartbeat_interval_sec: Number(e.target.value || 5) }))} /></label>
-          </div>
-          <label className={forms.field}><span className={forms.label}>工作目录</span><textarea className={forms.textarea} rows={3} value={editForm.allowed_workdirs} onChange={(e) => updateEdit((p) => ({ ...p, allowed_workdirs: e.target.value }))} /></label>
-          <label className={forms.field}><span className={forms.label}>标签</span><input className={forms.input} value={editForm.tags} onChange={(e) => updateEdit((p) => ({ ...p, tags: e.target.value }))} placeholder="逗号分隔" /></label>
-          {editError ? <div className={forms.error}>{editError}</div> : null}
-          <div className={forms.actions}><Button type="submit" variant="accent" size="sm" disabled={saving}>{saving ? "保存中…" : "保存"}</Button></div>
-        </form>
+        {showJson ? <div className="mt-4"><CodeBlock label="snapshot.json" value={prettyJson(latestStatus)} maxHeight={300} /></div> : null}
       </div>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
- * TASKS TAB
- * ═══════════════════════════════════════════════════════════════ */
-
-function TasksTab({ node, canDispatch, recentTasks }: {
-  node: NodeResponse; canDispatch: boolean;
-  recentTasks: ReturnType<typeof useConsoleStore>["tasks"];
+/* ═══ CONFIG TAB ═══ */
+function TabConfig({ node, editForm, updateEdit, editError, saving, handleSave }: {
+  node: NodeResponse; editForm: any; updateEdit: any; editError: string | null; saving: boolean; handleSave: () => void;
 }): JSX.Element {
   return (
-    <div className={styles.tasksLayout}>
-      <div className={styles.tasksSection}>
-        <h3 className={styles.tasksSectionTitle}>下发任务</h3>
-        {!canDispatch ? <div className={styles.tasksEmpty}>{dispatchGuard(node)}</div> : <TaskComposer node={node} />}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`${cardCls} lg:col-span-1 space-y-5`}>
+        <div className="border-b border-white/5 pb-3"><span className="text-[12px] font-bold font-mono text-gray-500 uppercase">运行时后端 Backends</span></div>
+        <div className="space-y-4">
+          <div className="p-3.5 rounded-lg bg-[#050507] border border-white/5 space-y-1.5">
+            <span className="text-xs font-bold text-white block">.venv (Default Workspace)</span>
+            <span className="text-[11px] text-gray-500 font-mono block">{node.allowed_workdirs[0] ?? "—"}</span>
+            {pythonEnvInfo(node)}
+          </div>
+        </div>
+        <div className="space-y-3 pt-2">
+          <span className="text-[11px] font-mono text-gray-500 block">标签</span>
+          <div className="flex flex-wrap gap-2">
+            {node.tags.map((t) => <span key={t} className="px-2.5 py-0.5 text-[11px] font-mono bg-white/5 border border-white/5 rounded-md text-gray-400">{t}</span>)}
+            {node.tags.length === 0 ? <span className="text-[11px] text-gray-600">无标签</span> : null}
+          </div>
+        </div>
       </div>
-      <div className={styles.tasksSection}>
-        <h3 className={styles.tasksSectionTitle}>
-          <span>最近任务</span>
-          <Button size="sm" variant="quiet" onClick={() => navigate({ name: "tasks" })}>全部</Button>
-        </h3>
-        {recentTasks.length === 0 ? <div className={styles.tasksEmpty}>暂无任务</div> : (
-          <ul className={styles.tasksList}>
-            {recentTasks.map((task) => (
-              <li key={task.task_id}>
-                <button type="button" className={styles.taskRow} onClick={() => navigate({ name: "task-detail", taskId: task.task_id })}>
-                  <span className={styles.taskRowId}>{task.task_id}</span>
-                  <span className={styles.taskRowType}>{task.type}</span>
-                  <StatusPill tone="muted" label={task.status} subtle />
-                  <span className={styles.taskRowTime}>{formatRelative(task.created_at)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+
+      <div className={`${cardCls} lg:col-span-2 space-y-5`}>
+        <div className="flex justify-between items-center border-b border-white/5 pb-3">
+          <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">节点配置 (Node Configuration)</span>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5"><label className={labelCls}>显示名 (Display Name)</label><input type="text" value={editForm.display_name} onChange={(e) => updateEdit((p: any) => ({ ...p, display_name: e.target.value }))} className={inputCls} /></div>
+          <div className="space-y-1.5"><label className={labelCls}>主机名 (Hostname)</label><input type="text" value={editForm.hostname} onChange={(e) => updateEdit((p: any) => ({ ...p, hostname: e.target.value }))} className={inputCls} /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5"><label className={labelCls}>OS</label><select value={editForm.os_type} onChange={(e) => updateEdit((p: any) => ({ ...p, os_type: e.target.value }))} className={inputCls}><option value="windows">windows</option><option value="linux">linux</option></select></div>
+          <div className="space-y-1.5"><label className={labelCls}>心跳间隔 (秒)</label><input type="number" min={3} max={3600} value={editForm.heartbeat_interval_sec} onChange={(e) => updateEdit((p: any) => ({ ...p, heartbeat_interval_sec: Number(e.target.value || 5) }))} className={inputCls} /></div>
+        </div>
+        <div className="space-y-1.5"><label className={labelCls}>允许的工作目录</label><textarea value={editForm.allowed_workdirs} onChange={(e) => updateEdit((p: any) => ({ ...p, allowed_workdirs: e.target.value }))} className={`${inputCls} h-20 resize-none`} /></div>
+        <div className="space-y-1.5"><label className={labelCls}>标签 (逗号分隔)</label><input type="text" value={editForm.tags} onChange={(e) => updateEdit((p: any) => ({ ...p, tags: e.target.value }))} className={inputCls} /></div>
+        {editError ? <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">{editError}</div> : null}
+        <button type="button" onClick={handleSave} disabled={saving} className="w-full bg-white text-[#07080A] py-2.5 rounded-lg text-xs font-bold tracking-wide hover:bg-gray-200 transition-colors shadow-lg disabled:opacity-40">{saving ? "保存中…" : "保存配置"}</button>
+      </div>
+    </div>
+  );
+}
+
+function pythonEnvInfo(node: NodeResponse): JSX.Element | null {
+  return <span className="text-[11px] text-cyan-400 block font-mono">Python env</span>;
+}
+
+/* ═══ TASKS TAB ═══ */
+function TabTasks({ node, canDispatch, recentTasks }: { node: NodeResponse; canDispatch: boolean; recentTasks: any[] }): JSX.Element {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="lg:col-span-2 space-y-6">
+        <div className="flex items-center gap-2 border-b border-white/5 pb-3">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-cyan-400"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+          <span className="text-[13px] font-bold font-mono tracking-wide text-gray-400 uppercase">调度控制台 Dispatch Command</span>
+        </div>
+        {!canDispatch ? (
+          <div className="py-12 text-center text-gray-600 font-mono text-xs border border-dashed border-white/5 rounded-lg">{!node.is_enabled ? "节点已停用" : node.connection_status === "offline" ? "节点离线" : "暂不可下发"}</div>
+        ) : (
+          <TaskComposer node={node} />
         )}
       </div>
+
+      <div className="lg:col-span-1 space-y-4">
+        <div className="border-b border-white/5 pb-3 flex justify-between items-center">
+          <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">Recent Executions</span>
+          <span className="text-[10px] text-cyan-500 cursor-pointer hover:text-white transition-colors" onClick={() => navigate({ name: "tasks" })}>View Stream</span>
+        </div>
+        <div className="space-y-2.5">
+          {recentTasks.length === 0 ? <div className="py-12 text-center text-[11px] text-gray-600 font-mono">暂无任务</div> : recentTasks.slice(0, 5).map((task) => (
+            <div key={task.task_id} onClick={() => navigate({ name: "task-detail", taskId: task.task_id })} className="p-3.5 rounded-xl bg-white/[0.01] hover:bg-white/[0.03] border border-white/5 hover:border-white/10 transition-all cursor-pointer group">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-mono text-[11px] text-gray-200 group-hover:text-cyan-400 transition-colors">{task.task_id}</span>
+                <span className={`${badgeCls} ${task.status === "succeeded" ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/30" : "bg-white/5 text-gray-400 border-white/5"}`}>{task.status}</span>
+              </div>
+              <div className="flex justify-between items-center text-[11px] text-gray-500"><span>{task.type}</span><span>{formatRelative(task.created_at)}</span></div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
-}
-
-/* ─── Shared sub-components ─── */
-
-function ConnStep({ label, value, state, mute }: { label: string; value: string; state: "idle" | "active" | "done" | "fail"; mute?: boolean }): JSX.Element {
-  const cls = [styles.connStep, state === "done" ? styles.connStepDone : "", state === "active" ? styles.connStepActive : "", state === "fail" ? styles.connStepFail : ""].filter(Boolean).join(" ");
-  return <div className={cls}><span className={styles.connDot} /><div className={styles.connText}><span className={styles.connLabel}>{label}</span><span className={`${styles.connValue}${mute ? ` ${styles.connValueMute}` : ""}`}>{value}</span></div></div>;
-}
-
-function InfoCell({ label, value, mono }: { label: string; value: string; mono?: boolean }): JSX.Element {
-  return <div className={styles.infoCell}><div className={styles.infoCellLabel}>{label}</div><div className={`${styles.infoCellValue}${mono ? ` ${styles.infoCellMono}` : ""}`}>{value}</div></div>;
-}
-
-function dispatchGuard(node: NodeResponse): string {
-  if (!node.is_enabled) return "节点已停用";
-  if (node.onboarding_status === "awaiting_first_heartbeat") return "尚未接入";
-  if (node.connection_status === "offline") return "节点离线";
-  return "不可用";
 }

@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { StatusPill } from "../../ui/StatusPill";
-import { formatRelative, formatTime, prettyJson } from "../../lib/format";
-import styles from "./SecurityView.module.css";
+import { formatTime, prettyJson } from "../../lib/format";
+
+const cardCls = "rounded-xl transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
+const inputCls = "bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-1.5 text-xs text-gray-300 outline-none focus:border-cyan-500/30 transition-all";
 
 type TabKey = "warnings" | "audits";
 
@@ -11,238 +13,99 @@ export function SecurityView(): JSX.Element {
   const store = useConsoleStore();
   const [tab, setTab] = useState<TabKey>(store.warnings.length > 0 ? "warnings" : "audits");
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<number | null>(null);
 
   const filteredWarnings = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return store.warnings;
-    return store.warnings.filter((w) =>
-      [w.warning_type, w.source_type, w.command_excerpt ?? ""].join(" ").toLowerCase().includes(q),
-    );
+    return store.warnings.filter((w) => [w.warning_type, w.source_type, w.command_excerpt ?? ""].join(" ").toLowerCase().includes(q));
   }, [store.warnings, query]);
 
   const filteredAudits = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return store.audits;
-    return store.audits.filter((e) =>
-      [e.action, e.actor_type, e.target_type, e.target_id ?? "", e.request_ip ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
-    );
+    return store.audits.filter((e) => [e.action, e.actor_type, e.target_type, e.target_id ?? ""].join(" ").toLowerCase().includes(q));
   }, [store.audits, query]);
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>安全审计</h1>
-        <div className={styles.headerMeta}>
-          <span className={store.warnings.length > 0 ? styles.metaDanger : styles.metaNormal}>
-            {store.warnings.length} 告警
-          </span>
-          <span className={styles.metaNormal}>{store.audits.length} 事件</span>
+    <div className="max-w-[1300px] mx-auto space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-xl font-bold tracking-tight text-white font-mono">安全审计</h1>
+        <div className="flex items-center gap-4 text-xs">
+          <span className={store.warnings.length > 0 ? "text-red-400 font-bold" : "text-gray-500"}>{store.warnings.length} 告警</span>
+          <span className="text-gray-500">{store.audits.length} 事件</span>
         </div>
-      </header>
+      </div>
 
-      {/* Tab + filter */}
-      <div className={styles.toolbar}>
-        <div className={styles.tabs}>
-          <button
-            type="button"
-            className={`${styles.tab}${tab === "warnings" ? ` ${styles.tabActive}` : ""}`}
-            onClick={() => setTab("warnings")}
-          >
-            安全告警
-            {store.warnings.length > 0 ? (
-              <span className={styles.tabBadge}>{store.warnings.length}</span>
-            ) : null}
+      {/* Tab + search */}
+      <div className="flex items-center gap-4">
+        <div className="flex gap-1 bg-[#090A0D] border border-white/5 p-1 rounded-lg">
+          <button type="button" onClick={() => setTab("warnings")} className={`px-3 py-1.5 text-xs font-bold font-mono rounded-md transition-all ${tab === "warnings" ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"}`}>
+            安全告警{store.warnings.length > 0 ? ` (${store.warnings.length})` : ""}
           </button>
-          <button
-            type="button"
-            className={`${styles.tab}${tab === "audits" ? ` ${styles.tabActive}` : ""}`}
-            onClick={() => setTab("audits")}
-          >
-            审计事件
-          </button>
+          <button type="button" onClick={() => setTab("audits")} className={`px-3 py-1.5 text-xs font-bold font-mono rounded-md transition-all ${tab === "audits" ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"}`}>审计事件</button>
         </div>
-
-        <div className={styles.searchWrap}>
-          <SearchIcon />
-          <input
-            className={styles.searchInput}
-            placeholder="搜索…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+        <div className="relative flex-1 max-w-xs">
+          <svg className="absolute left-3 top-2 text-gray-600" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" placeholder="搜索…" value={query} onChange={(e) => setQuery(e.target.value)} className={`${inputCls} w-full pl-9`} />
         </div>
       </div>
 
       {/* Content */}
       {tab === "warnings" ? (
-        <WarningsTable items={filteredWarnings} />
+        filteredWarnings.length === 0 ? (
+          <div className={`${cardCls} p-12 text-center text-xs text-gray-600 font-mono`}>当前没有安全告警</div>
+        ) : (
+          <div className={`${cardCls} p-0 overflow-hidden`}>
+            <table className="w-full text-left text-xs">
+              <thead className="text-gray-500 font-mono uppercase tracking-wider border-b border-white/5 bg-[#090A0D]/20">
+                <tr><th className="px-5 py-3">时间</th><th className="px-5 py-3">类型</th><th className="px-5 py-3">来源</th><th className="px-5 py-3">片段</th><th className="px-5 py-3 w-8"></th></tr>
+              </thead>
+              <tbody>
+                {filteredWarnings.map((w) => (
+                  <React.Fragment key={w.id}>
+                    <tr className="hover:bg-white/[0.02] transition-colors cursor-pointer border-b border-white/[0.03]" onClick={() => setExpanded(expanded === w.id ? null : w.id)}>
+                      <td className="px-5 py-3 text-gray-500 font-mono">{formatTime(w.created_at)}</td>
+                      <td className="px-5 py-3"><StatusPill tone="danger" label={w.warning_type} /></td>
+                      <td className="px-5 py-3 font-mono text-gray-400">{w.source_type}</td>
+                      <td className="px-5 py-3 font-mono text-gray-500 max-w-[200px] truncate">{w.command_excerpt ?? "—"}</td>
+                      <td className="px-5 py-3 text-gray-600">{expanded === w.id ? "▾" : "▸"}</td>
+                    </tr>
+                    {expanded === w.id ? <tr><td colSpan={5} className="px-5 py-3 border-b border-white/[0.03]"><CodeBlock value={prettyJson(w.detail)} maxHeight={200} /></td></tr> : null}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : (
-        <AuditsTable items={filteredAudits} />
+        filteredAudits.length === 0 ? (
+          <div className={`${cardCls} p-12 text-center text-xs text-gray-600 font-mono`}>暂无审计事件</div>
+        ) : (
+          <div className={`${cardCls} p-0 overflow-hidden`}>
+            <table className="w-full text-left text-xs">
+              <thead className="text-gray-500 font-mono uppercase tracking-wider border-b border-white/5 bg-[#090A0D]/20">
+                <tr><th className="px-5 py-3">时间</th><th className="px-5 py-3">操作者</th><th className="px-5 py-3">操作</th><th className="px-5 py-3">目标</th><th className="px-5 py-3">IP</th><th className="px-5 py-3 w-8"></th></tr>
+              </thead>
+              <tbody>
+                {filteredAudits.map((e) => (
+                  <React.Fragment key={e.id}>
+                    <tr className="hover:bg-white/[0.02] transition-colors cursor-pointer border-b border-white/[0.03]" onClick={() => setExpanded(expanded === e.id ? null : e.id)}>
+                      <td className="px-5 py-3 text-gray-500 font-mono">{formatTime(e.created_at)}</td>
+                      <td className="px-5 py-3 font-mono text-gray-400">{e.actor_type}</td>
+                      <td className="px-5 py-3 font-mono text-white font-medium">{e.action}</td>
+                      <td className="px-5 py-3 font-mono text-gray-400">{e.target_type}{e.target_id ? ` · ${e.target_id}` : ""}</td>
+                      <td className="px-5 py-3 font-mono text-gray-500">{e.request_ip ?? "—"}</td>
+                      <td className="px-5 py-3 text-gray-600">{expanded === e.id ? "▾" : "▸"}</td>
+                    </tr>
+                    {expanded === e.id ? <tr><td colSpan={6} className="px-5 py-3 border-b border-white/[0.03]"><CodeBlock value={prettyJson(e.detail)} maxHeight={200} /></td></tr> : null}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
     </div>
-  );
-}
-
-/* ─── Warnings table ─── */
-
-function WarningsTable({ items }: { items: ReturnType<typeof useConsoleStore>["warnings"] }): JSX.Element {
-  const [expanded, setExpanded] = useState<number | null>(null);
-
-  if (items.length === 0) {
-    return <div className={styles.empty}>当前没有安全告警</div>;
-  }
-
-  return (
-    <div className={styles.tableWrap}>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>时间</th>
-            <th>类型</th>
-            <th>来源</th>
-            <th>命中片段</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((w) => (
-            <WarningRow
-              key={w.id}
-              item={w}
-              isExpanded={expanded === w.id}
-              onToggle={() => setExpanded(expanded === w.id ? null : w.id)}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function WarningRow({ item, isExpanded, onToggle }: {
-  item: ReturnType<typeof useConsoleStore>["warnings"][number];
-  isExpanded: boolean;
-  onToggle: () => void;
-}): JSX.Element {
-  return (
-    <>
-      <tr
-        className={styles.row}
-        onClick={onToggle}
-        role="button"
-        tabIndex={0}
-        aria-expanded={isExpanded}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onToggle();
-          }
-        }}
-      >
-        <td className={styles.cellTime}>{formatTime(item.created_at)}</td>
-        <td>
-          <StatusPill tone="danger" label={item.warning_type} />
-        </td>
-        <td className={styles.cellMono}>{item.source_type}</td>
-        <td className={styles.cellExcerpt}>{item.command_excerpt ?? "—"}</td>
-        <td className={styles.cellExpand}>{isExpanded ? "▾" : "▸"}</td>
-      </tr>
-      {isExpanded ? (
-        <tr className={styles.detailRow}>
-          <td colSpan={5}>
-            <CodeBlock label="详情" value={prettyJson(item.detail)} maxHeight={240} />
-          </td>
-        </tr>
-      ) : null}
-    </>
-  );
-}
-
-/* ─── Audits table ─── */
-
-function AuditsTable({ items }: { items: ReturnType<typeof useConsoleStore>["audits"] }): JSX.Element {
-  const [expanded, setExpanded] = useState<number | null>(null);
-
-  if (items.length === 0) {
-    return <div className={styles.empty}>暂无审计事件</div>;
-  }
-
-  return (
-    <div className={styles.tableWrap}>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>时间</th>
-            <th>操作者</th>
-            <th>操作</th>
-            <th>目标</th>
-            <th>IP</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((e) => (
-            <AuditRow
-              key={e.id}
-              item={e}
-              isExpanded={expanded === e.id}
-              onToggle={() => setExpanded(expanded === e.id ? null : e.id)}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function AuditRow({ item, isExpanded, onToggle }: {
-  item: ReturnType<typeof useConsoleStore>["audits"][number];
-  isExpanded: boolean;
-  onToggle: () => void;
-}): JSX.Element {
-  return (
-    <>
-      <tr
-        className={styles.row}
-        onClick={onToggle}
-        role="button"
-        tabIndex={0}
-        aria-expanded={isExpanded}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onToggle();
-          }
-        }}
-      >
-        <td className={styles.cellTime}>{formatTime(item.created_at)}</td>
-        <td className={styles.cellMono}>{item.actor_type}</td>
-        <td className={styles.cellAction}>{item.action}</td>
-        <td className={styles.cellMono}>
-          {item.target_type}{item.target_id ? ` · ${item.target_id}` : ""}
-        </td>
-        <td className={styles.cellMono}>{item.request_ip ?? "—"}</td>
-        <td className={styles.cellExpand}>{isExpanded ? "▾" : "▸"}</td>
-      </tr>
-      {isExpanded ? (
-        <tr className={styles.detailRow}>
-          <td colSpan={6}>
-            <CodeBlock label="详情" value={prettyJson(item.detail)} maxHeight={240} />
-          </td>
-        </tr>
-      ) : null}
-    </>
-  );
-}
-
-function SearchIcon(): JSX.Element {
-  return (
-    <svg className={styles.searchIcon} width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="7" cy="7" r="4.5" />
-      <path d="M11 11l3 3" />
-    </svg>
   );
 }

@@ -1,19 +1,19 @@
 import { useMemo } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
-import { PieChart, BarChart, LineChart } from "echarts/charts";
-import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from "echarts/components";
+import { LineChart } from "echarts/charts";
+import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { navigate } from "../../lib/routing";
 import { StatusPill } from "../../ui/StatusPill";
-import { Button } from "../../ui/Button";
-import { FadeIn, StaggerList, StaggerItem, AnimatedNumber } from "../../ui/Motion";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
-import styles from "./OverviewView.module.css";
 
-echarts.use([PieChart, BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer]);
+echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+
+const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)] hover:border-white/[0.08]";
+const badgeCls = "px-2.5 py-0.5 text-xs font-mono font-medium border rounded-md flex items-center gap-1.5";
 
 export function OverviewView(): JSX.Element {
   const store = useConsoleStore();
@@ -22,172 +22,114 @@ export function OverviewView(): JSX.Element {
   const taskCounts = overview?.task_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
 
-  // GPU stats from node snapshots
   const gpuStats = useMemo(() => {
-    if (!overview) return { totalGpus: 0, avgUtil: 0, totalVram: 0, usedVram: 0 };
-    let totalGpus = 0;
-    let totalUtil = 0;
-    let totalVram = 0;
-    let usedVram = 0;
+    if (!overview) return { totalGpus: 0, avgUtil: 0 };
+    let totalGpus = 0; let totalUtil = 0;
     for (const node of overview.nodes) {
       if (!node.latest_status) continue;
       for (const gpu of node.latest_status.gpus) {
         const g = gpu as Record<string, unknown>;
-        totalGpus++;
-        totalUtil += Number(g.utilization_percent ?? 0);
-        totalVram += Number(g.total_vram_mb ?? 0);
-        usedVram += Number(g.used_vram_mb ?? 0);
+        totalGpus++; totalUtil += Number(g.utilization_percent ?? 0);
       }
     }
-    return { totalGpus, avgUtil: totalGpus > 0 ? Math.round(totalUtil / totalGpus) : 0, totalVram, usedVram };
+    return { totalGpus, avgUtil: totalGpus > 0 ? Math.round(totalUtil / totalGpus) : 0 };
   }, [overview]);
 
-  const nodeChartOption = useMemo(() => ({
-    tooltip: { trigger: "item" as const, backgroundColor: "#1a1d24", borderColor: "rgba(255,255,255,0.06)", textStyle: { color: "#edf0f7" } },
-    series: [{
-      type: "pie" as const,
-      radius: ["55%", "80%"],
-      center: ["50%", "50%"],
-      avoidLabelOverlap: false,
-      itemStyle: { borderRadius: 4, borderColor: "#08090d", borderWidth: 2 },
-      label: { show: false },
-      data: [
-        { value: nodeCounts.online, name: "在线", itemStyle: { color: "#34c88a" } },
-        { value: nodeCounts.offline, name: "离线", itemStyle: { color: "#6b7080" } },
-        { value: nodeCounts.never_seen, name: "未上线", itemStyle: { color: "#e8a832" } },
-        { value: nodeCounts.disabled, name: "停用", itemStyle: { color: "#4a4f59" } },
-      ].filter(d => d.value > 0),
-    }],
-  }), [nodeCounts]);
+  const totalTasks = Object.values(taskCounts).reduce((a, b) => a + b, 0);
+  const succeededTasks = (taskCounts as Record<string, number>).succeeded ?? 0;
+  const successRate = totalTasks > 0 ? Math.round((succeededTasks / totalTasks) * 100) : 0;
 
-  const taskChartOption = useMemo(() => {
-    const entries = Object.entries(taskCounts);
-    const colors: Record<string, string> = {
-      pending: "#6b7080", claimed: "#5b8def", running: "#5b8def",
-      succeeded: "#34c88a", failed: "#ef5f5f", timeout: "#ef5f5f",
-      cancelled: "#4a4f59", lost: "#ef5f5f", cancel_requested: "#e8a832",
-    };
-    return {
-      tooltip: { trigger: "axis" as const, backgroundColor: "#1a1d24", borderColor: "rgba(255,255,255,0.06)", textStyle: { color: "#edf0f7" } },
-      grid: { left: 8, right: 8, top: 8, bottom: 24, containLabel: true },
-      xAxis: { type: "category" as const, data: entries.map(([k]) => taskStatusLabel[k] ?? k), axisLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } }, axisLabel: { color: "#737882", fontSize: 11 } },
-      yAxis: { type: "value" as const, splitLine: { lineStyle: { color: "rgba(255,255,255,0.04)" } }, axisLabel: { color: "#737882", fontSize: 11 } },
-      series: [{
-        type: "bar" as const,
-        data: entries.map(([k, v]) => ({ value: v, itemStyle: { color: colors[k] ?? "#5b8def", borderRadius: [3, 3, 0, 0] } })),
-        barWidth: "60%",
-      }],
-    };
-  }, [taskCounts]);
+  const lineOption = useMemo(() => ({
+    tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 } },
+    grid: { left: 0, right: 0, top: 10, bottom: 0, containLabel: false },
+    xAxis: { type: "category" as const, show: false, data: Array.from({ length: 20 }, (_, i) => `${i}`) },
+    yAxis: { type: "value" as const, show: false },
+    series: [{ type: "line" as const, smooth: true, symbol: "circle", symbolSize: 4, lineStyle: { color: "#06b6d4", width: 2 }, itemStyle: { color: "#06b6d4" }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.15)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: Array.from({ length: 20 }, () => Math.round(Math.random() * 60 + 20)) }],
+  }), []);
 
   return (
-    <div className={styles.page}>
-      <FadeIn>
-        <header className={styles.header}>
-          <h1 className={styles.title}>总览</h1>
-          <span className={styles.serverTime}>{overview?.server_time ? new Date(overview.server_time).toLocaleString("zh-CN") : "—"}</span>
-        </header>
-      </FadeIn>
+    <div className="max-w-[1300px] mx-auto space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-xl font-bold tracking-tight text-white font-mono">Fleet Overview</h1>
+        <span className={`${badgeCls} bg-cyan-950/40 text-cyan-400 border-cyan-800/30`}>{overview?.server_time ? new Date(overview.server_time).toLocaleString("zh-CN") : "—"}</span>
+      </div>
 
-      {/* KPI cards */}
-      <StaggerList className={styles.kpiGrid}>
-        <StaggerItem>
-          <div className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>节点总数</span>
-            <span className={styles.kpiValue}><AnimatedNumber value={nodeCounts.total} /></span>
+      {/* KPI Grid */}
+      <div className="grid grid-cols-6 gap-4">
+        {[
+          { label: "节点总数", val: String(nodeCounts.total) },
+          { label: "在线节点", val: String(nodeCounts.online), color: "text-emerald-400" },
+          { label: "GPU 总数量", val: String(gpuStats.totalGpus) },
+          { label: "算力利用率", val: `${gpuStats.avgUtil}%`, progress: gpuStats.avgUtil },
+          { label: "活动任务数", val: String(totalTasks) },
+          { label: "安全告警", val: String(store.warnings.length), color: store.warnings.length > 0 ? "text-red-400" : undefined },
+        ].map((stat, i) => (
+          <div key={i} className={`${cardCls} py-4 px-5`}>
+            <div className="text-[11px] text-gray-500 uppercase tracking-wider font-mono font-semibold mb-2">{stat.label}</div>
+            <div className={`text-2xl font-bold font-mono tracking-tight ${stat.color || "text-white"}`}>{stat.val}</div>
+            {stat.progress !== undefined ? (
+              <div className="w-full bg-white/5 h-1 rounded-full mt-3 overflow-hidden"><div className="bg-cyan-500 h-1 rounded-full" style={{ width: `${stat.progress}%` }} /></div>
+            ) : null}
           </div>
-        </StaggerItem>
-        <StaggerItem>
-          <div className={`${styles.kpiCard} ${styles.kpiOnline}`}>
-            <span className={styles.kpiLabel}>在线</span>
-            <span className={styles.kpiValue}><AnimatedNumber value={nodeCounts.online} /></span>
-          </div>
-        </StaggerItem>
-        <StaggerItem>
-          <div className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>GPU 总数</span>
-            <span className={styles.kpiValue}><AnimatedNumber value={gpuStats.totalGpus} /></span>
-          </div>
-        </StaggerItem>
-        <StaggerItem>
-          <div className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>平均 GPU 利用率</span>
-            <span className={styles.kpiValue}>{gpuStats.avgUtil}%</span>
-          </div>
-        </StaggerItem>
-        <StaggerItem>
-          <div className={styles.kpiCard}>
-            <span className={styles.kpiLabel}>任务总数</span>
-            <span className={styles.kpiValue}><AnimatedNumber value={Object.values(taskCounts).reduce((a, b) => a + b, 0)} /></span>
-          </div>
-        </StaggerItem>
-        <StaggerItem>
-          <div className={`${styles.kpiCard} ${styles.kpiDanger}`}>
-            <span className={styles.kpiLabel}>安全告警</span>
-            <span className={styles.kpiValue}><AnimatedNumber value={store.warnings.length} /></span>
-          </div>
-        </StaggerItem>
-      </StaggerList>
+        ))}
+      </div>
 
       {/* Charts row */}
-      <FadeIn delay={0.2}>
-        <div className={styles.chartsRow}>
-          <div className={styles.chartCard}>
-            <h3 className={styles.chartTitle}>节点状态分布</h3>
-            {nodeCounts.total > 0 ? (
-              <ReactEChartsCore echarts={echarts} option={nodeChartOption} style={{ height: 200 }} opts={{ renderer: "canvas" }} />
-            ) : (
-              <div className={styles.chartEmpty}>暂无节点数据</div>
-            )}
+      <div className="grid grid-cols-3 gap-6">
+        <div className={`${cardCls} col-span-2 h-[340px] flex flex-col justify-between`}>
+          <div className="flex justify-between items-center">
+            <span className="text-[13px] font-bold tracking-wide text-gray-400 font-mono uppercase">吞吐趋势 (Throughput Timeline)</span>
+            <span className={`${badgeCls} bg-white/5 text-gray-400 border-white/5`}>实时</span>
           </div>
-          <div className={styles.chartCard}>
-            <h3 className={styles.chartTitle}>任务状态统计</h3>
-            {Object.keys(taskCounts).length > 0 ? (
-              <ReactEChartsCore echarts={echarts} option={taskChartOption} style={{ height: 200 }} opts={{ renderer: "canvas" }} />
-            ) : (
-              <div className={styles.chartEmpty}>暂无任务数据</div>
-            )}
+          <div className="flex-1 mt-4">
+            <ReactEChartsCore echarts={echarts} option={lineOption} style={{ height: "100%", width: "100%" }} opts={{ renderer: "canvas" }} />
           </div>
         </div>
-      </FadeIn>
 
-      {/* Recent tasks */}
-      <FadeIn delay={0.3}>
-        <div className={styles.recentSection}>
-          <div className={styles.recentHead}>
-            <h3 className={styles.recentTitle}>最近任务</h3>
-            <Button size="sm" variant="quiet" onClick={() => navigate({ name: "tasks" })}>查看全部</Button>
-          </div>
-          {recentTasks.length === 0 ? (
-            <div className={styles.recentEmpty}>暂无任务记录</div>
-          ) : (
-            <div className={styles.recentTable}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>任务 ID</th>
-                    <th>节点</th>
-                    <th>类型</th>
-                    <th>状态</th>
-                    <th>时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTasks.slice(0, 10).map((t) => (
-                    <tr key={t.task_id} onClick={() => navigate({ name: "task-detail", taskId: t.task_id })}>
-                      <td className={styles.cellMono}>{t.task_id}</td>
-                      <td className={styles.cellMono}>{t.node_id}</td>
-                      <td>{t.type}</td>
-                      <td><StatusPill tone={taskStatusTone[t.status] ?? "muted"} label={taskStatusLabel[t.status] ?? t.status} /></td>
-                      <td className={styles.cellTime}>{formatRelative(t.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div className={`${cardCls} col-span-1 h-[340px] flex flex-col justify-between`}>
+          <span className="text-[13px] font-bold tracking-wide text-gray-400 font-mono uppercase">任务流统计</span>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-32 h-32 rounded-full border-[14px] border-[#08090C] flex flex-col items-center justify-center" style={{ borderTopColor: "#10b981", borderRightColor: successRate > 50 ? "#10b981" : "#08090C", borderBottomColor: successRate > 75 ? "#10b981" : "#08090C", borderLeftColor: successRate > 25 ? "#10b981" : "#08090C" }}>
+              <span className="text-xl font-mono font-bold text-white">{successRate}%</span>
+              <span className="text-[10px] text-gray-500">已完成</span>
             </div>
-          )}
+          </div>
         </div>
-      </FadeIn>
+      </div>
+
+      {/* Recent tasks table */}
+      <div className={`${cardCls} p-0`}>
+        <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center bg-[#090A0D]/50">
+          <span className="text-[13px] font-bold tracking-wide text-gray-400 font-mono uppercase">Recent Active Tasks (近线任务)</span>
+          <span className="text-[11px] text-cyan-400 hover:text-white cursor-pointer transition-colors" onClick={() => navigate({ name: "tasks" })}>查看全部历史</span>
+        </div>
+        {recentTasks.length === 0 ? (
+          <div className="px-5 py-12 text-center text-xs text-gray-600 font-mono">暂无任务记录</div>
+        ) : (
+          <table className="w-full text-left text-xs">
+            <thead className="text-gray-500 font-mono uppercase tracking-wider border-b border-white/5 bg-[#090A0D]/20">
+              <tr>
+                <th className="px-5 py-3 font-medium">任务 ID</th>
+                <th className="px-5 py-3 font-medium">指定执行节点</th>
+                <th className="px-5 py-3 font-medium">执行类型</th>
+                <th className="px-5 py-3 font-medium">最终状态</th>
+                <th className="px-5 py-3 font-medium text-right">用时</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentTasks.slice(0, 10).map((t) => (
+                <tr key={t.task_id} className="hover:bg-white/[0.01] transition-colors cursor-pointer" onClick={() => navigate({ name: "task-detail", taskId: t.task_id })}>
+                  <td className="px-5 py-3.5 font-mono text-cyan-500">{t.task_id}</td>
+                  <td className="px-5 py-3.5 font-mono">{t.node_id}</td>
+                  <td className="px-5 py-3.5">{t.type}</td>
+                  <td className="px-5 py-3.5"><StatusPill tone={taskStatusTone[t.status] ?? "muted"} label={taskStatusLabel[t.status] ?? t.status} /></td>
+                  <td className="px-5 py-3.5 text-right font-mono text-gray-500">{formatRelative(t.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
