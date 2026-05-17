@@ -1,4 +1,4 @@
-/* ConfirmDialog v2 — liquid glass, centered, smooth entrance */
+/* Confirm dialog */
 
 .overlay {
   position: fixed;
@@ -7,76 +7,39 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px) saturate(120%);
-  -webkit-backdrop-filter: blur(6px) saturate(120%);
-  animation: overlay-in 0.2s var(--ease-out) both;
+  background: rgba(0, 0, 0, 0.6);
+  animation: fade-in 0.15s ease-out;
 }
 
 .dialog {
-  position: relative;
-  background: var(--glass-bg-strong);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border-strong);
-  border-radius: var(--r-xl);
-  padding: 24px 26px 20px;
-  width: 440px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  padding: 24px;
+  width: 420px;
   max-width: calc(100vw - 40px);
-  box-shadow:
-    var(--shadow-overlay),
-    var(--glass-highlight),
-    0 0 80px rgba(107, 158, 255, 0.04);
-  animation: dialog-in 0.28s var(--ease-bounce) both;
   outline: none;
-  overflow: hidden;
-}
-
-/* Top edge shimmer */
-.dialog::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(107, 158, 255, 0.3), transparent);
-  opacity: 0.7;
+  animation: slide-down 0.2s ease-out;
 }
 
 .title {
   font-size: var(--fs-16);
   font-weight: 700;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   color: var(--text);
-  letter-spacing: -0.02em;
 }
 
 .message {
   font-size: var(--fs-13);
   color: var(--text-soft);
-  margin: 0 0 22px;
-  line-height: 1.6;
+  margin: 0 0 20px;
+  line-height: 1.5;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
-@keyframes overlay-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-@keyframes dialog-in {
-  from {
-    opacity: 0;
-    transform: scale(0.92) translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

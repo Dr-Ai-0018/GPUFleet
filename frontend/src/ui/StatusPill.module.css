@@ -1,4 +1,4 @@
-/* Status pill v2 — glass, breathing glow */
+/* Status pill — simple, no blur */
 
 .pill {
   display: inline-flex;
@@ -9,82 +9,36 @@
   border-radius: var(--r-pill);
   font-size: var(--fs-11);
   font-weight: 500;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur-light);
-  -webkit-backdrop-filter: var(--glass-blur-light);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
   color: var(--text-soft);
   white-space: nowrap;
-  transition: box-shadow 0.3s var(--ease-out);
 }
 
 .dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: currentColor;
   flex-shrink: 0;
-  position: relative;
 }
 
-.pulse {
-  animation: status-blink 2.4s var(--ease-in-out) infinite;
-}
+.pulse { animation: status-blink 2s ease-in-out infinite; }
 
-.pulse::after {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0;
-  animation: breathe 2.4s var(--ease-in-out) infinite;
-}
-
-.subtle {
-  background: transparent;
-  border-color: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
+.subtle { background: transparent; border-color: transparent; }
 
 /* Tones */
-.tone_online {
-  color: var(--c-online-fg);
-  background: var(--c-online-soft);
-  border-color: var(--c-online-border);
-  box-shadow: 0 0 10px rgba(61, 217, 154, 0.08);
-}
+.tone_online { color: var(--c-online-fg); background: var(--c-online-soft); border-color: var(--c-online-border); }
 .tone_online .dot { background: var(--c-online); }
 
-.tone_waiting {
-  color: var(--c-waiting-fg);
-  background: var(--c-waiting-soft);
-  border-color: var(--c-waiting-border);
-}
+.tone_waiting { color: var(--c-waiting-fg); background: var(--c-waiting-soft); border-color: var(--c-waiting-border); }
 .tone_waiting .dot { background: var(--c-waiting); }
 
-.tone_offline {
-  color: var(--c-offline);
-  background: var(--c-offline-soft);
-  border-color: var(--c-offline-border);
-}
+.tone_offline { color: var(--c-offline); background: var(--c-offline-soft); border-color: var(--c-offline-border); }
 
-.tone_danger {
-  color: var(--c-danger-fg);
-  background: var(--c-danger-soft);
-  border-color: var(--c-danger-border);
-}
+.tone_danger { color: var(--c-danger-fg); background: var(--c-danger-soft); border-color: var(--c-danger-border); }
 .tone_danger .dot { background: var(--c-danger); }
 
-.tone_running {
-  color: var(--c-running);
-  background: var(--c-running-soft);
-  border-color: var(--c-running-border);
-}
+.tone_running { color: var(--c-running); background: var(--c-running-soft); border-color: var(--c-running-border); }
 
-.tone_muted {
-  color: var(--c-offline);
-  background: transparent;
-  border-color: var(--border);
-}
+.tone_muted { color: var(--text-mute); background: transparent; border-color: var(--border); }

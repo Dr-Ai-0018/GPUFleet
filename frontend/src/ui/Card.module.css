@@ -1,38 +1,10 @@
-/* Card v2 — liquid glass with ambient glow */
+/* Card — clean, no effects */
 
 .card {
-  position: relative;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur-light);
-  -webkit-backdrop-filter: var(--glass-blur-light);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-lg);
   overflow: hidden;
-  box-shadow: var(--glass-highlight), var(--shadow-xs);
-  transition:
-    border-color 0.3s var(--ease-out),
-    box-shadow 0.3s var(--ease-out),
-    transform 0.3s var(--ease-out);
-}
-
-/* Top edge shimmer on hover */
-.card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(107, 158, 255, 0.25), transparent);
-  opacity: 0;
-  transition: opacity 0.4s var(--ease-out);
-}
-
-.card:hover::before { opacity: 1; }
-
-.card:hover {
-  border-color: var(--glass-border-strong);
-  box-shadow: var(--glass-highlight), var(--shadow-sm), 0 0 40px rgba(107, 158, 255, 0.03);
 }
 
 .head {
@@ -40,14 +12,13 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 13px 18px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--border);
-  min-height: 46px;
 }
 
 .head h2 {
   margin: 0;
-  font-size: var(--fs-13);
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text);
 }
@@ -107,10 +78,7 @@
   gap: 3px;
   padding: 12px 14px;
   background: var(--bg-canvas);
-  transition: background 0.2s var(--ease-out);
 }
-
-.field:hover { background: var(--bg-surface); }
 
 .fieldLabel {
   font-size: var(--fs-10);
