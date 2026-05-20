@@ -14,6 +14,8 @@ from app.schemas import (
     NodeCreateRequest,
     NodeCreateResponse,
     NodeResponse,
+    NodeStatusHistoryItem,
+    NodeStatusHistoryResponse,
     NodeStatusPreview,
     NodeUpdateRequest,
 )
@@ -525,3 +527,46 @@ def get_latest_status(
         python_env=json.loads(row["python_env_json"]),
         task_runtime=json.loads(row["task_runtime_json"]),
     )
+
+
+@router.get("/{node_id}/status/history", response_model=NodeStatusHistoryResponse)
+def get_status_history(
+    node_id: str,
+    _: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 60,
+) -> NodeStatusHistoryResponse:
+    with db.connect() as conn:
+        node_exists = conn.execute("SELECT 1 FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        if node_exists is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+
+        rows = conn.execute(
+            """
+            SELECT reported_at, cpu_json, memory_json, gpu_json
+            FROM node_status_snapshots
+            WHERE node_id = ?
+            ORDER BY reported_at DESC, id DESC
+            LIMIT ?
+            """,
+            (node_id, limit),
+        ).fetchall()
+
+    items = []
+    for row in reversed(rows):  # reverse to ascending order
+        cpu = json.loads(row["cpu_json"])
+        memory = json.loads(row["memory_json"])
+        gpu_data = json.loads(row["gpu_json"])
+        # gpu_json is stored as {"gpus": [...], "nvidia": {...}}
+        gpus_list = gpu_data.get("gpus", []) if isinstance(gpu_data, dict) else (gpu_data if isinstance(gpu_data, list) else [])
+        first_gpu = gpus_list[0] if gpus_list else None
+        items.append(
+            NodeStatusHistoryItem(
+                reported_at=row["reported_at"],
+                cpu_usage_percent=cpu.get("usage_percent"),
+                memory_usage_percent=memory.get("usage_percent"),
+                gpu_utilization_percent=first_gpu.get("utilization_percent") if first_gpu else None,
+            )
+        )
+
+    return NodeStatusHistoryResponse(node_id=node_id, items=items)

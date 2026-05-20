@@ -72,6 +72,19 @@ export type DashboardOverview = {
   task_counts: Record<string, number>;
   nodes: DashboardNodeCard[];
   recent_tasks: DashboardTaskSummary[];
+  task_throughput_24h: number[];
+};
+
+export type NodeStatusHistoryItem = {
+  reported_at: string;
+  cpu_usage_percent: number | null;
+  memory_usage_percent: number | null;
+  gpu_utilization_percent: number | null;
+};
+
+export type NodeStatusHistoryResponse = {
+  node_id: string;
+  items: NodeStatusHistoryItem[];
 };
 
 export type NodeResponse = {

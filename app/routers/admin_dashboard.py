@@ -92,6 +92,18 @@ def get_overview(
             """
         ).fetchall()
 
+        throughput_rows = conn.execute(
+            """
+            SELECT
+                CAST(strftime('%H', datetime(finished_at, '+8 hours')) AS INTEGER) AS hour,
+                COUNT(*) AS cnt
+            FROM tasks
+            WHERE status IN ('succeeded', 'failed', 'timeout', 'cancelled', 'lost')
+              AND date(datetime(finished_at, '+8 hours')) = date('now', '+8 hours')
+            GROUP BY hour
+            """
+        ).fetchall()
+
         nodes: list[DashboardNodeCard] = []
         for row in node_rows:
             latest = conn.execute(
@@ -175,6 +187,11 @@ def get_overview(
         "never_seen": sum(1 for item in nodes if item.online_status == "never_seen"),
     }
     task_counts = {row["status"]: row["count_value"] for row in task_count_rows}
+    task_throughput_24h = [0] * 24
+    for row in throughput_rows:
+        h = row["hour"]
+        if h is not None and 0 <= h <= 23:
+            task_throughput_24h[h] = row["cnt"]
     recent_tasks = [
         DashboardTaskSummary(
             task_id=row["task_id"],
@@ -195,4 +212,5 @@ def get_overview(
         task_counts=task_counts,
         nodes=nodes,
         recent_tasks=recent_tasks,
+        task_throughput_24h=task_throughput_24h,
     )

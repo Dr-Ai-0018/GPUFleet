@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import ReactEChartsCore from "echarts-for-react/lib/core";
+import * as echarts from "echarts/core";
+import { LineChart } from "echarts/charts";
+import { GridComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
 import { ApiError, api } from "../../api";
 import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
@@ -12,8 +17,10 @@ import { useToast } from "../../ui/Toast";
 import { connectionLabel, connectionTone, onboardingLabel, onboardingTone } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 import { TaskComposer } from "../tasks/TaskComposer";
-import type { NodeResetSecretResponse, NodeResponse, NodeStatusPreview, OsType } from "../../types";
+import type { NodeResetSecretResponse, NodeResponse, NodeStatusHistoryItem, NodeStatusPreview, OsType } from "../../types";
 import forms from "../../ui/forms.module.css";
+
+echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
 type Props = { nodeId: string };
 type TabKey = "monitor" | "config" | "tasks";
@@ -23,6 +30,13 @@ const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[linear-gradient(
 const inputCls = "w-full bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-2 text-xs text-white outline-none focus:bg-[rgba(10,11,14,0.95)] focus:border-cyan-500/50 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.1)] transition-all font-mono";
 const labelCls = "text-[11px] font-mono text-gray-400";
 const badgeCls = "px-2.5 py-0.5 text-xs font-mono font-medium border rounded-md flex items-center gap-1.5";
+
+const beijingTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Shanghai",
+});
 
 export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const store = useConsoleStore();
@@ -120,7 +134,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
       </div>
 
       {/* Tab content */}
-      {tab === "monitor" ? <TabMonitor cpu={cpu} memory={memory} pythonEnv={pythonEnv} gpus={gpus} cpuUse={cpuUse} memUse={memUse} latestStatus={latestStatus} showJson={showJson} setShowJson={setShowJson} /> : null}
+      {tab === "monitor" ? <TabMonitor nodeId={nodeId} cpu={cpu} memory={memory} pythonEnv={pythonEnv} gpus={gpus} cpuUse={cpuUse} memUse={memUse} latestStatus={latestStatus} showJson={showJson} setShowJson={setShowJson} /> : null}
       {tab === "config" ? <TabConfig node={node} editForm={editForm} updateEdit={updateEdit} editError={editError} saving={saving} handleSave={handleSave} /> : null}
       {tab === "tasks" ? <TabTasks node={node} canDispatch={canDispatch} recentTasks={recentTasks} /> : null}
     </div>
@@ -129,14 +143,40 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
 
 
 /* ═══ MONITOR TAB — nvitop-density hardware panel ═══ */
-function TabMonitor({ cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus, showJson, setShowJson }: {
+function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus, showJson, setShowJson }: {
+  nodeId: string;
   cpu: any; memory: any; pythonEnv: any; gpus: any[]; cpuUse: number; memUse: number;
   latestStatus: NodeStatusPreview | null; showJson: boolean; setShowJson: (v: boolean) => void;
 }): JSX.Element {
+  const { callApi } = useConsoleStore();
+  const [historyItems, setHistoryItems] = useState<NodeStatusHistoryItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchHistory() {
+      try {
+        const res = await callApi((token) => api.getNodeStatusHistory(token, nodeId, 60));
+        if (!cancelled) setHistoryItems(res.items);
+      } catch {
+        // silently ignore — history is best-effort
+      }
+    }
+    void fetchHistory();
+    const id = window.setInterval(() => { void fetchHistory(); }, 5000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [callApi, nodeId]);
+
+  const cpuHistoryOption = useMemo(() => ({
+    tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 }, formatter: (params: any[]) => `CPU ${params[0]?.value ?? 0}%` },
+    grid: { left: 36, right: 8, top: 8, bottom: 20 },
+    xAxis: { type: "category" as const, data: historyItems.map((it) => beijingTimeFormatter.format(new Date(it.reported_at))), axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } }, axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) } },
+    yAxis: { type: "value" as const, min: 0, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" } },
+    series: [{ type: "line" as const, smooth: true, symbol: "none", connectNulls: false, lineStyle: { color: "#06b6d4", width: 1.5 }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.15)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: historyItems.map((it) => it.cpu_usage_percent) }],
+  }), [historyItems]);
+
   if (!latestStatus) return <div className="py-20 text-center text-gray-500">等待节点首次心跳上报</div>;
 
   const coreCount = cpu?.logical_cores ?? 8;
-  const coreLoads = Array.from({ length: coreCount }, () => Math.round(Math.random() * 100));
   const memTotal = memory?.total_bytes ?? 0;
   const memUsed = memory?.used_bytes ?? 0;
 
@@ -162,18 +202,14 @@ function TabMonitor({ cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus
               </div>
               <div className="flex-1 pb-2"><div className="h-2.5 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${cpuUse}%` }} /></div></div>
             </div>
-            {/* Core heatmap */}
+            {/* CPU history trend chart */}
             <div>
-              <span className="text-[10px] text-gray-500 font-mono uppercase block mb-2">{coreCount}-Thread Heatmap</span>
-              <div className="grid grid-cols-10 gap-1">
-                {coreLoads.map((val, idx) => {
-                  let c = "bg-white/10";
-                  if (val > 80) c = "bg-red-500/80";
-                  else if (val > 50) c = "bg-cyan-500/70";
-                  else if (val > 20) c = "bg-emerald-500/60";
-                  return <div key={idx} title={`Core ${idx + 1}: ${val}%`} className={`h-4 rounded-sm cursor-help ${c}`} />;
-                })}
-              </div>
+              <span className="text-[10px] text-gray-500 font-mono uppercase block mb-2">CPU Utilization History</span>
+              {historyItems.length > 0 ? (
+                <ReactEChartsCore echarts={echarts} option={cpuHistoryOption} style={{ height: 80 }} opts={{ renderer: "canvas" }} />
+              ) : (
+                <div className="h-[80px] flex items-center justify-center text-[11px] text-gray-600 font-mono bg-white/[0.02] rounded-lg">等待历史数据…</div>
+              )}
             </div>
           </div>
 
@@ -222,12 +258,13 @@ function TabMonitor({ cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus
         const fan = g.fan_speed_percent != null ? Number(g.fan_speed_percent) : null;
         const pcieGen = g.pcie_gen != null ? Number(g.pcie_gen) : null;
         const pcieWidth = g.pcie_width != null ? Number(g.pcie_width) : null;
+        const gpuIndex = typeof g.index === "number" ? g.index : idx;
 
         return (
               <div key={idx} className={`pb-6 ${idx < gpus.length - 1 ? "border-b border-white/5 mb-6" : ""}`}>
                 <div className="flex justify-between items-center mb-5">
                   <div className="flex items-center gap-3">
-                    <span className="text-[12px] font-mono text-gray-500 uppercase font-bold">GPU #{g.index ?? idx}</span>
+                    <span className="text-[12px] font-mono text-gray-500 uppercase font-bold">GPU #{gpuIndex}</span>
                     <span className="text-[14px] font-bold text-white">{String(g.model ?? "Unknown GPU")}</span>
                   </div>
                   <div className="flex items-center gap-3">

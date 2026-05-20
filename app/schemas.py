@@ -313,6 +313,7 @@ class DashboardOverview(BaseModel):
     task_counts: dict[str, int]
     nodes: list[DashboardNodeCard]
     recent_tasks: list[DashboardTaskSummary]
+    task_throughput_24h: list[int] = Field(default_factory=lambda: [0] * 24)
 
 
 class AuditEventView(BaseModel):
@@ -373,3 +374,15 @@ class NodeArtifactUploadRequest(BaseModel):
     content_base64: str
     content_type: str | None = None
     preview: dict[str, Any] = Field(default_factory=dict)
+
+
+class NodeStatusHistoryItem(BaseModel):
+    reported_at: str
+    cpu_usage_percent: float | None = None
+    memory_usage_percent: float | None = None
+    gpu_utilization_percent: float | None = None
+
+
+class NodeStatusHistoryResponse(BaseModel):
+    node_id: str
+    items: list[NodeStatusHistoryItem]

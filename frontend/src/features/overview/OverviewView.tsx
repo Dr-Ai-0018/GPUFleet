@@ -13,6 +13,16 @@ import { formatRelative, bytesToReadable } from "../../lib/format";
 echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
 const sectionCls = "rounded-xl bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
+const beijingDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Shanghai",
+});
 
 export function OverviewView(): JSX.Element {
   const store = useConsoleStore();
@@ -46,8 +56,8 @@ export function OverviewView(): JSX.Element {
     grid: { left: 40, right: 20, top: 20, bottom: 30 },
     xAxis: { type: "category" as const, data: Array.from({ length: 24 }, (_, i) => `${i}:00`), axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } }, axisLabel: { color: "#4a5568", fontSize: 10 } },
     yAxis: { type: "value" as const, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 10 } },
-    series: [{ type: "line" as const, smooth: true, symbol: "circle", symbolSize: 3, lineStyle: { color: "#06b6d4", width: 2 }, itemStyle: { color: "#06b6d4" }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.12)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: Array.from({ length: 24 }, () => Math.round(Math.random() * 50 + 10)) }],
-  }), []);
+    series: [{ type: "line" as const, smooth: true, symbol: "circle", symbolSize: 3, lineStyle: { color: "#06b6d4", width: 2 }, itemStyle: { color: "#06b6d4" }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.12)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: overview?.task_throughput_24h ?? Array(24).fill(0) }],
+  }), [overview?.task_throughput_24h]);
 
   // Chart: task status distribution (horizontal bar)
   const taskBarOption = useMemo(() => {
@@ -81,7 +91,7 @@ export function OverviewView(): JSX.Element {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight text-white">Fleet Overview</h1>
-        <span className="text-[12px] font-mono text-cyan-400">{overview?.server_time ? new Date(overview.server_time).toLocaleString("zh-CN") : "—"}</span>
+        <span className="text-[12px] font-mono text-cyan-400">{overview?.server_time ? beijingDateTimeFormatter.format(new Date(overview.server_time)) : "—"}</span>
       </div>
 
       {/* KPI Grid — bigger numbers */}
@@ -107,7 +117,7 @@ export function OverviewView(): JSX.Element {
         <div className={`${sectionCls} p-5`}>
           <div className="flex justify-between items-center mb-4">
             <span className="text-[13px] font-bold text-gray-300 uppercase tracking-wide">吞吐趋势 <span className="text-gray-500 font-normal">(Throughput Timeline)</span></span>
-            <span className="text-[10px] font-mono text-gray-500 px-2 py-1 bg-white/5 rounded">实时</span>
+            <span className="text-[10px] font-mono text-gray-500 px-2 py-1 bg-white/5 rounded">北京时间</span>
           </div>
           <ReactEChartsCore echarts={echarts} option={lineOption} style={{ height: 220 }} opts={{ renderer: "canvas" }} />
         </div>

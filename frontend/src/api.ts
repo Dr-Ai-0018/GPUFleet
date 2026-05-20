@@ -8,6 +8,7 @@ import type {
   NodeCreateResponse,
   NodeResetSecretResponse,
   NodeResponse,
+  NodeStatusHistoryResponse,
   NodeStatusPreview,
   NodeUpdatePayload,
   SecurityWarningView,
@@ -229,6 +230,14 @@ export const api = {
   getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {
     return request<SecurityWarningView[]>(
       `/api/admin/security-warnings?limit=${limit}`,
+      {},
+      token,
+    );
+  },
+
+  getNodeStatusHistory(token: string, nodeId: string, limit = 60): Promise<NodeStatusHistoryResponse> {
+    return request<NodeStatusHistoryResponse>(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}/status/history?limit=${limit}`,
       {},
       token,
     );
