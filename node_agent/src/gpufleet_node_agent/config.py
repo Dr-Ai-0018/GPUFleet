@@ -35,7 +35,7 @@ class AgentSettings(BaseSettings):
     modal_default_workspace: str | None = None
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_prefix="GPUFLEET_AGENT_",
         case_sensitive=False,
         extra="ignore",

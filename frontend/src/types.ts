@@ -27,6 +27,7 @@ export type NodeStatusPreview = {
   nvidia: Record<string, unknown>;
   python_env: Record<string, unknown>;
   task_runtime: Record<string, unknown>;
+  extra: Record<string, unknown>;
 };
 
 export type OnlineStatus = "online" | "offline" | "never_seen" | "disabled";

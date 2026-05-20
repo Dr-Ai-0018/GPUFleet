@@ -503,7 +503,7 @@ def get_latest_status(
     with db.connect() as conn:
         row = conn.execute(
             """
-            SELECT reported_at, cpu_json, memory_json, disk_json, gpu_json, python_env_json, task_runtime_json
+            SELECT reported_at, cpu_json, memory_json, disk_json, gpu_json, python_env_json, task_runtime_json, raw_payload_json
             FROM node_status_snapshots
             WHERE node_id = ?
             ORDER BY reported_at DESC, id DESC
@@ -516,6 +516,7 @@ def get_latest_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No status snapshot found")
 
     gpus, nvidia = _decode_gpu_snapshot(row["gpu_json"])
+    raw_payload = json.loads(row["raw_payload_json"]) if row["raw_payload_json"] else {}
 
     return NodeStatusPreview(
         reported_at=row["reported_at"],
@@ -526,6 +527,7 @@ def get_latest_status(
         nvidia=nvidia,
         python_env=json.loads(row["python_env_json"]),
         task_runtime=json.loads(row["task_runtime_json"]),
+        extra=raw_payload.get("extra", {}) if isinstance(raw_payload, dict) else {},
     )
 
 

@@ -102,13 +102,30 @@ class NodeCreateResponse(NodeResponse):
 class HeartbeatCpu(BaseModel):
     model: str | None = None
     logical_cores: int | None = None
+    physical_cores: int | None = None
     usage_percent: float | None = None
+    current_clock_mhz: int | None = None
+    max_clock_mhz: int | None = None
+    per_core_percent: list[float] = Field(default_factory=list)
 
 
 class HeartbeatMemory(BaseModel):
     total_bytes: int | None = None
     used_bytes: int | None = None
     usage_percent: float | None = None
+    available_bytes: int | None = None
+    cached_bytes: int | None = None
+    commit_used_bytes: int | None = None
+    commit_limit_bytes: int | None = None
+    paged_pool_bytes: int | None = None
+    nonpaged_pool_bytes: int | None = None
+    speed_mtps: int | None = None
+    slots_used: int | None = None
+    slots_total: int | None = None
+    form_factor: str | None = None
+    memory_type: str | None = None
+    installed_bytes: int | None = None
+    hardware_reserved_bytes: int | None = None
 
 
 class HeartbeatDisk(BaseModel):
@@ -124,7 +141,19 @@ class HeartbeatGpu(BaseModel):
     total_vram_mb: int | None = None
     used_vram_mb: int | None = None
     utilization_percent: float | None = None
+    encoder_utilization_percent: float | None = None
+    decoder_utilization_percent: float | None = None
     temperature_c: float | None = None
+    power_draw_w: float | None = None
+    power_limit_w: float | None = None
+    clock_graphics_mhz: int | None = None
+    clock_max_graphics_mhz: int | None = None
+    clock_video_mhz: int | None = None
+    fan_speed_percent: int | None = None
+    pcie_gen: int | None = None
+    pcie_width: int | None = None
+    encoder_sessions: int | None = None
+    decoder_sessions: int | None = None
 
 
 class HeartbeatNvidia(BaseModel):
@@ -277,6 +306,7 @@ class NodeStatusPreview(BaseModel):
     nvidia: dict[str, Any] = Field(default_factory=dict)
     python_env: dict[str, Any]
     task_runtime: dict[str, Any]
+    extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class DashboardNodeCard(BaseModel):

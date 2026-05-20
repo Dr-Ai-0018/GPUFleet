@@ -7,6 +7,7 @@ import platform
 import re
 import shutil
 import subprocess
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,10 @@ def get_boot_id(settings: AgentSettings) -> str:
 def collect_cpu() -> dict[str, Any]:
     usage_percent: float | None = None
     model = platform.processor() or None
+    per_core_percent: list[float] = []
+    physical_cores: int | None = None
+    current_clock_mhz: int | None = None
+    max_clock_mhz: int | None = None
 
     if os.name == "nt":
         try:
@@ -74,11 +79,12 @@ def collect_cpu() -> dict[str, Any]:
         except Exception:
             pass
 
-        model = (
-            os.environ.get("PROCESSOR_IDENTIFIER")
-            or os.environ.get("PROCESSOR_ARCHITECTURE")
-            or model
-        )
+        if not model:
+            model = (
+                os.environ.get("PROCESSOR_IDENTIFIER")
+                or os.environ.get("PROCESSOR_ARCHITECTURE")
+                or model
+            )
         counter_output = _run_powershell(
             "(Get-Counter '\\Processor(_Total)\\% Processor Time').CounterSamples | "
             "Select-Object -First 1 -ExpandProperty CookedValue"
@@ -105,6 +111,45 @@ def collect_cpu() -> dict[str, Any]:
                     usage_percent = round(float(last_value), 2)
                 except ValueError:
                     usage_percent = None
+
+        per_core_output = _run_powershell(
+            "$samples = (Get-Counter '\\Processor(*)\\% Processor Time').CounterSamples | "
+            "Where-Object { $_.InstanceName -match '^[0-9]+$' } | "
+            "Sort-Object { [int]$_.InstanceName } | "
+            "ForEach-Object { [math]::Round($_.CookedValue, 2) }; "
+            "$samples -join ','"
+        )
+        if per_core_output:
+            try:
+                per_core_percent = [
+                    round(float(item.strip()), 2)
+                    for item in per_core_output.split(",")
+                    if item.strip()
+                ]
+            except ValueError:
+                per_core_percent = []
+
+        processor_info_output = _run_powershell(
+            "$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1 NumberOfCores,CurrentClockSpeed,MaxClockSpeed; "
+            "if ($cpu) { $cpu | ConvertTo-Json -Compress }"
+        )
+        if processor_info_output:
+            try:
+                processor_info = json.loads(processor_info_output)
+                if isinstance(processor_info, dict):
+                    number_of_cores = processor_info.get("NumberOfCores")
+                    current_clock = processor_info.get("CurrentClockSpeed")
+                    max_clock = processor_info.get("MaxClockSpeed")
+                    if number_of_cores is not None:
+                        physical_cores = int(number_of_cores)
+                    if current_clock is not None:
+                        current_clock_mhz = int(current_clock)
+                    if max_clock is not None:
+                        max_clock_mhz = int(max_clock)
+            except (ValueError, TypeError):
+                physical_cores = None
+                current_clock_mhz = None
+                max_clock_mhz = None
     else:
         loadavg = os.getloadavg()[0] if hasattr(os, "getloadavg") else None
         cores = os.cpu_count() or 1
@@ -114,7 +159,11 @@ def collect_cpu() -> dict[str, Any]:
     return {
         "model": model,
         "logical_cores": os.cpu_count(),
+        "physical_cores": physical_cores,
         "usage_percent": usage_percent,
+        "current_clock_mhz": current_clock_mhz,
+        "max_clock_mhz": max_clock_mhz,
+        "per_core_percent": per_core_percent,
     }
 
 
@@ -140,10 +189,67 @@ def collect_memory() -> dict[str, Any]:
             free_bytes = int(memory_status.ullAvailPhys)
             used_bytes = max(total_bytes - free_bytes, 0)
             usage_percent = round((used_bytes / total_bytes) * 100, 2) if total_bytes else None
+            memory_detail_output = _run_powershell(
+                "$modules = @(Get-CimInstance Win32_PhysicalMemory); "
+                "$array = Get-CimInstance Win32_PhysicalMemoryArray | Select-Object -First 1; "
+                "$counters = Get-Counter '\\Memory\\Cache Bytes','\\Memory\\Committed Bytes','\\Memory\\Commit Limit','\\Memory\\Pool Paged Bytes','\\Memory\\Pool Nonpaged Bytes'; "
+                "$installed = ($modules | Measure-Object Capacity -Sum).Sum; "
+                "$speed = ($modules | Where-Object Speed | Measure-Object Speed -Maximum).Maximum; "
+                "$formMap = @{ 8='DIMM'; 9='SIP'; 12='SODIMM'; 13='Chip' }; "
+                "$typeMap = @{ 20='DDR'; 21='DDR2'; 24='DDR3'; 26='DDR4'; 34='DDR5' }; "
+                "$formCode = ($modules | Select-Object -First 1 -ExpandProperty FormFactor); "
+                "$memoryTypeCode = ($modules | Select-Object -First 1 -ExpandProperty SMBIOSMemoryType); "
+                "$result = [ordered]@{ "
+                "CacheBytes = [int64](($counters.CounterSamples | Where-Object { $_.Path -like '*Cache Bytes' } | Select-Object -First 1).CookedValue); "
+                "CommitUsedBytes = [int64](($counters.CounterSamples | Where-Object { $_.Path -like '*Committed Bytes' } | Select-Object -First 1).CookedValue); "
+                "CommitLimitBytes = [int64](($counters.CounterSamples | Where-Object { $_.Path -like '*Commit Limit' } | Select-Object -First 1).CookedValue); "
+                "PagedPoolBytes = [int64](($counters.CounterSamples | Where-Object { $_.Path -like '*Pool Paged Bytes' } | Select-Object -First 1).CookedValue); "
+                "NonpagedPoolBytes = [int64](($counters.CounterSamples | Where-Object { $_.Path -like '*Pool Nonpaged Bytes' } | Select-Object -First 1).CookedValue); "
+                "SlotsUsed = $modules.Count; "
+                "SlotsTotal = if ($array) { [int]$array.MemoryDevices } else { $null }; "
+                "SpeedMTps = if ($speed) { [int]$speed } else { $null }; "
+                "InstalledBytes = if ($installed) { [int64]$installed } else { $null }; "
+                "FormFactor = if ($formMap.ContainsKey([int]$formCode)) { $formMap[[int]$formCode] } else { $null }; "
+                "MemoryType = if ($typeMap.ContainsKey([int]$memoryTypeCode)) { $typeMap[[int]$memoryTypeCode] } else { $null } "
+                "}; $result | ConvertTo-Json -Compress"
+            )
+            details: dict[str, Any] = {}
+            if memory_detail_output:
+                try:
+                    parsed_details = json.loads(memory_detail_output)
+                    if isinstance(parsed_details, dict):
+                        details = parsed_details
+                except ValueError:
+                    details = {}
+            def _opt_int(value: Any) -> int | None:
+                if value is None:
+                    return None
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return None
+
+            installed_bytes = _opt_int(details.get("InstalledBytes"))
+            hardware_reserved_bytes = None
+            if installed_bytes is not None and installed_bytes >= total_bytes:
+                hardware_reserved_bytes = installed_bytes - total_bytes
             return {
                 "total_bytes": total_bytes,
                 "used_bytes": used_bytes,
                 "usage_percent": usage_percent,
+                "available_bytes": free_bytes,
+                "cached_bytes": _opt_int(details.get("CacheBytes")),
+                "commit_used_bytes": _opt_int(details.get("CommitUsedBytes")),
+                "commit_limit_bytes": _opt_int(details.get("CommitLimitBytes")),
+                "paged_pool_bytes": _opt_int(details.get("PagedPoolBytes")),
+                "nonpaged_pool_bytes": _opt_int(details.get("NonpagedPoolBytes")),
+                "speed_mtps": _opt_int(details.get("SpeedMTps")),
+                "slots_used": _opt_int(details.get("SlotsUsed")),
+                "slots_total": _opt_int(details.get("SlotsTotal")),
+                "form_factor": details.get("FormFactor"),
+                "memory_type": details.get("MemoryType"),
+                "installed_bytes": installed_bytes,
+                "hardware_reserved_bytes": hardware_reserved_bytes,
             }
 
     if Path("/proc/meminfo").exists():
@@ -166,6 +272,98 @@ def collect_memory() -> dict[str, Any]:
         "total_bytes": None,
         "used_bytes": None,
         "usage_percent": None,
+        "available_bytes": None,
+        "cached_bytes": None,
+        "commit_used_bytes": None,
+        "commit_limit_bytes": None,
+        "paged_pool_bytes": None,
+        "nonpaged_pool_bytes": None,
+        "speed_mtps": None,
+        "slots_used": None,
+        "slots_total": None,
+        "form_factor": None,
+        "memory_type": None,
+        "installed_bytes": None,
+        "hardware_reserved_bytes": None,
+    }
+
+
+def collect_primary_network(settings: AgentSettings, *, track_rate: bool = True) -> dict[str, Any]:
+    if os.name != "nt":
+        return {}
+
+    network_output = _run_powershell(
+        "$route = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | "
+        "Sort-Object RouteMetric,InterfaceMetric | Select-Object -First 1; "
+        "if (-not $route) { return }; "
+        "$adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue; "
+        "$ip = Get-NetIPConfiguration -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue; "
+        "$stats = Get-NetAdapterStatistics -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue; "
+        "$wlan = netsh wlan show interfaces 2>$null; "
+        "$ssid = $null; $signal = $null; $radio = $null; "
+        "if ($wlan) { "
+        "  foreach ($line in ($wlan -split \"`n\")) { "
+        "    if ($line -match '^\\s*SSID\\s*:\\s*(.+)$' -and $line -notmatch 'BSSID') { $ssid = $Matches[1].Trim() } "
+        "    elseif ($line -match '^\\s*Signal\\s*:\\s*(.+)$') { $signal = $Matches[1].Trim() } "
+        "    elseif ($line -match '^\\s*Radio type\\s*:\\s*(.+)$') { $radio = $Matches[1].Trim() } "
+        "  } "
+        "} "
+        "$result = [ordered]@{ "
+        "AdapterName = if ($adapter) { $adapter.Name } else { $null }; "
+        "InterfaceDescription = if ($adapter) { $adapter.InterfaceDescription } else { $null }; "
+        "LinkSpeed = if ($adapter) { $adapter.LinkSpeed } else { $null }; "
+        "MacAddress = if ($adapter) { $adapter.MacAddress } else { $null }; "
+        "IPv4Address = if ($ip -and $ip.IPv4Address) { $ip.IPv4Address[0].IPAddress } else { $null }; "
+        "IPv6Address = if ($ip -and $ip.IPv6Address) { $ip.IPv6Address[0].IPAddress } else { $null }; "
+        "SentBytes = if ($stats) { [int64]$stats.SentBytes } else { $null }; "
+        "ReceivedBytes = if ($stats) { [int64]$stats.ReceivedBytes } else { $null }; "
+        "SSID = $ssid; Signal = $signal; RadioType = $radio "
+        "}; $result | ConvertTo-Json -Compress"
+    )
+    if not network_output:
+        return {}
+
+    try:
+        current = json.loads(network_output)
+    except ValueError:
+        return {}
+    if not isinstance(current, dict):
+        return {}
+
+    tx_bps = None
+    rx_bps = None
+    if track_rate:
+        state_path = settings.state_dir / "network_stats.json"
+        previous = load_json(state_path, {})
+        now_ns = time.time_ns()
+        current["timestamp_ns"] = now_ns
+
+        if isinstance(previous, dict):
+            prev_ts = previous.get("timestamp_ns")
+            prev_sent = previous.get("SentBytes")
+            prev_recv = previous.get("ReceivedBytes")
+            curr_sent = current.get("SentBytes")
+            curr_recv = current.get("ReceivedBytes")
+            if all(isinstance(v, int) for v in (prev_ts, prev_sent, prev_recv, curr_sent, curr_recv)):
+                delta_seconds = max((now_ns - prev_ts) / 1_000_000_000, 0)
+                if delta_seconds > 0:
+                    tx_bps = max((curr_sent - prev_sent) / delta_seconds, 0)
+                    rx_bps = max((curr_recv - prev_recv) / delta_seconds, 0)
+
+        save_json(state_path, current)
+
+    return {
+        "adapter_name": current.get("AdapterName"),
+        "interface_description": current.get("InterfaceDescription"),
+        "link_speed": current.get("LinkSpeed"),
+        "mac_address": current.get("MacAddress"),
+        "ipv4_address": current.get("IPv4Address"),
+        "ipv6_address": current.get("IPv6Address"),
+        "ssid": current.get("SSID"),
+        "signal": current.get("Signal"),
+        "radio_type": current.get("RadioType"),
+        "tx_bytes_per_sec": round(tx_bps, 2) if tx_bps is not None else None,
+        "rx_bytes_per_sec": round(rx_bps, 2) if rx_bps is not None else None,
     }
 
 
@@ -213,16 +411,17 @@ def collect_gpus() -> list[dict[str, Any]]:
             "memory.total",
             "memory.used",
             "utilization.gpu",
+            "utilization.encoder",
+            "utilization.decoder",
             "temperature.gpu",
             "power.draw",
             "power.limit",
             "clocks.current.graphics",
             "clocks.max.graphics",
+            "clocks.current.video",
             "fan.speed",
             "pcie.link.gen.current",
             "pcie.link.width.current",
-            "encoder.stats.sessionCount",
-            "decoder.stats.sessionCount",
         ]
     )
     output = _run_command(
@@ -238,7 +437,7 @@ def collect_gpus() -> list[dict[str, Any]]:
     gpus: list[dict[str, Any]] = []
     for raw_line in output.splitlines():
         parts = [part.strip() for part in raw_line.split(",")]
-        if len(parts) < 6:
+        if len(parts) < 8:
             continue
 
         def _float(idx: int) -> float | None:
@@ -266,17 +465,18 @@ def collect_gpus() -> list[dict[str, Any]]:
                 "total_vram_mb": _int(2),
                 "used_vram_mb": _int(3),
                 "utilization_percent": _float(4),
-                "temperature_c": _float(5),
-                "power_draw_w": _float(6),
-                "power_limit_w": _float(7),
-                "clock_graphics_mhz": _int(8),
-                "clock_max_graphics_mhz": _int(9),
-                "fan_speed_percent": _int(10),
-                "pcie_gen": _int(11),
-                "pcie_width": _int(12),
-                "encoder_sessions": _int(13),
-                "decoder_sessions": _int(14),
-            }
+                "encoder_utilization_percent": _float(5),
+                "decoder_utilization_percent": _float(6),
+                "temperature_c": _float(7),
+                "power_draw_w": _float(8),
+                "power_limit_w": _float(9),
+                "clock_graphics_mhz": _int(10),
+                "clock_max_graphics_mhz": _int(11),
+                "clock_video_mhz": _int(12),
+                "fan_speed_percent": _int(13),
+                "pcie_gen": _int(14),
+                "pcie_width": _int(15),
+                }
         )
     return gpus
 

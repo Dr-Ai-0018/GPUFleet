@@ -11,6 +11,7 @@ from gpufleet_node_agent.collect import (
     collect_gpus,
     collect_memory,
     collect_nvidia,
+    collect_primary_network,
     collect_python_env,
     collect_task_runtime,
     get_boot_id,
@@ -37,6 +38,7 @@ def build_heartbeat_payload(settings: AgentSettings) -> dict[str, Any]:
             "platform": platform.platform(),
             "deployment_mode": settings.deployment_mode,
             "effective_deployment_mode": settings.effective_deployment_mode(),
+            "network": collect_primary_network(settings),
             "modal_runtime": collect_modal_runtime_status(settings),
         },
     }

@@ -24,6 +24,7 @@ from gpufleet_node_agent.collect import (
     collect_gpus,
     collect_memory,
     collect_nvidia,
+    collect_primary_network,
     collect_python_env,
     get_boot_id,
 )
@@ -289,6 +290,7 @@ def _execute_native_task(settings: AgentSettings, task: dict[str, Any], run_dir:
             "gpus": collect_gpus(),
             "nvidia": collect_nvidia(),
             "python_env": collect_python_env(settings),
+            "network": collect_primary_network(settings, track_rate=False),
             "modal_runtime": collect_modal_runtime_status(settings),
         }
     if task_type == "file_mkdir":

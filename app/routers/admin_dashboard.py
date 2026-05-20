@@ -108,7 +108,7 @@ def get_overview(
         for row in node_rows:
             latest = conn.execute(
                 """
-                SELECT reported_at, cpu_json, memory_json, disk_json, gpu_json, python_env_json, task_runtime_json
+                SELECT reported_at, cpu_json, memory_json, disk_json, gpu_json, python_env_json, task_runtime_json, raw_payload_json
                 FROM node_status_snapshots
                 WHERE node_id = ?
                 ORDER BY reported_at DESC, id DESC
@@ -130,6 +130,7 @@ def get_overview(
             latest_status = None
             if latest is not None:
                 gpus, nvidia = _decode_gpu_snapshot(latest["gpu_json"])
+                raw_payload = json.loads(latest["raw_payload_json"]) if latest["raw_payload_json"] else {}
                 latest_status = NodeStatusPreview(
                     reported_at=latest["reported_at"],
                     cpu=json.loads(latest["cpu_json"]),
@@ -139,6 +140,7 @@ def get_overview(
                     nvidia=nvidia,
                     python_env=json.loads(latest["python_env_json"]),
                     task_runtime=json.loads(latest["task_runtime_json"]),
+                    extra=raw_payload.get("extra", {}) if isinstance(raw_payload, dict) else {},
                 )
 
             nodes.append(
