@@ -416,98 +416,164 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
             live telemetry
           </div>
         </div>
-        <div className="grid gap-0 xl:grid-cols-4">
-          <PulseCell
-            eyebrow="CPU Pressure"
-            title={`${Math.round(cpuUse)}%`}
-            subtitle={cpu?.model ?? "Unknown CPU"}
-            meta={`${physicalCoreCount ?? "?"}C / ${coreCount}T`}
-            barValue={cpuUse}
-            accent="cyan"
-          />
-          <PulseCell
-            eyebrow="Memory Fabric"
-            title={`${Math.round(memUse)}%`}
-            subtitle={`${bytesToReadable(memUsed)} / ${bytesToReadable(memTotal)}`}
-            meta={`${memSpeed != null ? `${memSpeed} MT/s` : "speed n/a"}`}
-            barValue={memUse}
-            accent="amber"
-          />
-          <PulseCell
-            eyebrow="Network Link"
-            title={availabilityText(network?.link_speed, "Link N/A")}
-            subtitle={availabilityText(network?.adapter_name, "Disconnected")}
-            meta={`${availabilityText(network?.ssid, "Wired / Hidden")} · ${bytesPerSecondToReadable(network?.rx_bytes_per_sec)}`}
-            barValue={network?.rx_bytes_per_sec != null ? Math.min(100, (network.rx_bytes_per_sec / (1024 * 1024)) * 100) : null}
-            accent="emerald"
-          />
-          <PulseCell
-            eyebrow="Primary GPU"
-            title={primaryGpu ? `${primaryGpuUtil}%` : "—"}
-            subtitle={primaryGpu ? String(primaryGpu.model ?? "GPU") : "No accelerator"}
-            meta={primaryGpu ? `${primaryGpuVramPct}% VRAM · ${availabilityText(primaryGpu.temperature_c, "temp n/a")}°C` : "history unavailable"}
-            barValue={primaryGpu ? primaryGpuUtil : null}
-            accent="violet"
-          />
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
+          <div className="border-b border-white/[0.04] p-6 xl:border-b-0 xl:border-r">
+            <div className="rounded-[26px] border border-cyan-500/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.09),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.008))] px-6 py-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="max-w-[34rem]">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.22em] text-cyan-300/75">Compute Envelope</div>
+                  <h3 className="mt-3 text-[34px] font-bold leading-[1.02] tracking-[-0.04em] text-white">
+                    Balanced telemetry across processor, memory fabric, and accelerator load.
+                  </h3>
+                  <p className="mt-3 text-[14px] leading-6 text-gray-400">
+                    {cpu?.model ?? "Unknown CPU"}
+                    {primaryGpu ? ` · ${String(primaryGpu.model ?? "Primary GPU")}` : ""}
+                  </p>
+                </div>
+                <div className="hidden rounded-full border border-cyan-400/15 bg-cyan-400/[0.07] px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-cyan-300 xl:block">
+                  sampled {formatRelative(latestStatus.reported_at)}
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-3">
+                <HeroSignal
+                  eyebrow="CPU Pressure"
+                  value={`${Math.round(cpuUse)}%`}
+                  note={`${physicalCoreCount ?? "?"}C / ${coreCount}T`}
+                  barValue={cpuUse}
+                  accent="cyan"
+                />
+                <HeroSignal
+                  eyebrow="Memory Fabric"
+                  value={`${Math.round(memUse)}%`}
+                  note={`${bytesToReadable(memUsed)} / ${bytesToReadable(memTotal)}`}
+                  barValue={memUse}
+                  accent="amber"
+                />
+                <HeroSignal
+                  eyebrow="Primary GPU"
+                  value={primaryGpu ? `${primaryGpuUtil}%` : "—"}
+                  note={primaryGpu ? `${primaryGpuVramPct}% VRAM` : "No accelerator"}
+                  barValue={primaryGpu ? primaryGpuUtil : null}
+                  accent="violet"
+                />
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-2">
+                <InlineTag label="Memory" value={memSpeed != null ? `${memSpeed} MT/s` : "speed n/a"} />
+                <InlineTag label="Network" value={availabilityText(network?.ssid, "Wired / Hidden")} />
+                <InlineTag label="Link" value={availabilityText(network?.link_speed, "link n/a")} />
+                <InlineTag label="Runtime" value={pythonEnv?.python_version ? `Python ${pythonEnv.python_version}` : "runtime n/a"} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-0 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="border-b border-white/[0.04] p-6 sm:border-r xl:border-r-0">
+              <div className="space-y-3">
+                <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">Network Link</div>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <div className="text-[34px] font-bold tracking-[-0.04em] text-white">{availabilityText(network?.link_speed, "N/A")}</div>
+                    <div className="mt-1 text-[13px] text-gray-500">{availabilityText(network?.adapter_name, "Disconnected")}</div>
+                  </div>
+                  <div className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.07] px-3 py-1 text-[10px] font-mono uppercase tracking-[0.16em] text-emerald-300">
+                    {availabilityText(network?.ssid, "Wired / Hidden")}
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+                  <MetricCell label="Download" value={bytesPerSecondToReadable(network?.rx_bytes_per_sec)} />
+                  <MetricCell label="Upload" value={bytesPerSecondToReadable(network?.tx_bytes_per_sec)} />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-3">
+                <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">Runtime Profile</div>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <div className="text-[28px] font-bold tracking-[-0.03em] text-white">{pythonEnv?.python_version ? `Python ${pythonEnv.python_version}` : "Runtime N/A"}</div>
+                    <div className="mt-1 text-[13px] text-gray-500">
+                      {pythonEnv?.active_environment_kind
+                        ? `${pythonEnv.active_environment_kind}${pythonEnv.active_environment_name ? ` · ${pythonEnv.active_environment_name}` : ""}`
+                        : "environment metadata unavailable"}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Backends</div>
+                    <div className="mt-2 text-3xl font-bold font-mono text-cyan-300">{pythonEnv?.supported_backends ? pythonEnv.supported_backends.length : "—"}</div>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+                  <MetricCell label="Heartbeat" value={formatRelative(latestStatus.reported_at)} />
+                  <MetricCell label="GPU Temp" value={primaryGpu?.temperature_c != null ? `${primaryGpu.temperature_c}°C` : "—"} />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.95fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,0.85fr)]">
         <section className={`${cardCls} space-y-6`}>
-          <div className="flex items-start justify-between gap-6">
-            <div className="space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">System Processor</p>
-              <h3 className="text-[24px] font-bold leading-tight text-white">{cpu?.model ?? "Unknown CPU"}</h3>
-              <p className="text-[13px] text-gray-500">
-                {physicalCoreCount ? `${physicalCoreCount} physical / ` : ""}
-                {coreCount} logical cores
-              </p>
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_240px] xl:items-start">
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-gray-500">System Processor</p>
+                <h3 className="max-w-[16ch] text-[40px] font-bold leading-[1.05] tracking-[-0.03em] text-white">{cpu?.model ?? "Unknown CPU"}</h3>
+                <p className="text-[14px] text-gray-500">
+                  {physicalCoreCount ? `${physicalCoreCount} physical cores / ` : ""}
+                  {coreCount} logical threads sampled
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <InlineStat label="Physical" value={physicalCoreCount != null ? String(physicalCoreCount) : "—"} />
+                <InlineStat label="Logical" value={String(coreCount)} />
+                <InlineStat label="RAM" value={bytesToReadable(memTotal)} />
+                <InlineStat label="Backends" value={pythonEnv?.supported_backends ? String(pythonEnv.supported_backends.length) : "—"} />
+              </div>
             </div>
-            <div className="min-w-[180px] rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.08] px-5 py-4">
+
+            <div className="rounded-[24px] border border-cyan-500/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.14),transparent_48%),rgba(9,22,28,0.96)] px-5 py-5">
               <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-300/70">CPU Load</div>
-              <div className="mt-2 flex items-end gap-3">
-                <span className="text-5xl font-bold font-mono leading-none text-cyan-300">{Math.round(cpuUse)}</span>
-                <span className="pb-1 text-lg font-mono text-cyan-300/70">%</span>
+              <div className="mt-3 flex items-end gap-2">
+                <span className="text-6xl font-bold font-mono leading-none text-cyan-300">{Math.round(cpuUse)}</span>
+                <span className="pb-2 text-xl font-mono text-cyan-300/70">%</span>
               </div>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5">
-                <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-sky-400 transition-all" style={{ width: `${cpuUse}%` }} />
+                <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-300 transition-all" style={{ width: `${cpuUse}%` }} />
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] font-mono">
-                <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2">
-                  <div className="text-gray-500">Current</div>
+              <div className="mt-5 space-y-3 text-[11px] font-mono">
+                <div className="rounded-xl border border-white/6 bg-white/[0.03] px-3 py-3">
+                  <div className="text-gray-500">Current Clock</div>
                   <div className="mt-1 text-white">{currentClock != null ? `${currentClock} MHz` : "—"}</div>
                 </div>
-                <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2">
-                  <div className="text-gray-500">Max</div>
+                <div className="rounded-xl border border-white/6 bg-white/[0.03] px-3 py-3">
+                  <div className="text-gray-500">Max Clock</div>
                   <div className="mt-1 text-white">{maxClock != null ? `${maxClock} MHz` : "—"}</div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/[0.04] bg-[#0b0d11] px-4 py-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">CPU History</span>
+          <div className="rounded-[24px] border border-white/[0.04] bg-[#0b0d11] px-5 py-5">
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">CPU History</span>
               <span className="text-[11px] font-mono text-gray-600">{formatRelative(latestStatus.reported_at)}</span>
             </div>
             {historyItems.length > 0 ? (
-              <ReactEChartsCore echarts={echarts} option={cpuHistoryOption} style={{ height: 110 }} opts={{ renderer: "canvas" }} />
+              <ReactEChartsCore echarts={echarts} option={cpuHistoryOption} style={{ height: 150 }} opts={{ renderer: "canvas" }} />
             ) : (
-              <div className="flex h-[110px] items-center justify-center text-[11px] font-mono text-gray-600">等待历史数据…</div>
+              <div className="flex h-[150px] items-center justify-center text-[11px] font-mono text-gray-600">等待历史数据…</div>
             )}
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCell label="Physical" value={physicalCoreCount != null ? String(physicalCoreCount) : "—"} />
-            <MetricCell label="Logical" value={String(coreCount)} />
-            <MetricCell label="RAM" value={bytesToReadable(memTotal)} />
-            <MetricCell label="Backends" value={pythonEnv?.supported_backends ? String(pythonEnv.supported_backends.length) : "—"} />
           </div>
 
           {perCore.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Per-Core Usage</span>
+                <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">Per-Core Usage</span>
                 <span className="text-[11px] font-mono text-gray-600">{perCore.length} threads sampled</span>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
@@ -529,18 +595,18 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
         </section>
 
         <section className={`${cardCls} space-y-6`}>
-          <div className="rounded-[28px] border border-cyan-500/12 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.14),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] p-5">
+          <div className="rounded-[26px] border border-cyan-500/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.11),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Memory Fabric</p>
-                <h3 className="mt-1 text-[18px] font-bold text-white">{bytesToReadable(memUsed)} / {bytesToReadable(memTotal)}</h3>
+                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray-500">Memory Fabric</p>
+                <h3 className="mt-2 text-[30px] font-bold tracking-[-0.02em] text-white">{bytesToReadable(memUsed)} / {bytesToReadable(memTotal)}</h3>
               </div>
               <div className="text-right">
-                <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Pressure</div>
-                <div className="mt-1 text-4xl font-bold font-mono text-cyan-300">{Math.round(memUse)}<span className="ml-1 text-lg text-cyan-300/70">%</span></div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray-500">Pressure</div>
+                <div className="mt-2 text-5xl font-bold font-mono text-cyan-300">{Math.round(memUse)}<span className="ml-1 text-xl text-cyan-300/70">%</span></div>
               </div>
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="mt-6 space-y-4">
               <div className="h-3 overflow-hidden rounded-full bg-black/30">
                 <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-400 to-emerald-400 transition-all" style={{ width: `${memUse}%` }} />
               </div>
@@ -561,20 +627,20 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
             </div>
           </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <MetricCell label="Commit" value={memCommitUsed != null && memCommitLimit != null ? `${bytesToReadable(memCommitUsed)} / ${bytesToReadable(memCommitLimit)}` : "—"} />
-              <MetricCell label="Paged Pool" value={pagedPool != null ? bytesToReadable(pagedPool) : "—"} />
-              <MetricCell label="Nonpaged" value={nonpagedPool != null ? bytesToReadable(nonpagedPool) : "—"} />
-              <MetricCell label="Speed" value={memSpeed != null ? `${memSpeed} MT/s` : "—"} />
-              <MetricCell label="Slots" value={slotsUsed != null ? `${slotsUsed}/${slotsTotal ?? "?"}` : "—"} />
-              <MetricCell label="Form" value={formFactor && memoryType ? `${formFactor} · ${memoryType}` : (formFactor ?? memoryType ?? "—")} />
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MetricCell label="Commit" value={memCommitUsed != null && memCommitLimit != null ? `${bytesToReadable(memCommitUsed)} / ${bytesToReadable(memCommitLimit)}` : "—"} />
+            <MetricCell label="Paged Pool" value={pagedPool != null ? bytesToReadable(pagedPool) : "—"} />
+            <MetricCell label="Nonpaged" value={nonpagedPool != null ? bytesToReadable(nonpagedPool) : "—"} />
+            <MetricCell label="Speed" value={memSpeed != null ? `${memSpeed} MT/s` : "—"} />
+            <MetricCell label="Slots" value={slotsUsed != null ? `${slotsUsed}/${slotsTotal ?? "?"}` : "—"} />
+            <MetricCell label="Form" value={formFactor && memoryType ? `${formFactor} · ${memoryType}` : (formFactor ?? memoryType ?? "—")} />
+          </div>
 
-          <div className="rounded-2xl border border-white/[0.04] bg-[#0b0d11] p-5">
+          <div className="rounded-[24px] border border-white/[0.04] bg-[#0b0d11] p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Network Link</p>
-                <h4 className="mt-1 text-[15px] font-bold text-white">{network?.adapter_name ?? "Disconnected"}</h4>
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">Network Link</p>
+                <h4 className="mt-2 text-[28px] font-bold tracking-[-0.02em] text-white">{availabilityText(network?.adapter_name, "Disconnected")}</h4>
               </div>
               <div className="text-right text-[11px] font-mono">
                 <div className="text-cyan-400">{availabilityText(network?.ssid, "Wired / Hidden")}</div>
@@ -715,18 +781,16 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
   );
 }
 
-function PulseCell({
+function HeroSignal({
   eyebrow,
-  title,
-  subtitle,
-  meta,
+  value,
+  note,
   barValue,
   accent,
 }: {
   eyebrow: string;
-  title: string;
-  subtitle: string;
-  meta: string;
+  value: string;
+  note: string;
   barValue: number | null;
   accent: "cyan" | "amber" | "emerald" | "violet";
 }): JSX.Element {
@@ -740,14 +804,22 @@ function PulseCell({
           : "bg-cyan-400";
 
   return (
-    <div className="border-r border-white/[0.04] px-6 py-5 last:border-r-0">
+    <div className="rounded-[20px] border border-white/[0.05] bg-black/20 px-4 py-4">
       <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">{eyebrow}</div>
-      <div className="mt-3 text-[26px] font-bold font-mono leading-none text-white">{title}</div>
-      <div className="mt-3 min-h-[44px] text-[12px] leading-6 text-gray-400">{subtitle}</div>
-      <div className="text-[11px] font-mono text-gray-500">{meta}</div>
+      <div className="mt-3 text-[32px] font-bold font-mono leading-none text-white">{value}</div>
+      <div className="mt-3 text-[11px] font-mono text-gray-500">{note}</div>
       <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
         <div className={`h-full rounded-full ${accentCls}`} style={{ width: `${Math.max(0, Math.min(100, barValue ?? 0))}%`, opacity: barValue == null ? 0.18 : 1 }} />
       </div>
+    </div>
+  );
+}
+
+function InlineStat({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="border-t border-white/[0.05] pt-3">
+      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">{label}</div>
+      <div className="mt-2 text-[22px] font-bold font-mono text-white">{value}</div>
     </div>
   );
 }
