@@ -13,8 +13,6 @@ import { EmptyState } from "../../ui/EmptyState";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
 import { Gauge } from "../../ui/Gauge";
-import { ArcGauge } from "../../ui/ArcGauge";
-import { RingGauge } from "../../ui/RingGauge";
 import { BlockProgress } from "../../ui/BlockProgress";
 import { useToast } from "../../ui/Toast";
 import { connectionLabel, connectionTone, onboardingLabel, onboardingTone } from "../../lib/labels";
@@ -408,40 +406,51 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr_1fr_1fr]">
-        <SummaryPanel
-          eyebrow="CPU Pressure"
-          title={`${Math.round(cpuUse)}%`}
-          subtitle={cpu?.model ?? "Unknown CPU"}
-          aside={<RingGauge value={cpuUse} size={84} label={String(Math.round(cpuUse))} sublabel="CPU" />}
-          tone="cyan"
-        />
-        <SummaryPanel
-          eyebrow="Memory Fabric"
-          title={`${Math.round(memUse)}%`}
-          subtitle={`${bytesToReadable(memUsed)} / ${bytesToReadable(memTotal)}`}
-          aside={<ArcGauge value={memUse} size={92} color="auto" label={String(Math.round(memUse))} />}
-          tone="violet"
-        />
-        <SummaryPanel
-          eyebrow="Network Link"
-          title={bytesPerSecondToReadable(network?.rx_bytes_per_sec)}
-          subtitle={`${availabilityText(network?.adapter_name, "Disconnected")} · ${availabilityText(network?.link_speed)}`}
-          aside={
-            <div className="rounded-full border border-cyan-400/15 bg-cyan-400/8 px-3 py-1 text-[10px] font-mono text-cyan-300">
-              {availabilityText(network?.ssid, "Wired / Hidden")}
-            </div>
-          }
-          tone="emerald"
-        />
-        <SummaryPanel
-          eyebrow="Primary GPU"
-          title={primaryGpu ? `${primaryGpuUtil}%` : "—"}
-          subtitle={primaryGpu ? `${String(primaryGpu.model ?? "GPU")} · ${primaryGpuVramPct}% VRAM` : "No accelerator"}
-          aside={primaryGpu ? <ArcGauge value={primaryGpuUtil} size={92} color="auto" label={String(primaryGpuUtil)} /> : undefined}
-          tone="amber"
-        />
-      </div>
+      <section className="overflow-hidden rounded-[28px] border border-white/[0.04] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.06),transparent_38%),linear-gradient(180deg,rgba(16,18,23,0.98)_0%,rgba(9,10,13,1)_100%)] shadow-[0_10px_35px_-14px_rgba(0,0,0,0.55)]">
+        <div className="flex items-center justify-between border-b border-white/[0.04] px-6 py-4">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">Operational Pulse</div>
+            <div className="mt-1 text-[13px] text-gray-400">当前节点的实时硬件状态摘要，优先展示最稳定、最可操作的信号</div>
+          </div>
+          <div className="rounded-full border border-cyan-400/15 bg-cyan-400/[0.08] px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-cyan-300">
+            live telemetry
+          </div>
+        </div>
+        <div className="grid gap-0 xl:grid-cols-4">
+          <PulseCell
+            eyebrow="CPU Pressure"
+            title={`${Math.round(cpuUse)}%`}
+            subtitle={cpu?.model ?? "Unknown CPU"}
+            meta={`${physicalCoreCount ?? "?"}C / ${coreCount}T`}
+            barValue={cpuUse}
+            accent="cyan"
+          />
+          <PulseCell
+            eyebrow="Memory Fabric"
+            title={`${Math.round(memUse)}%`}
+            subtitle={`${bytesToReadable(memUsed)} / ${bytesToReadable(memTotal)}`}
+            meta={`${memSpeed != null ? `${memSpeed} MT/s` : "speed n/a"}`}
+            barValue={memUse}
+            accent="amber"
+          />
+          <PulseCell
+            eyebrow="Network Link"
+            title={availabilityText(network?.link_speed, "Link N/A")}
+            subtitle={availabilityText(network?.adapter_name, "Disconnected")}
+            meta={`${availabilityText(network?.ssid, "Wired / Hidden")} · ${bytesPerSecondToReadable(network?.rx_bytes_per_sec)}`}
+            barValue={network?.rx_bytes_per_sec != null ? Math.min(100, (network.rx_bytes_per_sec / (1024 * 1024)) * 100) : null}
+            accent="emerald"
+          />
+          <PulseCell
+            eyebrow="Primary GPU"
+            title={primaryGpu ? `${primaryGpuUtil}%` : "—"}
+            subtitle={primaryGpu ? String(primaryGpu.model ?? "GPU") : "No accelerator"}
+            meta={primaryGpu ? `${primaryGpuVramPct}% VRAM · ${availabilityText(primaryGpu.temperature_c, "temp n/a")}°C` : "history unavailable"}
+            barValue={primaryGpu ? primaryGpuUtil : null}
+            accent="violet"
+          />
+        </div>
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.95fr)]">
         <section className={`${cardCls} space-y-6`}>
@@ -706,29 +715,38 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
   );
 }
 
-function SummaryPanel({
+function PulseCell({
   eyebrow,
   title,
   subtitle,
-  aside,
-  tone,
+  meta,
+  barValue,
+  accent,
 }: {
   eyebrow: string;
   title: string;
   subtitle: string;
-  aside?: JSX.Element;
-  tone: "cyan" | "violet" | "emerald" | "amber";
+  meta: string;
+  barValue: number | null;
+  accent: "cyan" | "amber" | "emerald" | "violet";
 }): JSX.Element {
+  const accentCls =
+    accent === "amber"
+      ? "bg-amber-400"
+      : accent === "emerald"
+        ? "bg-emerald-400"
+        : accent === "violet"
+          ? "bg-violet-400"
+          : "bg-cyan-400";
+
   return (
-    <div className={`rounded-2xl border border-white/[0.04] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_42%),linear-gradient(180deg,rgba(16,18,23,0.98)_0%,rgba(10,11,14,0.98)_100%)] px-5 py-5 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.4)]`}>
-      <div className={`pointer-events-none absolute hidden`} />
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">{eyebrow}</div>
-          <div className="mt-2 text-[28px] font-bold font-mono leading-none text-white">{title}</div>
-          <div className="mt-2 text-[12px] text-gray-500">{subtitle}</div>
-        </div>
-        {aside ? <div className="shrink-0">{aside}</div> : null}
+    <div className="border-r border-white/[0.04] px-6 py-5 last:border-r-0">
+      <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">{eyebrow}</div>
+      <div className="mt-3 text-[26px] font-bold font-mono leading-none text-white">{title}</div>
+      <div className="mt-3 min-h-[44px] text-[12px] leading-6 text-gray-400">{subtitle}</div>
+      <div className="text-[11px] font-mono text-gray-500">{meta}</div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
+        <div className={`h-full rounded-full ${accentCls}`} style={{ width: `${Math.max(0, Math.min(100, barValue ?? 0))}%`, opacity: barValue == null ? 0.18 : 1 }} />
       </div>
     </div>
   );
