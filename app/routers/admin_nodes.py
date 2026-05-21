@@ -568,6 +568,14 @@ def get_status_history(
                 cpu_usage_percent=cpu.get("usage_percent"),
                 memory_usage_percent=memory.get("usage_percent"),
                 gpu_utilization_percent=first_gpu.get("utilization_percent") if first_gpu else None,
+                gpu_memory_percent=(
+                    (float(first_gpu.get("used_vram_mb", 0)) / float(first_gpu.get("total_vram_mb", 1))) * 100
+                    if first_gpu and first_gpu.get("total_vram_mb")
+                    else None
+                ),
+                gpu_temperature_c=first_gpu.get("temperature_c") if first_gpu else None,
+                gpu_power_draw_w=first_gpu.get("power_draw_w") if first_gpu else None,
+                gpu_clock_graphics_mhz=first_gpu.get("clock_graphics_mhz") if first_gpu else None,
             )
         )
 

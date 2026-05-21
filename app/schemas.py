@@ -411,6 +411,10 @@ class NodeStatusHistoryItem(BaseModel):
     cpu_usage_percent: float | None = None
     memory_usage_percent: float | None = None
     gpu_utilization_percent: float | None = None
+    gpu_memory_percent: float | None = None
+    gpu_temperature_c: float | None = None
+    gpu_power_draw_w: float | None = None
+    gpu_clock_graphics_mhz: float | None = None
 
 
 class NodeStatusHistoryResponse(BaseModel):

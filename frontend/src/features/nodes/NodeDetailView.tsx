@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { LineChart } from "echarts/charts";
-import { GridComponent, TooltipComponent } from "echarts/components";
+import { GridComponent, TooltipComponent, LegendComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { ApiError, api } from "../../api";
 import { navigate } from "../../lib/routing";
@@ -23,7 +23,7 @@ import { TaskComposer } from "../tasks/TaskComposer";
 import type { NodeResetSecretResponse, NodeResponse, NodeStatusHistoryItem, NodeStatusPreview, OsType } from "../../types";
 import forms from "../../ui/forms.module.css";
 
-echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
 type Props = { nodeId: string };
 type TabKey = "monitor" | "config" | "tasks";
@@ -254,6 +254,128 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
     yAxis: { type: "value" as const, min: 0, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" } },
     series: [{ type: "line" as const, smooth: true, symbol: "none", connectNulls: false, lineStyle: { color: "#06b6d4", width: 1.5 }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.15)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: historyItems.map((it) => it.cpu_usage_percent) }],
   }), [historyItems]);
+
+  const historyLabels = useMemo(
+    () => historyItems.map((it) => beijingTimeFormatter.format(new Date(it.reported_at))),
+    [historyItems],
+  );
+
+  const gpuLoadHistoryOption = useMemo(() => ({
+    tooltip: {
+      trigger: "axis" as const,
+      backgroundColor: "#0d1117",
+      borderColor: "rgba(255,255,255,0.05)",
+      textStyle: { color: "#c9d1d9", fontSize: 11 },
+    },
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: { color: "#6b7280", fontSize: 10 },
+      itemWidth: 10,
+      itemHeight: 4,
+    },
+    grid: { left: 34, right: 12, top: 28, bottom: 20 },
+    xAxis: {
+      type: "category" as const,
+      data: historyLabels,
+      axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } },
+      axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) },
+    },
+    yAxis: {
+      type: "value" as const,
+      min: 0,
+      max: 100,
+      splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } },
+      axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" },
+    },
+    series: [
+      {
+        name: "GPU Util",
+        type: "line" as const,
+        smooth: true,
+        symbol: "none",
+        lineStyle: { color: "#06b6d4", width: 1.8 },
+        areaStyle: {
+          color: {
+            type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{ offset: 0, color: "rgba(6,182,212,0.16)" }, { offset: 1, color: "rgba(6,182,212,0)" }],
+          },
+        },
+        data: historyItems.map((it) => it.gpu_utilization_percent),
+      },
+      {
+        name: "VRAM",
+        type: "line" as const,
+        smooth: true,
+        symbol: "none",
+        lineStyle: { color: "#22c55e", width: 1.5 },
+        data: historyItems.map((it) => it.gpu_memory_percent),
+      },
+    ],
+  }), [historyItems, historyLabels]);
+
+  const gpuThermalHistoryOption = useMemo(() => ({
+    tooltip: {
+      trigger: "axis" as const,
+      backgroundColor: "#0d1117",
+      borderColor: "rgba(255,255,255,0.05)",
+      textStyle: { color: "#c9d1d9", fontSize: 11 },
+    },
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: { color: "#6b7280", fontSize: 10 },
+      itemWidth: 10,
+      itemHeight: 4,
+    },
+    grid: { left: 34, right: 38, top: 28, bottom: 20 },
+    xAxis: {
+      type: "category" as const,
+      data: historyLabels,
+      axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } },
+      axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) },
+    },
+    yAxis: [
+      {
+        type: "value" as const,
+        splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } },
+        axisLabel: { color: "#4a5568", fontSize: 9 },
+      },
+      {
+        type: "value" as const,
+        splitLine: { show: false },
+        axisLabel: { color: "#4a5568", fontSize: 9 },
+      },
+    ],
+    series: [
+      {
+        name: "Temp",
+        type: "line" as const,
+        smooth: true,
+        symbol: "none",
+        lineStyle: { color: "#f97316", width: 1.5 },
+        data: historyItems.map((it) => it.gpu_temperature_c),
+      },
+      {
+        name: "Power",
+        type: "line" as const,
+        smooth: true,
+        symbol: "none",
+        yAxisIndex: 1,
+        lineStyle: { color: "#f59e0b", width: 1.5 },
+        data: historyItems.map((it) => it.gpu_power_draw_w),
+      },
+      {
+        name: "Clock",
+        type: "line" as const,
+        smooth: true,
+        symbol: "none",
+        yAxisIndex: 1,
+        lineStyle: { color: "#a78bfa", width: 1.3 },
+        data: historyItems.map((it) => it.gpu_clock_graphics_mhz),
+      },
+    ],
+  }), [historyItems, historyLabels]);
 
   if (!latestStatus) return <div className="py-20 text-center text-gray-500">等待节点首次心跳上报</div>;
 
@@ -486,7 +608,7 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
       {gpus.length === 0 ? (
         <div className="py-10 text-center text-gray-600 text-[13px]">无 GPU 设备检测到</div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="space-y-6">
           {gpus.map((gpu, idx) => {
         const g = gpu as GpuSnapshot;
         const used = Number(g.used_vram_mb ?? 0);
@@ -519,15 +641,34 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
                     <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${util > 80 ? "bg-red-950/40 text-red-400 border-red-800/30" : util > 30 ? "bg-cyan-950/40 text-cyan-400 border-cyan-800/30" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/30"}`}>{util > 0 ? "Active" : "Idle"}</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-[1.1fr_0.9fr] gap-8">
+                <div className="grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr]">
                   <div className="space-y-4">
                     <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">算力利用率</span><span className="text-white font-bold font-mono">{util}%</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${util > 80 ? "bg-red-500" : "bg-cyan-500"}`} style={{ width: `${util}%` }} /></div></div>
                     <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">显存占用</span><span className="text-white font-bold font-mono">{used}/{total} MB ({pct}%)</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct > 90 ? "bg-red-500" : "bg-cyan-400"}`} style={{ width: `${pct}%` }} /></div></div>
                     {powerDraw != null && powerLimit != null ? <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">功耗</span><span className="text-white font-bold font-mono">{powerDraw.toFixed(1)}W / {powerLimit}W</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-amber-500/70 rounded-full" style={{ width: `${Math.min(100, (powerDraw / powerLimit) * 100)}%` }} /></div></div> : null}
                   </div>
-                  <div className="flex items-center justify-center">
-                    <ArcGauge value={util} size={148} color="auto" label={String(util)} sublabel="GPU UTIL" />
+                  <div className="rounded-2xl border border-white/[0.04] bg-[#0b0d11] p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Load Timeline</div>
+                      <div className="text-[11px] font-mono text-gray-600">Util / VRAM</div>
+                    </div>
+                    {idx === 0 && historyItems.length > 1 ? (
+                      <ReactEChartsCore echarts={echarts} option={gpuLoadHistoryOption} style={{ height: 160 }} opts={{ renderer: "canvas" }} />
+                    ) : (
+                      <div className="flex h-[160px] items-center justify-center text-[11px] font-mono text-gray-600">等待 GPU 历史数据…</div>
+                    )}
                   </div>
+                </div>
+                <div className="mt-5 rounded-2xl border border-white/[0.04] bg-[#0b0d11] p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Thermal / Power Timeline</div>
+                    <div className="text-[11px] font-mono text-gray-600">Temp / Power / Clock</div>
+                  </div>
+                  {idx === 0 && historyItems.length > 1 ? (
+                    <ReactEChartsCore echarts={echarts} option={gpuThermalHistoryOption} style={{ height: 140 }} opts={{ renderer: "canvas" }} />
+                  ) : (
+                    <div className="flex h-[140px] items-center justify-center text-[11px] font-mono text-gray-600">等待 GPU 历史数据…</div>
+                  )}
                 </div>
                 <div className="mt-5 grid grid-cols-3 gap-x-6 gap-y-5">
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">TEMP</span><span className="text-[16px] font-bold font-mono text-white">{temp != null ? `${temp}°C` : "—"}</span></div>
@@ -578,14 +719,6 @@ function SummaryPanel({
   aside?: JSX.Element;
   tone: "cyan" | "violet" | "emerald" | "amber";
 }): JSX.Element {
-  const glow =
-    tone === "violet"
-      ? "from-violet-500/12"
-      : tone === "emerald"
-        ? "from-emerald-500/12"
-        : tone === "amber"
-          ? "from-amber-500/12"
-          : "from-cyan-500/12";
   return (
     <div className={`rounded-2xl border border-white/[0.04] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_42%),linear-gradient(180deg,rgba(16,18,23,0.98)_0%,rgba(10,11,14,0.98)_100%)] px-5 py-5 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.4)]`}>
       <div className={`pointer-events-none absolute hidden`} />
@@ -595,7 +728,7 @@ function SummaryPanel({
           <div className="mt-2 text-[28px] font-bold font-mono leading-none text-white">{title}</div>
           <div className="mt-2 text-[12px] text-gray-500">{subtitle}</div>
         </div>
-        {aside ? <div className={`shrink-0 rounded-2xl bg-gradient-to-br ${glow} to-transparent p-1`}>{aside}</div> : null}
+        {aside ? <div className="shrink-0">{aside}</div> : null}
       </div>
     </div>
   );

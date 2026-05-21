@@ -81,6 +81,10 @@ export type NodeStatusHistoryItem = {
   cpu_usage_percent: number | null;
   memory_usage_percent: number | null;
   gpu_utilization_percent: number | null;
+  gpu_memory_percent: number | null;
+  gpu_temperature_c: number | null;
+  gpu_power_draw_w: number | null;
+  gpu_clock_graphics_mhz: number | null;
 };
 
 export type NodeStatusHistoryResponse = {
