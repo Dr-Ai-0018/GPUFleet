@@ -21,6 +21,8 @@ export function AppShell({ onLogout }: Props): JSX.Element {
 
   const awaitingCount = store.nodes.filter((n) => n.onboarding_status === "awaiting_first_heartbeat").length;
   const warningCount = store.warnings.length;
+  const onlineCount = store.nodes.filter((n) => n.connection_status === "online").length;
+  const lastSync = store.overview?.server_time ?? null;
 
   const activeKey: NavKey = route.name === "node-detail" ? "fleet" : route.name === "task-detail" ? "tasks" : route.name;
 
@@ -37,25 +39,29 @@ export function AppShell({ onLogout }: Props): JSX.Element {
       {/* Background glow */}
       <div className="fixed top-[-40%] left-[-20%] w-[60%] h-[60%] bg-cyan-950/10 blur-[200px] rounded-full pointer-events-none mix-blend-screen" />
       <div className="fixed bottom-[-40%] right-[-20%] w-[60%] h-[60%] bg-emerald-950/5 blur-[200px] rounded-full pointer-events-none mix-blend-screen" />
+      <div className="fixed right-[8%] top-[20%] h-[30rem] w-[30rem] rounded-full bg-violet-950/10 blur-[180px] pointer-events-none mix-blend-screen" />
 
       {/* Sidebar */}
       <aside className="w-[250px] border-r border-white/5 bg-[#08090C]/90 backdrop-blur-2xl flex flex-col z-20 shrink-0">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)] animate-[float_4s_var(--ease-in-out)_infinite]">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             </div>
             <div>
               <span className="text-white font-bold text-[15px] tracking-wide">GPUFleet</span>
-              <span className="text-[9px] text-cyan-500 font-mono block tracking-widest leading-none font-semibold mt-0.5">ENTERPRISE</span>
+              <span className="text-[9px] text-cyan-500 font-mono block tracking-widest leading-none font-semibold mt-0.5 bg-gradient-to-r from-cyan-400 to-violet-400 bg-clip-text text-transparent">ENTERPRISE</span>
             </div>
           </div>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 px-3.5 py-6 space-y-1">
-          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest px-2.5 mb-3 font-mono">Operations</div>
+          <div className="mb-3 flex items-center gap-2 px-2.5">
+            <div className="h-3 w-px bg-cyan-400/60" />
+            <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest font-mono">Operations</div>
+          </div>
           {navItems.map((item) => {
             const isActive = activeKey === item.id;
             return (
@@ -63,13 +69,19 @@ export function AppShell({ onLogout }: Props): JSX.Element {
                 key={item.id}
                 href={buildHash({ name: item.id } as Route)}
                 onClick={(e) => { e.preventDefault(); navigate({ name: item.id } as Route); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200 relative ${isActive ? "text-white" : "text-gray-400 hover:text-white"}`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200 relative overflow-hidden ${isActive ? "text-white" : "text-gray-400 hover:text-white"}`}
               >
-                {isActive && <div className="absolute inset-0 bg-white/[0.04] rounded-lg border border-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]" />}
+                {isActive && (
+                  <>
+                    <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-cyan-400 shadow-[0_0_16px_rgba(15,240,179,0.5)]" />
+                    <div className="absolute inset-0 rounded-lg border border-cyan-400/15 bg-[linear-gradient(90deg,rgba(15,240,179,0.12),rgba(15,240,179,0.03)_55%,rgba(255,255,255,0.02))] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]" />
+                  </>
+                )}
                 <span className={`relative z-10 ${isActive ? "text-cyan-400" : "text-gray-500"}`}>{item.icon}</span>
                 <span className="relative z-10">{item.label}</span>
                 {item.badge ? (
-                  <span className="relative z-10 ml-auto text-[10px] font-bold min-w-[20px] h-[18px] px-1.5 rounded-md bg-cyan-950/40 text-cyan-400 border border-cyan-800/30 flex items-center justify-center">
+                  <span className="relative z-10 ml-auto flex items-center gap-1.5 rounded-full border border-cyan-800/30 bg-cyan-950/30 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
                     {item.badge}
                   </span>
                 ) : null}
@@ -79,9 +91,9 @@ export function AppShell({ onLogout }: Props): JSX.Element {
         </nav>
 
         {/* User */}
-        <div className="p-4 border-t border-white/5 bg-[#090A0D]/50">
+        <div className="border-t border-white/5 bg-[#090A0D]/50 p-4">
           <div className="flex items-center gap-3 px-1 py-1">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-800 to-gray-700 border border-white/10 flex items-center justify-center font-bold text-xs text-white">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-800 to-gray-700 border border-cyan-400/10 shadow-[0_0_0_1px_rgba(15,240,179,0.08)] flex items-center justify-center font-bold text-xs text-white">
               {store.me?.username?.slice(0, 2).toUpperCase() ?? "AD"}
             </div>
             <div className="flex-1 min-w-0">
@@ -93,6 +105,16 @@ export function AppShell({ onLogout }: Props): JSX.Element {
             <button type="button" onClick={onLogout} className="text-gray-500 hover:text-white transition-colors p-1.5 hover:bg-white/5 rounded-md" title="退出">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </button>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+              <div className="text-[9px] font-mono uppercase text-gray-500">Online</div>
+              <div className="mt-1 text-[13px] font-bold font-mono text-white">{onlineCount}/{store.nodes.length || 0}</div>
+            </div>
+            <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+              <div className="text-[9px] font-mono uppercase text-gray-500">Last Sync</div>
+              <div className="mt-1 text-[13px] font-bold font-mono text-white">{lastSync ? formatRelative(lastSync) : "—"}</div>
+            </div>
           </div>
         </div>
       </aside>
@@ -111,6 +133,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
               同步数据
             </button>
+            <HeaderClock />
           </div>
         </header>
 
@@ -128,6 +151,22 @@ export function AppShell({ onLogout }: Props): JSX.Element {
           </PageTransition>
         </div>
       </main>
+    </div>
+  );
+}
+
+function HeaderClock(): JSX.Element {
+  const [clock, setClock] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <div className="rounded-md border border-white/5 bg-[#050507] px-3 py-1.5 text-right">
+      <div className="text-[9px] font-mono uppercase tracking-[0.18em] text-gray-600">Beijing Time</div>
+      <div className="text-[12px] font-mono text-cyan-300">{new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Shanghai" }).format(clock)}</div>
     </div>
   );
 }

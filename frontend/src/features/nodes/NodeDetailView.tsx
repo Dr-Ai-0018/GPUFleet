@@ -13,6 +13,9 @@ import { EmptyState } from "../../ui/EmptyState";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
 import { Gauge } from "../../ui/Gauge";
+import { ArcGauge } from "../../ui/ArcGauge";
+import { RingGauge } from "../../ui/RingGauge";
+import { BlockProgress } from "../../ui/BlockProgress";
 import { useToast } from "../../ui/Toast";
 import { connectionLabel, connectionTone, onboardingLabel, onboardingTone } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
@@ -275,9 +278,49 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
   const formFactor = memory?.form_factor ?? null;
   const memoryType = memory?.memory_type ?? null;
   const hardwareReserved = memory?.hardware_reserved_bytes ?? null;
+  const primaryGpu = (gpus[0] as GpuSnapshot | undefined) ?? null;
+  const primaryGpuUtil = Number(primaryGpu?.utilization_percent ?? 0);
+  const primaryGpuVramPct = primaryGpu && Number(primaryGpu.total_vram_mb ?? 0) > 0
+    ? Math.round((Number(primaryGpu.used_vram_mb ?? 0) / Number(primaryGpu.total_vram_mb ?? 1)) * 100)
+    : 0;
 
   return (
     <div className="space-y-8">
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr_1fr_1fr]">
+        <SummaryPanel
+          eyebrow="CPU Pressure"
+          title={`${Math.round(cpuUse)}%`}
+          subtitle={cpu?.model ?? "Unknown CPU"}
+          aside={<RingGauge value={cpuUse} size={84} label={String(Math.round(cpuUse))} sublabel="CPU" />}
+          tone="cyan"
+        />
+        <SummaryPanel
+          eyebrow="Memory Fabric"
+          title={`${Math.round(memUse)}%`}
+          subtitle={`${bytesToReadable(memUsed)} / ${bytesToReadable(memTotal)}`}
+          aside={<ArcGauge value={memUse} size={92} color="auto" label={String(Math.round(memUse))} />}
+          tone="violet"
+        />
+        <SummaryPanel
+          eyebrow="Network Link"
+          title={bytesPerSecondToReadable(network?.rx_bytes_per_sec)}
+          subtitle={`${availabilityText(network?.adapter_name, "Disconnected")} · ${availabilityText(network?.link_speed)}`}
+          aside={
+            <div className="rounded-full border border-cyan-400/15 bg-cyan-400/8 px-3 py-1 text-[10px] font-mono text-cyan-300">
+              {availabilityText(network?.ssid, "Wired / Hidden")}
+            </div>
+          }
+          tone="emerald"
+        />
+        <SummaryPanel
+          eyebrow="Primary GPU"
+          title={primaryGpu ? `${primaryGpuUtil}%` : "—"}
+          subtitle={primaryGpu ? `${String(primaryGpu.model ?? "GPU")} · ${primaryGpuVramPct}% VRAM` : "No accelerator"}
+          aside={primaryGpu ? <ArcGauge value={primaryGpuUtil} size={92} color="auto" label={String(primaryGpuUtil)} /> : undefined}
+          tone="amber"
+        />
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.95fr)]">
         <section className={`${cardCls} space-y-6`}>
           <div className="flex items-start justify-between gap-6">
@@ -340,17 +383,12 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
                 {perCore.map((value: number, idx: number) => {
                   const pct = Math.max(0, Math.min(100, Math.round(value)));
                   return (
-                    <div key={idx} className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2.5">
+                    <div key={idx} className="rounded-xl border border-white/[0.04] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] px-3 py-2.5">
                       <div className="mb-2 flex items-center justify-between text-[10px] font-mono">
                         <span className="text-gray-500">C{idx}</span>
                         <span className="text-white/80">{pct}%</span>
                       </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
-                        <div
-                          className={`h-full rounded-full ${pct >= 85 ? "bg-red-500" : pct >= 50 ? "bg-cyan-400" : "bg-emerald-400"}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                      <BlockProgress value={pct} blocks={8} height={6} color="auto" />
                     </div>
                   );
                 })}
@@ -422,11 +460,16 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
                 <div className="mt-2 text-2xl font-bold font-mono text-white">{bytesPerSecondToReadable(network?.rx_bytes_per_sec)}</div>
               </div>
             </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <InlineTag label="SSID" value={availabilityText(network?.ssid, "Wired / Hidden")} />
+              <InlineTag label="Radio" value={availabilityText(network?.radio_type)} />
+              <InlineTag label="Signal" value={availabilityText(network?.signal)} />
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <MetricCell label="Radio" value={availabilityText(network?.radio_type)} />
-              <MetricCell label="Signal" value={availabilityText(network?.signal)} />
               <MetricCell label="IPv4" value={availabilityText(network?.ipv4_address)} />
               <MetricCell label="IPv6" value={availabilityText(network?.ipv6_address)} />
+              <MetricCell label="Adapter" value={availabilityText(network?.interface_description ?? network?.adapter_name)} />
+              <MetricCell label="Link" value={availabilityText(network?.link_speed)} />
             </div>
           </div>
 
@@ -443,7 +486,7 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
       {gpus.length === 0 ? (
         <div className="py-10 text-center text-gray-600 text-[13px]">无 GPU 设备检测到</div>
       ) : (
-        <div className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-2">
           {gpus.map((gpu, idx) => {
         const g = gpu as GpuSnapshot;
         const used = Number(g.used_vram_mb ?? 0);
@@ -464,7 +507,7 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
         const gpuIndex = typeof g.index === "number" ? g.index : idx;
 
         return (
-              <div key={idx} className={`pb-6 ${idx < gpus.length - 1 ? "border-b border-white/5 mb-6" : ""}`}>
+              <div key={idx} className={`${cardCls} pb-6`}>
                 <div className="flex justify-between items-center mb-5">
                   <div className="flex items-center gap-3">
                     <span className="text-[12px] font-mono text-gray-500 uppercase font-bold">GPU #{gpuIndex}</span>
@@ -476,20 +519,23 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
                     <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${util > 80 ? "bg-red-950/40 text-red-400 border-red-800/30" : util > 30 ? "bg-cyan-950/40 text-cyan-400 border-cyan-800/30" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/30"}`}>{util > 0 ? "Active" : "Idle"}</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-8">
+                <div className="grid grid-cols-[1.1fr_0.9fr] gap-8">
                   <div className="space-y-4">
                     <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">算力利用率</span><span className="text-white font-bold font-mono">{util}%</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${util > 80 ? "bg-red-500" : "bg-cyan-500"}`} style={{ width: `${util}%` }} /></div></div>
                     <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">显存占用</span><span className="text-white font-bold font-mono">{used}/{total} MB ({pct}%)</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct > 90 ? "bg-red-500" : "bg-cyan-400"}`} style={{ width: `${pct}%` }} /></div></div>
                     {powerDraw != null && powerLimit != null ? <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">功耗</span><span className="text-white font-bold font-mono">{powerDraw.toFixed(1)}W / {powerLimit}W</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-amber-500/70 rounded-full" style={{ width: `${Math.min(100, (powerDraw / powerLimit) * 100)}%` }} /></div></div> : null}
                   </div>
-                  <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+                  <div className="flex items-center justify-center">
+                    <ArcGauge value={util} size={148} color="auto" label={String(util)} sublabel="GPU UTIL" />
+                  </div>
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-x-6 gap-y-5">
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">TEMP</span><span className="text-[16px] font-bold font-mono text-white">{temp != null ? `${temp}°C` : "—"}</span></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">POWER</span><span className="text-[16px] font-bold font-mono text-white">{powerDraw != null ? `${powerDraw.toFixed(0)}W` : "—"}</span></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">FAN</span><span className="text-[16px] font-bold font-mono text-white">{fan != null ? `${fan}%` : "N/A"}</span></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">CLOCK</span><span className="text-[16px] font-bold font-mono text-white">{clockCur ?? "—"} <span className="text-[11px] text-gray-600">MHz</span></span></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">BOOST</span><span className="text-[16px] font-bold font-mono text-white">{clockMax ?? "—"} <span className="text-[11px] text-gray-600">MHz</span></span></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">UTIL</span><span className="text-[16px] font-bold font-mono text-white">{util}%</span></div>
-                  </div>
                 </div>
                 <div className="mt-5 grid grid-cols-4 gap-3">
                   <MetricCell label="Driver" value={nvidia.driver_version ?? "—"} />
@@ -519,11 +565,57 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
   );
 }
 
+function SummaryPanel({
+  eyebrow,
+  title,
+  subtitle,
+  aside,
+  tone,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  aside?: JSX.Element;
+  tone: "cyan" | "violet" | "emerald" | "amber";
+}): JSX.Element {
+  const glow =
+    tone === "violet"
+      ? "from-violet-500/12"
+      : tone === "emerald"
+        ? "from-emerald-500/12"
+        : tone === "amber"
+          ? "from-amber-500/12"
+          : "from-cyan-500/12";
+  return (
+    <div className={`rounded-2xl border border-white/[0.04] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_42%),linear-gradient(180deg,rgba(16,18,23,0.98)_0%,rgba(10,11,14,0.98)_100%)] px-5 py-5 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.4)]`}>
+      <div className={`pointer-events-none absolute hidden`} />
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">{eyebrow}</div>
+          <div className="mt-2 text-[28px] font-bold font-mono leading-none text-white">{title}</div>
+          <div className="mt-2 text-[12px] text-gray-500">{subtitle}</div>
+        </div>
+        {aside ? <div className={`shrink-0 rounded-2xl bg-gradient-to-br ${glow} to-transparent p-1`}>{aside}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function MetricCell({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <div className="min-w-0 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
       <span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">{label}</span>
       <span className="block break-all text-[13px] font-bold font-mono leading-snug text-white">{value}</span>
+    </div>
+  );
+}
+
+function InlineTag({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="rounded-full border border-white/8 bg-white/[0.02] px-3 py-1 text-[10px] font-mono text-gray-300">
+      <span className="text-gray-500">{label}</span>
+      <span className="mx-1 text-gray-600">/</span>
+      <span className="text-white">{value}</span>
     </div>
   );
 }

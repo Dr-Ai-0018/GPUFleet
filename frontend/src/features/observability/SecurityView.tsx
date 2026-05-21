@@ -3,6 +3,7 @@ import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { StatusPill } from "../../ui/StatusPill";
 import { formatTime, prettyJson } from "../../lib/format";
+import { RingGauge } from "../../ui/RingGauge";
 
 const cardCls = "rounded-xl transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
 const inputCls = "bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-1.5 text-xs text-gray-300 outline-none focus:border-cyan-500/30 transition-all";
@@ -14,6 +15,8 @@ export function SecurityView(): JSX.Element {
   const [tab, setTab] = useState<TabKey>(store.warnings.length > 0 ? "warnings" : "audits");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
+  const totalSignals = store.warnings.length + store.audits.length;
+  const warningRate = totalSignals > 0 ? Math.round((store.warnings.length / totalSignals) * 100) : 0;
 
   const filteredWarnings = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -34,6 +37,29 @@ export function SecurityView(): JSX.Element {
         <div className="flex items-center gap-4 text-xs">
           <span className={store.warnings.length > 0 ? "text-red-400 font-bold" : "text-gray-500"}>{store.warnings.length} 告警</span>
           <span className="text-gray-500">{store.audits.length} 事件</span>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr_1fr]">
+        <div className={`${cardCls} px-5 py-5`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Security Posture</div>
+              <div className="mt-2 text-4xl font-bold font-mono text-white">{totalSignals}</div>
+              <div className="mt-1 text-[12px] text-gray-500">warnings and audit signals in buffer</div>
+            </div>
+            <RingGauge value={warningRate} size={90} label={String(warningRate)} sublabel="WARN" />
+          </div>
+        </div>
+        <div className={`${cardCls} px-5 py-5`}>
+          <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Warning Feed</div>
+          <div className="mt-2 text-3xl font-bold font-mono text-red-300">{store.warnings.length}</div>
+          <div className="mt-1 text-[12px] text-gray-500">danger-level events requiring review</div>
+        </div>
+        <div className={`${cardCls} px-5 py-5`}>
+          <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Audit Trail</div>
+          <div className="mt-2 text-3xl font-bold font-mono text-cyan-300">{store.audits.length}</div>
+          <div className="mt-1 text-[12px] text-gray-500">operator actions captured for traceability</div>
         </div>
       </div>
 

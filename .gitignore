@@ -59,3 +59,5 @@ node_agent/src/*.egg-info/
 .mypy_cache/
 
 references/
+
+.claude/

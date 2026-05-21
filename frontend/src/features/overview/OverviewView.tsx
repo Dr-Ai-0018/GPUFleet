@@ -7,6 +7,10 @@ import { CanvasRenderer } from "echarts/renderers";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { navigate } from "../../lib/routing";
 import { StatusPill } from "../../ui/StatusPill";
+import { RingGauge } from "../../ui/RingGauge";
+import { ArcGauge } from "../../ui/ArcGauge";
+import { BlockProgress } from "../../ui/BlockProgress";
+import { MiniSparkline } from "../../ui/MiniSparkline";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative, bytesToReadable } from "../../lib/format";
 
@@ -49,6 +53,14 @@ export function OverviewView(): JSX.Element {
   const succeededTasks = (taskCounts as Record<string, number>).succeeded ?? 0;
   const failedTasks = ((taskCounts as Record<string, number>).failed ?? 0) + ((taskCounts as Record<string, number>).timeout ?? 0);
   const runningTasks = ((taskCounts as Record<string, number>).running ?? 0) + ((taskCounts as Record<string, number>).claimed ?? 0);
+  const onlineRate = nodeCounts.total > 0 ? Math.round((nodeCounts.online / nodeCounts.total) * 100) : 0;
+  const throughputSeries = overview?.task_throughput_24h ?? Array(24).fill(0);
+  const nodeDist = [
+    { label: "在线", value: nodeCounts.online, color: "#0ff0b3" },
+    { label: "离线", value: nodeCounts.offline, color: "#f0b040" },
+    { label: "停用", value: nodeCounts.disabled, color: "#8b949e" },
+    { label: "未上线", value: nodeCounts.never_seen, color: "#7c3aed" },
+  ];
 
   // Chart: throughput timeline
   const lineOption = useMemo(() => ({
@@ -94,22 +106,87 @@ export function OverviewView(): JSX.Element {
         <span className="text-[12px] font-mono text-cyan-400">{overview?.server_time ? beijingDateTimeFormatter.format(new Date(overview.server_time)) : "—"}</span>
       </div>
 
-      {/* KPI Grid — bigger numbers */}
-      <div className="grid grid-cols-6 gap-4">
-        {[
-          { label: "节点总数", val: nodeCounts.total },
-          { label: "在线节点", val: nodeCounts.online, color: "text-emerald-400" },
-          { label: "GPU 总数", val: gpuStats.totalGpus },
-          { label: "GPU 利用率", val: `${gpuStats.avgUtil}%`, progress: gpuStats.avgUtil },
-          { label: "运行中任务", val: runningTasks, color: "text-cyan-400" },
-          { label: "安全告警", val: store.warnings.length, color: store.warnings.length > 0 ? "text-red-400" : undefined },
-        ].map((stat, i) => (
-          <div key={i} className={`${sectionCls} py-5 px-5`}>
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider font-mono mb-3">{stat.label}</div>
-            <div className={`text-3xl font-bold font-mono tracking-tight ${stat.color || "text-white"}`}>{stat.val}</div>
-            {stat.progress !== undefined ? <div className="w-full bg-white/5 h-1.5 rounded-full mt-3 overflow-hidden"><div className="bg-cyan-500 h-1.5 rounded-full" style={{ width: `${stat.progress}%` }} /></div> : null}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.35fr_1fr_1fr]">
+        <div className={`${sectionCls} overflow-hidden px-6 py-5`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">节点总览</p>
+              <h2 className="mt-2 text-4xl font-bold tracking-tight text-white">{nodeCounts.total}</h2>
+              <p className="mt-1 text-[12px] text-gray-500">Fleet nodes currently registered</p>
+            </div>
+            <RingGauge value={onlineRate} size={92} label={String(onlineRate)} sublabel="ONLINE" />
           </div>
-        ))}
+          <div className="mt-5 space-y-3">
+            {nodeDist.map((item) => {
+              const width = nodeCounts.total > 0 ? (item.value / nodeCounts.total) * 100 : 0;
+              return (
+                <div key={item.label}>
+                  <div className="mb-1 flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-gray-400">{item.label}</span>
+                    <span className="text-white">{item.value}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/5">
+                    <div className="h-full rounded-full" style={{ width: `${width}%`, background: item.color, boxShadow: `0 0 12px ${item.color}55` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={`${sectionCls} px-5 py-5`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">GPU Cluster</div>
+              <div className="mt-2 text-3xl font-bold font-mono text-white">{gpuStats.totalGpus}</div>
+              <div className="mt-1 text-[12px] text-gray-500">active accelerators</div>
+            </div>
+            <ArcGauge value={gpuStats.avgUtil} size={112} color="auto" label={String(gpuStats.avgUtil)} sublabel="AVG UTIL" />
+          </div>
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-mono">
+              <span className="text-gray-500">VRAM footprint</span>
+              <span className="text-white">{gpuStats.usedVram}/{gpuStats.totalVram} MB</span>
+            </div>
+            <BlockProgress value={gpuStats.totalVram > 0 ? (gpuStats.usedVram / gpuStats.totalVram) * 100 : 0} blocks={18} />
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+              <div className="text-[10px] font-mono uppercase text-gray-500">Total</div>
+              <div className="mt-1 text-[15px] font-bold font-mono text-white">{bytesToReadable(gpuStats.totalVram * 1024 * 1024)}</div>
+            </div>
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+              <div className="text-[10px] font-mono uppercase text-gray-500">Used</div>
+              <div className="mt-1 text-[15px] font-bold font-mono text-cyan-300">{bytesToReadable(gpuStats.usedVram * 1024 * 1024)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className={`${sectionCls} px-5 py-5`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Task Pulse</div>
+              <div className="mt-2 text-3xl font-bold font-mono text-white">{runningTasks}</div>
+              <div className="mt-1 text-[12px] text-gray-500">running now</div>
+            </div>
+            <div className="rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1 text-[11px] font-mono text-cyan-300 shadow-[0_0_24px_rgba(15,240,179,0.08)]">
+              {store.warnings.length > 0 ? `${store.warnings.length} warnings` : "secure"}
+            </div>
+          </div>
+          <div className="mt-5">
+            <MiniSparkline data={throughputSeries} width={260} height={56} className="w-full" />
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+              <div className="text-[10px] font-mono uppercase text-gray-500">Succeeded</div>
+              <div className="mt-1 text-[15px] font-bold font-mono text-emerald-300">{succeededTasks}</div>
+            </div>
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+              <div className="text-[10px] font-mono uppercase text-gray-500">Failed</div>
+              <div className="mt-1 text-[15px] font-bold font-mono text-red-300">{failedTasks}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Row: Throughput + Task Status */}
@@ -185,8 +262,8 @@ export function OverviewView(): JSX.Element {
                   <div className="w-[140px] shrink-0"><span className="text-[13px] text-white font-medium">{node.display_name}</span></div>
                   <div className="flex-1 grid grid-cols-3 gap-4">
                     <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">CPU</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full" style={{ width: `${cpuPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(cpuPct)}%</span></div>
-                    <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">MEM</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${memPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(memPct)}%</span></div>
-                    <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">GPU</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-amber-500 rounded-full" style={{ width: `${gpuPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(gpuPct)}%</span></div>
+                    <div className="space-y-1"><span className="text-[10px] text-gray-500 font-mono">MEM</span><BlockProgress value={memPct} blocks={10} height={7} color="auto" /><div className="text-right text-[11px] font-mono text-gray-400">{Math.round(memPct)}%</div></div>
+                    <div className="flex items-center justify-between gap-3"><div><span className="text-[10px] text-gray-500 font-mono block">GPU</span><span className="text-[11px] font-mono text-gray-400">{Math.round(gpuPct)}%</span></div><ArcGauge value={gpuPct} size={74} color="auto" label={String(Math.round(gpuPct))} /></div>
                   </div>
                 </div>
               );
