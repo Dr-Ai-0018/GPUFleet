@@ -20,7 +20,7 @@ from app.schemas import (
     NodeStatusPreview,
     NodeUpdateRequest,
 )
-from app.security import derive_node_signing_key, generate_node_secret
+from app.security import derive_node_signing_key, encrypt_node_signing_key, generate_node_secret
 
 router = APIRouter(prefix="/api/admin/nodes", tags=["admin-nodes"])
 
@@ -172,7 +172,8 @@ def create_node(
 ) -> NodeCreateResponse:
     now_iso = utc_now_iso()
     node_secret = generate_node_secret()
-    derived_key = derive_node_signing_key(node_secret)
+    signing_key = derive_node_signing_key(node_secret)
+    encrypted_signing_key = encrypt_node_signing_key(request.app.state.settings, signing_key)
 
     with db.connect() as conn:
         node_columns = db.get_table_columns(conn, "nodes")
@@ -190,16 +191,17 @@ def create_node(
             conn.execute(
                 """
                 INSERT INTO nodes (
-                    node_id, display_name, node_secret_hash, node_signing_key, node_type, os_type, hostname,
+                    node_id, display_name, node_secret_hash, node_signing_key, encrypted_signing_key, node_type, os_type, hostname,
                     heartbeat_interval_sec, allowed_workdirs_json, tags_json,
                     is_enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     payload.node_id,
                     payload.display_name,
-                    derived_key,
-                    derived_key,
+                    None,
+                    "",
+                    encrypted_signing_key,
                     payload.node_type,
                     payload.os_type,
                     payload.hostname,
@@ -214,15 +216,16 @@ def create_node(
             conn.execute(
                 """
                 INSERT INTO nodes (
-                    node_id, display_name, node_signing_key, node_type, os_type, hostname,
+                    node_id, display_name, node_signing_key, encrypted_signing_key, node_type, os_type, hostname,
                     heartbeat_interval_sec, allowed_workdirs_json, tags_json,
                     is_enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     payload.node_id,
                     payload.display_name,
-                    derived_key,
+                    "",
+                    encrypted_signing_key,
                     payload.node_type,
                     payload.os_type,
                     payload.hostname,
@@ -413,7 +416,8 @@ def reset_node_secret(
 ) -> NodeCreateResponse:
     now_iso = utc_now_iso()
     node_secret = generate_node_secret()
-    derived_key = derive_node_signing_key(node_secret)
+    signing_key = derive_node_signing_key(node_secret)
+    encrypted_signing_key = encrypt_node_signing_key(request.app.state.settings, signing_key)
 
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
@@ -423,13 +427,17 @@ def reset_node_secret(
         node_columns = db.get_table_columns(conn, "nodes")
         if "node_secret_hash" in node_columns:
             conn.execute(
-                "UPDATE nodes SET node_secret_hash = ?, node_signing_key = ?, updated_at = ? WHERE node_id = ?",
-                (derived_key, derived_key, now_iso, node_id),
+                """
+                UPDATE nodes
+                SET node_secret_hash = ?, node_signing_key = ?, encrypted_signing_key = ?, updated_at = ?
+                WHERE node_id = ?
+                """,
+                (None, "", encrypted_signing_key, now_iso, node_id),
             )
         else:
             conn.execute(
-                "UPDATE nodes SET node_signing_key = ?, updated_at = ? WHERE node_id = ?",
-                (derived_key, now_iso, node_id),
+                "UPDATE nodes SET node_signing_key = ?, encrypted_signing_key = ?, updated_at = ? WHERE node_id = ?",
+                ("", encrypted_signing_key, now_iso, node_id),
             )
         conn.execute(
             """

@@ -23,7 +23,7 @@ from app.schemas import (
     TaskControlCommand,
     TaskEnvelope,
 )
-from app.security import hash_request_body, verify_node_request_signature
+from app.security import decrypt_node_signing_key, hash_request_body, verify_node_request_signature
 from app.task_utils import RESULT_ACCEPTING_TASK_STATUSES, TASK_EVENT_TRANSITIONS, TERMINAL_TASK_STATUSES
 
 router = APIRouter(prefix="/api/node", tags=["node"])
@@ -100,8 +100,25 @@ def _authenticate_node(
                 detail="Nonce already used",
             )
 
+        stored_signing_key = node["node_signing_key"] or ""
+        encrypted_signing_key = node["encrypted_signing_key"] or ""
+        if encrypted_signing_key:
+            try:
+                stored_signing_key = decrypt_node_signing_key(settings, encrypted_signing_key)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Node signing key unavailable",
+                ) from exc
+
+        if not stored_signing_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Node signing key unavailable",
+            )
+
         if not verify_node_request_signature(
-            node["node_signing_key"],
+            stored_signing_key,
             node_id,
             timestamp,
             nonce,

@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+from app.config import get_settings
+from app.security import encrypt_node_signing_key
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -54,6 +56,7 @@ class Database:
                     node_id TEXT NOT NULL UNIQUE,
                     display_name TEXT NOT NULL,
                     node_signing_key TEXT,
+                    encrypted_signing_key TEXT,
                     node_type TEXT NOT NULL,
                     os_type TEXT,
                     hostname TEXT,
@@ -197,27 +200,36 @@ class Database:
 
         if "node_signing_key" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN node_signing_key TEXT")
+        if "encrypted_signing_key" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN encrypted_signing_key TEXT")
         if "first_seen_at" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN first_seen_at TEXT")
         if "last_boot_id" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN last_boot_id TEXT")
-
+        settings = get_settings()
+        select_columns = ["id", "node_signing_key", "encrypted_signing_key"]
         if "node_secret_hash" in node_columns:
-            conn.execute(
-                """
-                UPDATE nodes
-                SET node_signing_key = COALESCE(node_signing_key, node_secret_hash)
-                WHERE node_signing_key IS NULL OR node_signing_key = ''
-                """
-            )
-
-        conn.execute(
-            """
-            UPDATE nodes
-            SET node_signing_key = ''
-            WHERE node_signing_key IS NULL
-            """
-        )
+            select_columns.append("node_secret_hash")
+        rows = conn.execute(f"SELECT {', '.join(select_columns)} FROM nodes").fetchall()
+        for row in rows:
+            legacy_signing_key = row["node_secret_hash"] if "node_secret_hash" in row.keys() else ""
+            plaintext_signing_key = row["node_signing_key"] or legacy_signing_key or ""
+            encrypted_signing_key = row["encrypted_signing_key"] or ""
+            if plaintext_signing_key and not encrypted_signing_key:
+                encrypted_signing_key = encrypt_node_signing_key(settings, plaintext_signing_key)
+            if plaintext_signing_key != "" or encrypted_signing_key != row["encrypted_signing_key"]:
+                conn.execute(
+                    """
+                    UPDATE nodes
+                    SET node_signing_key = ?, encrypted_signing_key = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        "",
+                        encrypted_signing_key,
+                        row["id"],
+                    ),
+                )
 
     def trim_node_status_history(self, node_id: str, keep: int) -> None:
         with self.connect() as conn:

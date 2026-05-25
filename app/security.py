@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import secrets
@@ -59,6 +60,52 @@ def generate_node_secret() -> str:
 
 def derive_node_signing_key(node_secret: str) -> str:
     return hashlib.sha256(node_secret.encode("utf-8")).hexdigest()
+
+
+def _node_encryption_key(settings: Settings) -> bytes:
+    secret = settings.node_key_encryption_secret or settings.jwt_secret
+    return hashlib.sha256(secret.encode("utf-8")).digest()
+
+
+def _xor_with_keystream(payload: bytes, key: bytes, nonce: bytes) -> bytes:
+    output = bytearray()
+    counter = 0
+    while len(output) < len(payload):
+        block = hmac.new(
+            key,
+            nonce + counter.to_bytes(4, "big"),
+            hashlib.sha256,
+        ).digest()
+        output.extend(block)
+        counter += 1
+    return bytes(a ^ b for a, b in zip(payload, output[: len(payload)]))
+
+
+def encrypt_node_signing_key(settings: Settings, signing_key: str) -> str:
+    key = _node_encryption_key(settings)
+    nonce = secrets.token_bytes(16)
+    plaintext = signing_key.encode("utf-8")
+    ciphertext = _xor_with_keystream(plaintext, key, nonce)
+    tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
+    envelope = nonce + ciphertext + tag
+    return "v1:" + base64.urlsafe_b64encode(envelope).decode("ascii")
+
+
+def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> str:
+    if not encrypted_signing_key.startswith("v1:"):
+        raise ValueError("Unsupported encrypted signing key format")
+    raw = base64.urlsafe_b64decode(encrypted_signing_key[3:].encode("ascii"))
+    if len(raw) < 48:
+        raise ValueError("Encrypted signing key payload too short")
+    nonce = raw[:16]
+    tag = raw[-32:]
+    ciphertext = raw[16:-32]
+    key = _node_encryption_key(settings)
+    expected_tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
+    if not hmac.compare_digest(expected_tag, tag):
+        raise ValueError("Encrypted signing key authentication failed")
+    plaintext = _xor_with_keystream(ciphertext, key, nonce)
+    return plaintext.decode("utf-8")
 
 
 def hash_request_body(body: bytes) -> str:

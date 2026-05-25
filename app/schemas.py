@@ -95,7 +95,7 @@ class NodeOnboardingPackage(BaseModel):
 
 class NodeCreateResponse(NodeResponse):
     node_secret: str
-    signing_hint: str = "Agent should locally derive sha256(node_secret) and use it as the HMAC signing key."
+    signing_hint: str = "Agent should locally derive sha256(node_secret) and use it as the HMAC signing key; the server stores only an encrypted form."
     onboarding: NodeOnboardingPackage
 
 

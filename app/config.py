@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = 60 * 24 * 7
+    node_key_encryption_secret: str = ""
 
     default_admin_username: str = "admin"
     default_admin_password: str = _SENTINEL
