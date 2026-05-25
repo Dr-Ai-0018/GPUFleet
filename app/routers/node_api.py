@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi.util import get_ipaddr
 
 from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_db, get_settings_dep
+from app.routers.admin_auth import limiter
 from app.schemas import (
     HeartbeatRequest,
     HeartbeatResponse,
@@ -25,6 +27,13 @@ from app.security import hash_request_body, verify_node_request_signature
 from app.task_utils import RESULT_ACCEPTING_TASK_STATUSES, TASK_EVENT_TRANSITIONS, TERMINAL_TASK_STATUSES
 
 router = APIRouter(prefix="/api/node", tags=["node"])
+
+
+def _node_rate_limit_key(request: Request) -> str:
+    node_id = request.headers.get("X-Node-Id")
+    if node_id:
+        return node_id
+    return f"unknown:{get_ipaddr(request)}"
 
 
 def _parse_timestamp(raw_timestamp: str) -> datetime:
@@ -213,6 +222,7 @@ def _sanitize_artifact_name(name: str) -> str:
 
 
 @router.post("/heartbeat", response_model=HeartbeatResponse)
+@limiter.limit("60/minute", key_func=_node_rate_limit_key)
 async def heartbeat(
     request: Request,
     db: Annotated[Database, Depends(get_db)],

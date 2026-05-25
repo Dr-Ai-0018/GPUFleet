@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_current_admin, get_db
+from app.routers.admin_auth import limiter
 from app.schemas import (
     AdminTaskArtifactView,
     AdminTaskCreateRequest,
@@ -115,6 +116,7 @@ def _load_artifacts(conn: object, task_id: str) -> list[AdminTaskArtifactView]:
 
 
 @router.post("", response_model=AdminTaskDetail, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 def create_task(
     payload: AdminTaskCreateRequest,
     request: Request,
@@ -286,6 +288,7 @@ def get_task(
 
 
 @router.post("/{task_id}/cancel", response_model=AdminTaskDetail)
+@limiter.limit("30/minute")
 def cancel_task(
     task_id: str,
     request: Request,

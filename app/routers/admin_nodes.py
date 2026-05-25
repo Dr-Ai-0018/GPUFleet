@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_current_admin, get_db
+from app.routers.admin_auth import limiter
 from app.schemas import (
     NodeOnboardingPackage,
     NodeCreateRequest,
@@ -162,6 +163,7 @@ def list_nodes(
 
 
 @router.post("", response_model=NodeCreateResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 def create_node(
     payload: NodeCreateRequest,
     request: Request,
@@ -276,6 +278,7 @@ def get_node(
 
 
 @router.patch("/{node_id}", response_model=NodeResponse)
+@limiter.limit("30/minute")
 def update_node(
     node_id: str,
     payload: NodeUpdateRequest,
@@ -343,6 +346,7 @@ def update_node(
 
 
 @router.post("/{node_id}/disable", response_model=NodeResponse)
+@limiter.limit("30/minute")
 def disable_node(
     node_id: str,
     request: Request,
@@ -353,6 +357,7 @@ def disable_node(
 
 
 @router.post("/{node_id}/enable", response_model=NodeResponse)
+@limiter.limit("30/minute")
 def enable_node(
     node_id: str,
     request: Request,
@@ -399,6 +404,7 @@ def _set_node_enabled(
 
 
 @router.post("/{node_id}/reset-secret", response_model=NodeCreateResponse)
+@limiter.limit("30/minute")
 def reset_node_secret(
     node_id: str,
     request: Request,
@@ -464,6 +470,7 @@ def reset_node_secret(
 
 
 @router.delete("/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 def delete_node(
     node_id: str,
     request: Request,
