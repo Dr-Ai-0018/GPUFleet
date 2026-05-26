@@ -48,7 +48,8 @@ class Database:
                     is_active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    last_login_at TEXT
+                    last_login_at TEXT,
+                    tokens_invalidated_at TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS nodes (
@@ -241,6 +242,13 @@ class Database:
         }
         if "result_locked_at" not in task_columns:
             conn.execute("ALTER TABLE tasks ADD COLUMN result_locked_at TEXT")
+
+        admin_columns = {
+            row["name"]: row
+            for row in conn.execute("PRAGMA table_info(admins)").fetchall()
+        }
+        if "tokens_invalidated_at" not in admin_columns:
+            conn.execute("ALTER TABLE admins ADD COLUMN tokens_invalidated_at TEXT")
 
     def trim_node_status_history(self, node_id: str, keep: int) -> None:
         with self.connect() as conn:

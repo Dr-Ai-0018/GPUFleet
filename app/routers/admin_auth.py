@@ -8,6 +8,7 @@ from slowapi.util import get_remote_address
 
 from app.config import Settings
 from app.db import Database, utc_now_iso
+from app.deps import _token_invalidated
 from app.deps import get_current_admin, get_db, get_settings_dep
 from app.schemas import AdminProfile, LoginRequest, RefreshRequest, TokenPair
 from app.security import (
@@ -68,6 +69,7 @@ def refresh(
         ) from exc
 
     username = token_payload.get("sub")
+    token_iat = token_payload.get("iat")
     with db.connect() as conn:
         admin = conn.execute(
             "SELECT * FROM admins WHERE username = ? AND is_active = 1",
@@ -78,6 +80,12 @@ def refresh(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Admin account not found",
+        )
+
+    if _token_invalidated(token_iat, admin["tokens_invalidated_at"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been invalidated",
         )
 
     return TokenPair(
