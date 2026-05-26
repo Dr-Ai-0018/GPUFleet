@@ -64,6 +64,8 @@ class Database:
                     heartbeat_interval_sec INTEGER NOT NULL DEFAULT 5,
                     allowed_workdirs_json TEXT NOT NULL DEFAULT '[]',
                     tags_json TEXT NOT NULL DEFAULT '[]',
+                    allow_shell INTEGER NOT NULL DEFAULT 0,
+                    allow_modal INTEGER NOT NULL DEFAULT 0,
                     is_enabled INTEGER NOT NULL DEFAULT 1,
                     first_seen_at TEXT,
                     last_seen_at TEXT,
@@ -108,6 +110,12 @@ class Database:
                     started_at TEXT,
                     finished_at TEXT,
                     result_locked_at TEXT,
+                    review_stage INTEGER,
+                    review_decision TEXT,
+                    review_detail TEXT,
+                    review_admin_id INTEGER,
+                    review_started_at TEXT,
+                    review_finished_at TEXT,
                     FOREIGN KEY(node_id) REFERENCES nodes(node_id) ON DELETE CASCADE,
                     FOREIGN KEY(created_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
                 );
@@ -185,12 +193,45 @@ class Database:
                     FOREIGN KEY(node_id) REFERENCES nodes(node_id) ON DELETE CASCADE
                 );
 
+                CREATE TABLE IF NOT EXISTS task_reviews (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    stage INTEGER NOT NULL,
+                    reviewer_type TEXT NOT NULL,
+                    reviewer_id TEXT,
+                    decision TEXT NOT NULL,
+                    risk_score REAL,
+                    risk_factors_json TEXT,
+                    reasoning TEXT,
+                    duration_sec REAL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS alert_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alert_type TEXT NOT NULL,
+                    severity TEXT NOT NULL DEFAULT 'warning',
+                    title TEXT NOT NULL,
+                    summary TEXT,
+                    detail_json TEXT,
+                    target_type TEXT,
+                    target_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'unread',
+                    actioned_by INTEGER,
+                    actioned_at TEXT,
+                    expires_at TEXT,
+                    created_at TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_nodes_last_seen_at ON nodes(last_seen_at);
                 CREATE INDEX IF NOT EXISTS idx_snapshots_node_id_reported_at ON node_status_snapshots(node_id, reported_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_tasks_node_status_created_at ON tasks(node_id, status, created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_task_attempts_task_id_id ON task_attempts(task_id, id DESC);
                 CREATE INDEX IF NOT EXISTS idx_nonces_node_id_expires_at ON nonces(node_id, expires_at);
                 CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events(created_at);
+                CREATE INDEX IF NOT EXISTS idx_task_reviews_task_id ON task_reviews(task_id);
+                CREATE INDEX IF NOT EXISTS idx_alert_messages_status_created ON alert_messages(status, created_at DESC);
                 """
             )
             self._migrate_schema(conn)
@@ -211,6 +252,10 @@ class Database:
             conn.execute("ALTER TABLE nodes ADD COLUMN last_request_ts TEXT")
         if "last_boot_id" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN last_boot_id TEXT")
+        if "allow_shell" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN allow_shell INTEGER NOT NULL DEFAULT 0")
+        if "allow_modal" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN allow_modal INTEGER NOT NULL DEFAULT 0")
         settings = get_settings()
         select_columns = ["id", "node_signing_key", "encrypted_signing_key"]
         if "node_secret_hash" in node_columns:
@@ -242,6 +287,18 @@ class Database:
         }
         if "result_locked_at" not in task_columns:
             conn.execute("ALTER TABLE tasks ADD COLUMN result_locked_at TEXT")
+        if "review_stage" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN review_stage INTEGER")
+        if "review_decision" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN review_decision TEXT")
+        if "review_detail" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN review_detail TEXT")
+        if "review_admin_id" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN review_admin_id INTEGER")
+        if "review_started_at" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN review_started_at TEXT")
+        if "review_finished_at" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN review_finished_at TEXT")
 
         admin_columns = {
             row["name"]: row

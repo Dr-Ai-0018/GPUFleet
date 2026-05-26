@@ -18,6 +18,7 @@ def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str 
         "os_type": "linux",
         "heartbeat_interval_sec": 5,
         "allowed_workdirs": ["/tmp/work"],
+        "allow_shell": True,
     })
     assert resp.status_code in (200, 201), resp.text
     return resp.json()
@@ -27,7 +28,7 @@ def _create_task(
     client: TestClient,
     auth_headers: dict[str, str],
     node_id: str = "test-node-1",
-    task_type: str = "shell",
+    task_type: str = "health_check",
     payload: dict | None = None,
     timeout_sec: int | None = None,
 ) -> dict:
@@ -35,7 +36,7 @@ def _create_task(
     body = {
         "node_id": node_id,
         "type": task_type,
-        "payload": payload or {"command": "echo hello"},
+        "payload": payload or ({} if task_type == "health_check" else {"command": "echo hello"}),
         "workdir": "/tmp/work",
     }
     if timeout_sec is not None:
@@ -50,7 +51,7 @@ class TestTaskCreate:
         _create_node(client, auth_headers)
         task = _create_task(client, auth_headers)
         assert task["status"] == "pending"
-        assert task["type"] == "shell"
+        assert task["type"] == "health_check"
         assert task["node_id"] == "test-node-1"
 
     def test_create_task_invalid_type(self, client: TestClient, auth_headers: dict[str, str]) -> None:

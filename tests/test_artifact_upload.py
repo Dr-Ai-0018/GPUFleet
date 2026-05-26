@@ -19,6 +19,7 @@ def _setup_node_and_task(client: TestClient, auth_headers: dict[str, str]) -> tu
         "os_type": "linux",
         "heartbeat_interval_sec": 5,
         "allowed_workdirs": ["/tmp"],
+        "allow_shell": True,
     })
     assert resp.status_code == 201
     node_secret = resp.json()["node_secret"]

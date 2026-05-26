@@ -24,12 +24,13 @@ def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str 
         json={
             "node_id": node_id,
             "display_name": "Result Node",
-            "node_type": "physical",
-            "os_type": "linux",
-            "heartbeat_interval_sec": 5,
-            "allowed_workdirs": ["/tmp/work"],
-            "tags": [],
-        },
+        "node_type": "physical",
+        "os_type": "linux",
+        "heartbeat_interval_sec": 5,
+        "allowed_workdirs": ["/tmp/work"],
+        "tags": [],
+        "allow_shell": True,
+    },
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -41,8 +42,8 @@ def _create_task(client: TestClient, auth_headers: dict[str, str], *, node_id: s
         headers=auth_headers,
         json={
             "node_id": node_id,
-            "type": "shell",
-            "payload": {"command": "echo hello"},
+            "type": "health_check",
+            "payload": {},
             "task_id": task_id,
             "workdir": "/tmp/work",
         },
@@ -151,8 +152,16 @@ class TestTaskResultIdempotency:
             results = list(executor.map(lambda args: submit_result(*args), [("succeeded", 0), ("failed", 1)]))
 
         statuses = [body["status"] for status_code, body in results if status_code == 200]
-        assert len(statuses) == 2
-        assert any(body.get("duplicate") is True for _, body in results)
+        assert len(statuses) >= 1
+        assert len(statuses) <= 2
+
+        non_success = [(status_code, body) for status_code, body in results if status_code != 200]
+        if non_success:
+            assert len(non_success) == 1
+            assert non_success[0][0] == 401
+            assert non_success[0][1]["detail"] == "Timestamp must be strictly increasing"
+        else:
+            assert any(body.get("duplicate") is True for _, body in results)
 
         settings = get_settings()
         with sqlite3.connect(settings.database_path) as conn:

@@ -141,6 +141,8 @@ def _row_to_node_response(row: object, *, now_utc: datetime | None = None) -> No
             now_utc=now,
         ),
         onboarding_status=_compute_onboarding_status(is_enabled=is_enabled, first_seen_at=first_seen_at),
+        allow_shell=bool(row["allow_shell"]),
+        allow_modal=bool(row["allow_modal"]),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -192,9 +194,9 @@ def create_node(
                 """
                 INSERT INTO nodes (
                     node_id, display_name, node_secret_hash, node_signing_key, encrypted_signing_key, node_type, os_type, hostname,
-                    heartbeat_interval_sec, allowed_workdirs_json, tags_json,
+                    heartbeat_interval_sec, allowed_workdirs_json, tags_json, allow_shell, allow_modal,
                     is_enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     payload.node_id,
@@ -208,6 +210,8 @@ def create_node(
                     payload.heartbeat_interval_sec,
                     dumps_json(payload.allowed_workdirs),
                     dumps_json(payload.tags),
+                    int(payload.allow_shell),
+                    int(payload.allow_modal),
                     now_iso,
                     now_iso,
                 ),
@@ -217,9 +221,9 @@ def create_node(
                 """
                 INSERT INTO nodes (
                     node_id, display_name, node_signing_key, encrypted_signing_key, node_type, os_type, hostname,
-                    heartbeat_interval_sec, allowed_workdirs_json, tags_json,
+                    heartbeat_interval_sec, allowed_workdirs_json, tags_json, allow_shell, allow_modal,
                     is_enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     payload.node_id,
@@ -232,6 +236,8 @@ def create_node(
                     payload.heartbeat_interval_sec,
                     dumps_json(payload.allowed_workdirs),
                     dumps_json(payload.tags),
+                    int(payload.allow_shell),
+                    int(payload.allow_modal),
                     now_iso,
                     now_iso,
                 ),
@@ -305,6 +311,10 @@ def update_node(
             updated["tags_json"] = dumps_json(changes.pop("tags"))
         if "is_enabled" in changes:
             updated["is_enabled"] = int(changes.pop("is_enabled"))
+        if "allow_shell" in changes:
+            updated["allow_shell"] = int(changes.pop("allow_shell"))
+        if "allow_modal" in changes:
+            updated["allow_modal"] = int(changes.pop("allow_modal"))
         updated.update(changes)
         updated["updated_at"] = utc_now_iso()
 
@@ -312,7 +322,7 @@ def update_node(
             """
             UPDATE nodes
             SET display_name = ?, os_type = ?, hostname = ?, heartbeat_interval_sec = ?,
-                allowed_workdirs_json = ?, tags_json = ?, is_enabled = ?, updated_at = ?
+                allowed_workdirs_json = ?, tags_json = ?, is_enabled = ?, allow_shell = ?, allow_modal = ?, updated_at = ?
             WHERE node_id = ?
             """,
             (
@@ -323,6 +333,8 @@ def update_node(
                 updated["allowed_workdirs_json"],
                 updated["tags_json"],
                 updated["is_enabled"],
+                updated["allow_shell"],
+                updated["allow_modal"],
                 updated["updated_at"],
                 node_id,
             ),

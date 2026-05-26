@@ -56,6 +56,8 @@ class NodeCreateRequest(BaseModel):
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
     allowed_workdirs: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    allow_shell: bool = False
+    allow_modal: bool = False
 
 
 class NodeUpdateRequest(BaseModel):
@@ -66,6 +68,8 @@ class NodeUpdateRequest(BaseModel):
     allowed_workdirs: list[str] | None = None
     tags: list[str] | None = None
     is_enabled: bool | None = None
+    allow_shell: bool | None = None
+    allow_modal: bool | None = None
 
 
 class NodeResponse(BaseModel):
@@ -82,6 +86,8 @@ class NodeResponse(BaseModel):
     last_seen_at: str | None
     connection_status: Literal["online", "offline", "disabled", "never_seen"]
     onboarding_status: Literal["awaiting_first_heartbeat", "connected", "disabled"]
+    allow_shell: bool
+    allow_modal: bool
     created_at: str
     updated_at: str
 
@@ -224,6 +230,43 @@ class TaskControlCommand(BaseModel):
     kill_grace_sec: int = 15
 
 
+class ReviewResult(BaseModel):
+    """AI 审核结果摘要"""
+    stage: int
+    decision: str
+    risk_score: float | None = None
+    risk_factors: list[dict[str, Any]] = Field(default_factory=list)
+    reasoning: str | None = None
+
+
+class ReviewEscalateRequest(BaseModel):
+    note: str | None = None
+
+
+class ReviewApproveRequest(BaseModel):
+    note: str | None = None
+
+
+class ReviewRejectRequest(BaseModel):
+    note: str | None = None
+
+
+class AlertMessageView(BaseModel):
+    id: int
+    alert_type: str
+    severity: str
+    title: str
+    summary: str | None
+    detail: dict[str, Any] = Field(default_factory=dict)
+    target_type: str | None
+    target_id: str | None
+    status: str
+    actioned_by: int | None
+    actioned_at: str | None
+    expires_at: str | None
+    created_at: str
+
+
 class AdminTaskCreateRequest(BaseModel):
     node_id: str
     type: TaskType
@@ -287,6 +330,8 @@ class AdminTaskDetail(AdminTaskListItem):
     logs: list[AdminTaskLogView] = Field(default_factory=list)
     artifacts: list[AdminTaskArtifactView] = Field(default_factory=list)
     result: AdminTaskResultSummary | None = None
+    review_stage: int | None = None
+    review_decision: str | None = None
 
 
 class HeartbeatResponse(BaseModel):

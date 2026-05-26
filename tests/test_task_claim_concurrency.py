@@ -24,12 +24,13 @@ def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str 
         json={
             "node_id": node_id,
             "display_name": f"Node {node_id}",
-            "node_type": "physical",
-            "os_type": "linux",
-            "heartbeat_interval_sec": 5,
-            "allowed_workdirs": ["/tmp/work"],
-            "tags": [],
-        },
+        "node_type": "physical",
+        "os_type": "linux",
+        "heartbeat_interval_sec": 5,
+        "allowed_workdirs": ["/tmp/work"],
+        "tags": [],
+        "allow_shell": True,
+    },
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -41,15 +42,16 @@ def _create_task(
     *,
     node_id: str,
     task_id: str,
-    command: str = "echo hello",
+    task_type: str = "health_check",
+    payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
     resp = client.post(
         "/api/admin/tasks",
         headers=auth_headers,
         json={
             "node_id": node_id,
-            "type": "shell",
-            "payload": {"command": command},
+            "type": task_type,
+            "payload": payload or ({} if task_type == "health_check" else {"command": "echo hello"}),
             "task_id": task_id,
             "workdir": "/tmp/work",
         },

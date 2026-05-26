@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import json
 import secrets
 from typing import Annotated
@@ -19,6 +20,9 @@ from app.schemas import (
 )
 from app.task_utils import (
     ACTIVE_TASK_STATUSES,
+    MODAL_TASK_TYPES,
+    SHELL_TASK_TYPES,
+    TASK_TYPE_LEVEL_L2,
     TERMINAL_TASK_STATUSES,
     detect_dangerous_command,
     ensure_workdir_allowed,
@@ -124,7 +128,6 @@ def create_task(
     db: Annotated[Database, Depends(get_db)],
 ) -> AdminTaskDetail:
     now_iso = utc_now_iso()
-    warning_detail_json = dumps_json(payload.model_dump())
     with db.connect() as conn:
         node = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (payload.node_id,)).fetchone()
         if node is None:
@@ -151,36 +154,32 @@ def create_task(
                 detail="Task workdir is outside node allowed_workdirs",
             )
 
-        dangerous_match = detect_dangerous_command(payload.type, payload.payload)
-        if dangerous_match:
-            warning_excerpt = dangerous_match
-            warning_source_id = str(admin["id"])
-            warning_type = "blocked_dangerous_task_command"
-        else:
-            warning_excerpt = None
-            warning_source_id = None
-            warning_type = None
+        # --- §1.5 白名单 + 审核状态 ---
+        is_l2 = payload.type in TASK_TYPE_LEVEL_L2
+        initial_status = "pending"
+        review_stage = None
+        review_decision_val = None
+        review_detail_val = None
+        review_started_at = None
+        review_finished_at = None
 
-        if warning_excerpt is not None:
-            conn.execute(
-                """
-                INSERT INTO security_warnings (source_type, source_id, warning_type, command_excerpt, detail_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    "admin",
-                    warning_source_id,
-                    warning_type,
-                    warning_excerpt,
-                    warning_detail_json,
-                    now_iso,
-                ),
-            )
-            conn.commit()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Blocked dangerous command snippet: {warning_excerpt}",
-            )
+        if is_l2:
+            if payload.type in SHELL_TASK_TYPES and not node["allow_shell"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Node {payload.node_id} does not allow task type '{payload.type}'. Enable allow_shell first.",
+                )
+            if payload.type in MODAL_TASK_TYPES and not node["allow_modal"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Node {payload.node_id} does not allow modal_command. Enable allow_modal first.",
+                )
+
+            initial_status = "reviewing"
+            review_stage = 3
+            review_started_at = now_iso
+            review_decision_val = "pending_human"
+            review_detail_val = dumps_json({"reason": "L2 task awaiting human review"})
 
         task_id = payload.task_id or f"tsk_{secrets.token_hex(8)}"
         idempotency_key = payload.idempotency_key or f"manual-{secrets.token_hex(12)}"
@@ -195,8 +194,9 @@ def create_task(
             INSERT INTO tasks (
                 task_id, revision, idempotency_key, node_id, type, status, payload_json,
                 workdir, env_json, requested_gpu_ids_json, timeout_sec, kill_grace_sec,
-                danger_level, created_by_admin_id, created_at
-            ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                danger_level, created_by_admin_id, created_at,
+                review_stage, review_decision, review_detail, review_started_at, review_finished_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -204,6 +204,7 @@ def create_task(
                 idempotency_key,
                 payload.node_id,
                 payload.type,
+                initial_status,
                 dumps_json(payload.payload),
                 payload.workdir,
                 dumps_json(payload.env),
@@ -213,8 +214,44 @@ def create_task(
                 payload.danger_level,
                 admin["id"],
                 now_iso,
+                review_stage,
+                review_decision_val,
+                review_detail_val,
+                review_started_at,
+                review_finished_at,
             ),
         )
+        if initial_status == "reviewing":
+            alert_detail = {
+                "task_id": task_id,
+                "task_type": payload.type,
+                "node_id": payload.node_id,
+                "command": payload.payload.get("command") or payload.payload.get("script", ""),
+                "env": payload.env,
+                "payload": payload.payload,
+                "admin_username": admin["username"],
+                "dangerous_match": detect_dangerous_command(payload.type, payload.payload),
+            }
+            expires_at = (datetime.now(UTC) + timedelta(minutes=30)).replace(microsecond=0).isoformat()
+            conn.execute(
+                """
+                INSERT INTO alert_messages (alert_type, severity, title, summary, detail_json,
+                                            target_type, target_id, status, expires_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "command_review",
+                    "critical",
+                    f"危险命令审核: {payload.type} @ {payload.node_id}",
+                    f"任务 {task_id} 需要人工审核",
+                    dumps_json(alert_detail),
+                    "task",
+                    task_id,
+                    "unread",
+                    expires_at,
+                    now_iso,
+                ),
+            )
         conn.execute(
             """
             INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
@@ -242,6 +279,8 @@ def create_task(
         logs=[],
         artifacts=[],
         result=None,
+        review_stage=row["review_stage"],
+        review_decision=row["review_decision"],
     )
 
 
@@ -284,6 +323,8 @@ def get_task(
         logs=logs,
         artifacts=artifacts,
         result=result,
+        review_stage=row["review_stage"],
+        review_decision=row["review_decision"],
     )
 
 
@@ -348,6 +389,8 @@ def cancel_task(
         logs=logs,
         artifacts=artifacts,
         result=result,
+        review_stage=saved["review_stage"],
+        review_decision=saved["review_decision"],
     )
 
 
