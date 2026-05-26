@@ -575,7 +575,7 @@ async def artifact_upload(
         max_encoded_bytes = (settings.max_artifact_bytes * 4 // 3) + 4096
         if request_size > max_encoded_bytes:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail=f"Artifact request exceeds size limit ({settings.max_artifact_bytes} bytes decoded)",
             )
 
@@ -594,7 +594,7 @@ async def artifact_upload(
     estimated_decoded_size = len(payload.content_base64) * 3 // 4
     if estimated_decoded_size > settings.max_artifact_bytes:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
         )
 
@@ -605,7 +605,7 @@ async def artifact_upload(
 
     if len(content) > settings.max_artifact_bytes:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
         )
 
