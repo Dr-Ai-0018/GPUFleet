@@ -358,24 +358,11 @@ class Database:
                 LIMIT 1
             )
               AND status = 'pending'
+            RETURNING *
             """,
             (claimed_at, node_id, node_id),
         )
-        if updated.rowcount != 1:
-            return None
-
-        return conn.execute(
-            """
-            SELECT *
-            FROM tasks
-            WHERE node_id = ?
-              AND status = 'claimed'
-              AND claimed_at = ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (node_id, claimed_at),
-        ).fetchone()
+        return updated.fetchone()
 
     def sync_reported_active_task(
         self,

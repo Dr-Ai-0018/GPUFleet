@@ -94,6 +94,20 @@ def refresh(
     )
 
 
+@router.post("/logout")
+def logout(
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> dict[str, bool]:
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE admins SET tokens_invalidated_at = ?, updated_at = ? WHERE id = ?",
+            (now_iso, now_iso, admin["id"]),
+        )
+    return {"ok": True}
+
+
 @router.get("/me", response_model=AdminProfile)
 def me(admin: Annotated[object, Depends(get_current_admin)]) -> AdminProfile:
     return AdminProfile(

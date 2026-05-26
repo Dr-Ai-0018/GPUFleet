@@ -129,3 +129,28 @@ class TestMe:
         resp = client.get("/api/admin/me", headers={"Authorization": f"Bearer {admin_token}"})
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Access token has been invalidated"
+
+
+class TestLogout:
+    def test_logout_invalidates_current_access_and_refresh_tokens(self, client: TestClient) -> None:
+        login_resp = client.post("/api/admin/login", json={
+            "username": "admin",
+            "password": "test-admin-pass",
+        })
+        assert login_resp.status_code == 200
+        tokens = login_resp.json()
+        headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+        logout_resp = client.post("/api/admin/logout", headers=headers)
+        assert logout_resp.status_code == 200
+        assert logout_resp.json() == {"ok": True}
+
+        me_resp = client.get("/api/admin/me", headers=headers)
+        assert me_resp.status_code == 401
+        assert me_resp.json()["detail"] == "Access token has been invalidated"
+
+        refresh_resp = client.post("/api/admin/refresh", json={
+            "refresh_token": tokens["refresh_token"],
+        })
+        assert refresh_resp.status_code == 401
+        assert refresh_resp.json()["detail"] == "Refresh token has been invalidated"

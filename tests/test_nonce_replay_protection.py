@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import hmac
 import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.db import Database
+from app.main import app
 from app.security import build_signed_headers_for_test, derive_node_signing_key
 
 
@@ -57,8 +60,8 @@ class TestNonceReplayProtection:
         }
 
         second = client.post("/api/node/heartbeat", content=body, headers=second_headers)
-        assert second.status_code == 401
-        assert second.json()["detail"] == "Nonce already used"
+        assert second.status_code == 409
+        assert second.json()["detail"] == "Duplicate nonce"
 
     def test_timestamp_must_be_strictly_increasing(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         node = _create_node(client, auth_headers, node_id="monotonic-node")
@@ -70,11 +73,97 @@ class TestNonceReplayProtection:
         assert first.status_code == 200, first.text
 
         headers_2 = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
-        headers_2["X-Timestamp"] = headers_1["X-Timestamp"]
+        repeated_timestamp = headers_1["X-Timestamp"]
+        headers_2["X-Timestamp"] = repeated_timestamp
+        signing_key = derive_node_signing_key(node["node_secret"])
+        body_hash = hashlib.sha256(body).hexdigest()
+        message = "\n".join([node["node_id"], repeated_timestamp, headers_2["X-Nonce"], body_hash]).encode("utf-8")
+        headers_2["X-Signature"] = hmac.new(signing_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
         second = client.post("/api/node/heartbeat", content=body, headers=headers_2)
 
-        assert second.status_code == 401
+        assert second.status_code == 409
         assert second.json()["detail"] == "Timestamp must be strictly increasing"
+
+    def test_concurrent_duplicate_nonce_only_one_request_succeeds(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        node = _create_node(client, auth_headers, node_id="concurrent-nonce-node")
+        payload = {"boot_id": "boot-001", "heartbeat_interval_sec": 5}
+        body = json.dumps(payload).encode("utf-8")
+        headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
+        base_timestamp = headers["X-Timestamp"]
+        shared_nonce = headers["X-Nonce"]
+        signing_key = derive_node_signing_key(node["node_secret"])
+        body_hash = hashlib.sha256(body).hexdigest()
+        barrier = Barrier(10)
+
+        def send(index: int) -> tuple[int, dict[str, object]]:
+            timestamp = (datetime.fromisoformat(base_timestamp) + timedelta(seconds=index)).isoformat()
+            message = "\n".join([node["node_id"], timestamp, shared_nonce, body_hash]).encode("utf-8")
+            signature = hmac.new(signing_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+            request_headers = {
+                **headers,
+                "X-Timestamp": timestamp,
+                "X-Nonce": shared_nonce,
+                "X-Signature": signature,
+            }
+            barrier.wait()
+            with TestClient(app) as thread_client:
+                resp = thread_client.post("/api/node/heartbeat", content=body, headers=request_headers)
+            return resp.status_code, resp.json()
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(send, range(10)))
+
+        assert sum(status_code == 200 for status_code, _ in results) == 1
+        duplicate_failures = [body for status_code, body in results if status_code == 409]
+        assert len(duplicate_failures) == 9
+        assert all(item["detail"] == "Duplicate nonce" for item in duplicate_failures)
+
+    def test_concurrent_same_timestamp_only_one_request_succeeds(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        node = _create_node(client, auth_headers, node_id="concurrent-ts-node")
+        payload = {"boot_id": "boot-001", "heartbeat_interval_sec": 5}
+        body = json.dumps(payload).encode("utf-8")
+        barrier = Barrier(10)
+        headers_list: list[dict[str, str]] = []
+
+        for _ in range(10):
+            headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
+            headers_list.append(headers)
+
+        shared_timestamp = headers_list[0]["X-Timestamp"]
+        signing_key = derive_node_signing_key(node["node_secret"])
+        body_hash = hashlib.sha256(body).hexdigest()
+        prepared_headers: list[dict[str, str]] = []
+        for headers in headers_list:
+            nonce = headers["X-Nonce"]
+            message = "\n".join([node["node_id"], shared_timestamp, nonce, body_hash]).encode("utf-8")
+            signature = hmac.new(signing_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+            prepared_headers.append({
+                **headers,
+                "X-Timestamp": shared_timestamp,
+                "X-Signature": signature,
+            })
+
+        def send(index: int) -> tuple[int, dict[str, object]]:
+            barrier.wait()
+            with TestClient(app) as thread_client:
+                resp = thread_client.post("/api/node/heartbeat", content=body, headers=prepared_headers[index])
+            return resp.status_code, resp.json()
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(send, range(10)))
+
+        assert sum(status_code == 200 for status_code, _ in results) == 1
+        timestamp_failures = [body for status_code, body in results if status_code == 409]
+        assert len(timestamp_failures) == 9
+        assert all(item["detail"] == "Timestamp must be strictly increasing" for item in timestamp_failures)
 
     def test_background_nonce_prune_removes_expired_rows(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         node = _create_node(client, auth_headers, node_id="prune-node")

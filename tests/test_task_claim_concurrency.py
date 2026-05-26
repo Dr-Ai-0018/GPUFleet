@@ -138,6 +138,47 @@ class TestTaskClaimConcurrency:
         assert rows[0]["task_id"] == task["task_id"]
         assert rows[0]["status"] == "claimed"
 
+    def test_only_one_concurrent_heartbeat_claims_single_pending_task_with_same_timestamp(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        node = _create_node(client, auth_headers, node_id="claim-same-ts-node")
+        task = _create_task(
+            client,
+            auth_headers,
+            node_id="claim-same-ts-node",
+            task_id="same-ts-task-1",
+        )
+        barrier = Barrier(10)
+        shared_time = datetime.now(UTC).replace(microsecond=0).isoformat()
+
+        def send_heartbeat(_: int) -> tuple[int, dict[str, object]]:
+            barrier.wait()
+            return _heartbeat(
+                "claim-same-ts-node",
+                node["node_secret"],
+                timestamp=shared_time,
+            )
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(send_heartbeat, range(10)))
+
+        claimed_responses = [
+            body
+            for status_code, body in results
+            if status_code == 200 and len(body["tasks"]) == 1
+        ]
+        timestamp_conflicts = [
+            body
+            for status_code, body in results
+            if status_code == 409 and body.get("detail") == "Timestamp must be strictly increasing"
+        ]
+
+        assert len(claimed_responses) == 1
+        assert claimed_responses[0]["tasks"][0]["task_id"] == task["task_id"]
+        assert len(timestamp_conflicts) == 9
+
     def test_node_with_active_task_does_not_claim_new_pending_task(
         self,
         client: TestClient,

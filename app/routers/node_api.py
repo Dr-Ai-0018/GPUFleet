@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from base64 import b64decode
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -89,25 +90,6 @@ def _authenticate_node(
                 detail="Node not found or disabled",
             )
 
-        last_request_ts_raw = node["last_request_ts"]
-        if last_request_ts_raw:
-            last_request_ts = _parse_timestamp(last_request_ts_raw)
-            if request_time <= last_request_ts:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Timestamp must be strictly increasing",
-                )
-
-        used = conn.execute(
-            "SELECT 1 FROM nonces WHERE node_id = ? AND nonce = ?",
-            (node_id, nonce),
-        ).fetchone()
-        if used:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Nonce already used",
-            )
-
         stored_signing_key = node["node_signing_key"] or ""
         encrypted_signing_key = node["encrypted_signing_key"] or ""
         if encrypted_signing_key:
@@ -139,14 +121,32 @@ def _authenticate_node(
             )
 
         expires_at = (now + timedelta(seconds=settings.nonce_ttl_sec)).replace(microsecond=0).isoformat()
-        conn.execute(
-            "INSERT INTO nonces (node_id, nonce, timestamp_utc, expires_at) VALUES (?, ?, ?, ?)",
-            (node_id, nonce, timestamp, expires_at),
+        try:
+            conn.execute(
+                "INSERT INTO nonces (node_id, nonce, timestamp_utc, expires_at) VALUES (?, ?, ?, ?)",
+                (node_id, nonce, timestamp, expires_at),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Duplicate nonce",
+            ) from exc
+
+        updated = conn.execute(
+            """
+            UPDATE nodes
+            SET last_request_ts = ?, updated_at = ?
+            WHERE node_id = ?
+              AND is_enabled = 1
+              AND (last_request_ts IS NULL OR last_request_ts < ?)
+            """,
+            (timestamp, now_iso, node_id, timestamp),
         )
-        conn.execute(
-            "UPDATE nodes SET last_request_ts = ?, updated_at = ? WHERE node_id = ?",
-            (timestamp, now_iso, node_id),
-        )
+        if updated.rowcount != 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Timestamp must be strictly increasing",
+            )
 
     return node_id, node
 
@@ -514,9 +514,7 @@ async def task_result(
     now_iso = utc_now_iso()
     with db.connect() as conn:
         row = _load_task_for_node(conn, node_id, payload.task_id)
-        if row["status"] in TERMINAL_TASK_STATUSES:
-            return {"ok": True, "task_id": payload.task_id, "status": row["status"], "duplicate": True}
-        if row["status"] not in RESULT_ACCEPTING_TASK_STATUSES:
+        if row["status"] not in RESULT_ACCEPTING_TASK_STATUSES and row["status"] not in TERMINAL_TASK_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Task in status {row['status']} cannot accept final result yet",
