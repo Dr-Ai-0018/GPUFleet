@@ -77,7 +77,6 @@ def _authenticate_node(
 
     body_hash = hash_request_body(body)
     now_iso = utc_now_iso()
-    db.prune_expired_nonces(now_iso)
 
     with db.connect() as conn:
         node = conn.execute(
@@ -89,6 +88,15 @@ def _authenticate_node(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Node not found or disabled",
             )
+
+        last_request_ts_raw = node["last_request_ts"]
+        if last_request_ts_raw:
+            last_request_ts = _parse_timestamp(last_request_ts_raw)
+            if request_time <= last_request_ts:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Timestamp must be strictly increasing",
+                )
 
         used = conn.execute(
             "SELECT 1 FROM nonces WHERE node_id = ? AND nonce = ?",
@@ -134,6 +142,10 @@ def _authenticate_node(
         conn.execute(
             "INSERT INTO nonces (node_id, nonce, timestamp_utc, expires_at) VALUES (?, ?, ?, ?)",
             (node_id, nonce, timestamp, expires_at),
+        )
+        conn.execute(
+            "UPDATE nodes SET last_request_ts = ?, updated_at = ? WHERE node_id = ?",
+            (timestamp, now_iso, node_id),
         )
 
     return node_id, node

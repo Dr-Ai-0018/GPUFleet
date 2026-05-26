@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from threading import Barrier
 
 from fastapi.testclient import TestClient
@@ -11,7 +14,7 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.db import Database
 from app.main import app
-from app.security import build_signed_headers_for_test
+from app.security import build_signed_headers_for_test, derive_node_signing_key
 
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "claim-node") -> dict[str, object]:
@@ -55,7 +58,13 @@ def _create_task(
     return resp.json()
 
 
-def _heartbeat(node_id: str, node_secret: str, *, active_task_id: str | None = None) -> tuple[int, dict[str, object]]:
+def _heartbeat(
+    node_id: str,
+    node_secret: str,
+    *,
+    active_task_id: str | None = None,
+    timestamp: str | None = None,
+) -> tuple[int, dict[str, object]]:
     payload = {
         "boot_id": "boot-001",
         "heartbeat_interval_sec": 5,
@@ -63,6 +72,12 @@ def _heartbeat(node_id: str, node_secret: str, *, active_task_id: str | None = N
     }
     body = json.dumps(payload).encode("utf-8")
     headers = build_signed_headers_for_test(node_id, node_secret, body)
+    if timestamp is not None:
+        signing_key = derive_node_signing_key(node_secret)
+        body_hash = hashlib.sha256(body).hexdigest()
+        headers["X-Timestamp"] = timestamp
+        message = "\n".join([node_id, timestamp, headers["X-Nonce"], body_hash]).encode("utf-8")
+        headers["X-Signature"] = hmac.new(signing_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
     with TestClient(app) as thread_client:
         resp = thread_client.post("/api/node/heartbeat", content=body, headers=headers)
     return resp.status_code, resp.json()
@@ -82,13 +97,18 @@ class TestTaskClaimConcurrency:
             task_id="race-task-1",
         )
         barrier = Barrier(10)
+        base_time = datetime.now(UTC).replace(microsecond=0)
 
-        def send_heartbeat() -> tuple[int, dict[str, object]]:
+        def send_heartbeat(index: int) -> tuple[int, dict[str, object]]:
             barrier.wait()
-            return _heartbeat("claim-race-node", node["node_secret"])
+            return _heartbeat(
+                "claim-race-node",
+                node["node_secret"],
+                timestamp=(base_time + timedelta(seconds=index)).isoformat(),
+            )
 
         with ThreadPoolExecutor(max_workers=10) as executor:
-            results = list(executor.map(lambda _: send_heartbeat(), range(10)))
+            results = list(executor.map(send_heartbeat, range(10)))
 
         claimed_responses = [
             body
@@ -124,8 +144,13 @@ class TestTaskClaimConcurrency:
         node = _create_node(client, auth_headers, node_id="active-node")
         first_task = _create_task(client, auth_headers, node_id="active-node", task_id="active-task-1")
         second_task = _create_task(client, auth_headers, node_id="active-node", task_id="active-task-2")
+        base_time = datetime.now(UTC).replace(microsecond=0)
 
-        first_status, first_body = _heartbeat("active-node", node["node_secret"])
+        first_status, first_body = _heartbeat(
+            "active-node",
+            node["node_secret"],
+            timestamp=base_time.isoformat(),
+        )
         assert first_status == 200
         assert len(first_body["tasks"]) == 1
         assert first_body["tasks"][0]["task_id"] == first_task["task_id"]
@@ -134,6 +159,7 @@ class TestTaskClaimConcurrency:
             "active-node",
             node["node_secret"],
             active_task_id=first_task["task_id"],
+            timestamp=(base_time + timedelta(seconds=1)).isoformat(),
         )
         assert second_status == 200
         assert second_body["tasks"] == []
@@ -165,9 +191,11 @@ class TestTaskClaimConcurrency:
         claimed_task_ids: list[str] = []
         settings = get_settings()
         db = Database(settings.database_path)
+        base_time = datetime.now(UTC).replace(microsecond=0)
 
-        for expected_task_id in [first_task["task_id"], second_task["task_id"], third_task["task_id"]]:
-            status_code, body = _heartbeat("ordered-node", node["node_secret"])
+        for offset, expected_task_id in enumerate([first_task["task_id"], second_task["task_id"], third_task["task_id"]]):
+            timestamp = (base_time + timedelta(seconds=offset)).isoformat()
+            status_code, body = _heartbeat("ordered-node", node["node_secret"], timestamp=timestamp)
             assert status_code == 200
             assert len(body["tasks"]) == 1
             claimed_task_id = body["tasks"][0]["task_id"]

@@ -66,6 +66,7 @@ class Database:
                     is_enabled INTEGER NOT NULL DEFAULT 1,
                     first_seen_at TEXT,
                     last_seen_at TEXT,
+                    last_request_ts TEXT,
                     last_boot_id TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -204,6 +205,8 @@ class Database:
             conn.execute("ALTER TABLE nodes ADD COLUMN encrypted_signing_key TEXT")
         if "first_seen_at" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN first_seen_at TEXT")
+        if "last_request_ts" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN last_request_ts TEXT")
         if "last_boot_id" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN last_boot_id TEXT")
         settings = get_settings()

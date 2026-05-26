@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     default_admin_password: str = _SENTINEL
 
     node_allowed_clock_skew_sec: int = 300
-    nonce_ttl_sec: int = 600
+    nonce_ttl_sec: int = 120
     max_status_history_per_node: int = 200
     max_artifact_bytes: int = 500 * 1024 * 1024  # 500 MB
     cors_allowed_origins: list[str] = Field(

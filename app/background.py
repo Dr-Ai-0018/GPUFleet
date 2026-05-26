@@ -174,6 +174,7 @@ async def lost_task_scanner(db: Database) -> None:
     """Periodically scan for lost/timed-out tasks."""
     while True:
         try:
+            db.prune_expired_nonces(utc_now_iso())
             _mark_lost_tasks(db)
         except Exception:
             logger.exception("Error in lost task scanner")
