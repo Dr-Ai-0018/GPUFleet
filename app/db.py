@@ -336,9 +336,6 @@ class Database:
         }
 
     def claim_next_task_for_node(self, conn: sqlite3.Connection, node_id: str, claimed_at: str) -> sqlite3.Row | None:
-        if not conn.in_transaction:
-            conn.execute("BEGIN IMMEDIATE")
-
         updated = conn.execute(
             """
             UPDATE tasks

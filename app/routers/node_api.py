@@ -271,6 +271,7 @@ async def heartbeat(
     now_iso = utc_now_iso()
 
     with db.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             """
             UPDATE nodes
