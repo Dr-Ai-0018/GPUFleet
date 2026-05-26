@@ -106,6 +106,7 @@ class Database:
                     claimed_at TEXT,
                     started_at TEXT,
                     finished_at TEXT,
+                    result_locked_at TEXT,
                     FOREIGN KEY(node_id) REFERENCES nodes(node_id) ON DELETE CASCADE,
                     FOREIGN KEY(created_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
                 );
@@ -233,6 +234,13 @@ class Database:
                         row["id"],
                     ),
                 )
+
+        task_columns = {
+            row["name"]: row
+            for row in conn.execute("PRAGMA table_info(tasks)").fetchall()
+        }
+        if "result_locked_at" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN result_locked_at TEXT")
 
     def trim_node_status_history(self, node_id: str, keep: int) -> None:
         with self.connect() as conn:

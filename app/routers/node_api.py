@@ -524,10 +524,24 @@ async def task_result(
 
         finished_at = payload.finished_at or now_iso
         started_at = payload.started_at or row["started_at"] or now_iso
-        conn.execute(
-            "UPDATE tasks SET status = ?, started_at = ?, finished_at = ? WHERE task_id = ?",
-            (payload.final_status, started_at, finished_at, payload.task_id),
+        updated = conn.execute(
+            """
+            UPDATE tasks
+            SET status = ?, started_at = ?, finished_at = ?, result_locked_at = ?
+            WHERE task_id = ?
+              AND result_locked_at IS NULL
+              AND status IN ('claimed', 'running', 'cancel_requested')
+            """,
+            (payload.final_status, started_at, finished_at, now_iso, payload.task_id),
         )
+        if updated.rowcount != 1:
+            row = _load_task_for_node(conn, node_id, payload.task_id)
+            if row["status"] in TERMINAL_TASK_STATUSES:
+                return {"ok": True, "task_id": payload.task_id, "status": row["status"], "duplicate": True}
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Task in status {row['status']} cannot accept final result yet",
+            )
         _upsert_task_attempt(
             conn,
             payload.task_id,
