@@ -10,6 +10,7 @@ from typing import Any, Iterator
 from app.config import get_settings
 from app.security import encrypt_node_signing_key
 
+
 def utc_now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
@@ -26,8 +27,11 @@ class Database:
     def connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        settings = get_settings()
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute(f"PRAGMA busy_timeout = {settings.sqlite_busy_timeout_ms}")
         try:
             yield conn
             conn.commit()
