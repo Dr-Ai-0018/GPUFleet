@@ -11,6 +11,7 @@ import { SecurityView } from "../features/observability/SecurityView";
 import { OverviewView } from "../features/overview/OverviewView";
 import { Button } from "../ui/Button";
 import { PageTransition } from "../ui/Motion";
+import { CommandPalette } from "../ui/CommandPalette";
 
 type NavKey = Route["name"];
 type Props = { onLogout: () => void };
@@ -36,6 +37,9 @@ export function AppShell({ onLogout }: Props): JSX.Element {
 
   return (
     <div className="min-h-screen bg-[#07080A] text-gray-300 font-sans flex overflow-hidden relative">
+      {/* Command Palette */}
+      <CommandPalette />
+
       {/* Background glow */}
       <div className="fixed top-[-40%] left-[-20%] w-[60%] h-[60%] bg-cyan-950/10 blur-[200px] rounded-full pointer-events-none mix-blend-screen" />
       <div className="fixed bottom-[-40%] right-[-20%] w-[60%] h-[60%] bg-emerald-950/5 blur-[200px] rounded-full pointer-events-none mix-blend-screen" />
@@ -125,10 +129,15 @@ export function AppShell({ onLogout }: Props): JSX.Element {
         <header className="h-14 flex items-center justify-between px-7 border-b border-white/5 bg-[#08090C]/50 backdrop-blur-md shrink-0">
           <Breadcrumb route={route} />
           <div className="flex items-center gap-3">
-            <div className="relative w-48">
-              <svg className="absolute left-3 top-2.5 text-gray-600" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input type="text" placeholder="Search instances..." className="w-full bg-[#050507] border border-white/5 rounded-md pl-9 pr-3 py-1.5 text-xs text-gray-300 outline-none focus:border-cyan-500/30 transition-all" />
-            </div>
+            <button
+              type="button"
+              onClick={() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true })); }}
+              className="relative w-48 flex items-center gap-2 bg-[#050507] border border-white/5 rounded-md pl-3 pr-2 py-1.5 text-xs text-gray-500 hover:border-cyan-500/20 hover:text-gray-400 transition-all cursor-pointer group"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <span className="flex-1 text-left">搜索...</span>
+              <kbd className="text-[9px] font-mono border border-white/[0.08] rounded px-1 py-0.5 bg-white/[0.03] text-gray-600 group-hover:text-gray-400 transition-colors">⌘K</kbd>
+            </button>
             <button type="button" onClick={() => void store.refresh()} className="bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-md text-[12px] font-medium text-gray-300 hover:text-white flex items-center gap-2 transition-all">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
               同步数据

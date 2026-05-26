@@ -28,6 +28,7 @@ export type ConsoleState = {
   loading: LoadState;
   lastError: string | null;
   overview: DashboardOverview | null;
+  prevOverview: DashboardOverview | null;  // cached previous overview for delta calculation
   nodes: NodeResponse[];
   tasks: AdminTaskListItem[];
   audits: AuditEventView[];
@@ -49,6 +50,7 @@ const defaultState: ConsoleState = {
   loading: "idle",
   lastError: null,
   overview: null,
+  prevOverview: null,
   nodes: [],
   tasks: [],
   audits: [],
@@ -139,6 +141,7 @@ export function ConsoleStoreProvider({
           me,
           loading: "ready",
           lastError: null,
+          prevOverview: prev.overview,
           overview,
           nodes,
           tasks,

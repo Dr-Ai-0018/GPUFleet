@@ -10,6 +10,9 @@ type MiniSparklineProps = {
   fillOpacity?: number; // 0-1, default 0.15
   strokeWidth?: number; // default 1.5
   className?: string;
+  thresholdValue?: number;      // optional horizontal threshold line
+  thresholdColor?: string;      // default "#f0b040"
+  thresholdLabel?: string;      // label for the threshold line
 };
 
 export function MiniSparkline({
@@ -20,6 +23,9 @@ export function MiniSparkline({
   fillOpacity = 0.15,
   strokeWidth = 1.5,
   className = "",
+  thresholdValue,
+  thresholdColor = "#f0b040",
+  thresholdLabel,
 }: MiniSparklineProps): JSX.Element {
   if (!data || data.length < 2) {
     return <div style={{ width, height }} className={className} />;
@@ -73,6 +79,41 @@ export function MiniSparkline({
         strokeLinejoin="round"
         style={{ filter: `drop-shadow(0 0 2px ${color}80)` }}
       />
+      {/* Threshold line */}
+      {thresholdValue !== undefined && (
+        <>
+          {(() => {
+            const thresholdY = pad + ((1 - (Math.max(min, Math.min(max, thresholdValue)) - min) / range) * (height - pad * 2));
+            return (
+              <>
+                <line
+                  x1={pad}
+                  y1={thresholdY}
+                  x2={width - pad}
+                  y2={thresholdY}
+                  stroke={thresholdColor}
+                  strokeWidth={1}
+                  strokeDasharray="3 2"
+                  opacity={0.6}
+                />
+                {thresholdLabel && (
+                  <text
+                    x={width - pad}
+                    y={thresholdY - 3}
+                    fill={thresholdColor}
+                    fontSize={8}
+                    fontFamily="monospace"
+                    textAnchor="end"
+                    opacity={0.7}
+                  >
+                    {thresholdLabel}
+                  </text>
+                )}
+              </>
+            );
+          })()}
+        </>
+      )}
       {/* Last point dot */}
       <circle
         cx={points[points.length - 1].x}

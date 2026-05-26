@@ -6,7 +6,7 @@ import { StatusPill } from "../../ui/StatusPill";
 import { connectionLabel, connectionTone, nodeTypeLabel, osLabel } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
 import { BlockProgress } from "../../ui/BlockProgress";
-import { ArcGauge } from "../../ui/ArcGauge";
+import { GpuHeatCells } from "../../ui/GpuHeatCells";
 
 const cardCls = "rounded-xl transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)] hover:border-white/[0.08]";
 const inputCls = "w-full bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-1.5 text-xs text-gray-300 outline-none focus:border-cyan-500/30 transition-all";
@@ -132,7 +132,7 @@ export function FleetView(): JSX.Element {
                 const liveNode = overviewByNodeId.get(node.node_id);
                 const cpuPct = Number(liveNode?.latest_status?.cpu?.usage_percent ?? 0);
                 const memPct = Number(liveNode?.latest_status?.memory?.usage_percent ?? 0);
-                const gpuPct = Number(liveNode?.latest_status?.gpus?.[0]?.utilization_percent ?? 0);
+                const gpus = liveNode?.latest_status?.gpus ?? [];
                 return (
                 <tr key={node.node_id} className="hover:bg-white/[0.02] transition-colors cursor-pointer border-b border-white/[0.03] last:border-0" onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}>
                   <td className="px-5 py-3.5">
@@ -141,8 +141,8 @@ export function FleetView(): JSX.Element {
                   </td>
                   <td className="px-5 py-3.5"><StatusPill tone={connectionTone[node.connection_status]} label={connectionLabel[node.connection_status]} pulse={node.connection_status === "online"} /></td>
                   <td className="px-5 py-3.5 text-gray-400">{nodeTypeLabel[node.node_type] ?? node.node_type}{node.os_type ? <span className="block text-[11px] text-gray-600">{osLabel[node.os_type] ?? node.os_type}</span> : null}</td>
-                  <td className="px-5 py-3.5 min-w-[220px]">
-                    <div className="grid grid-cols-[1fr_1fr_70px] items-center gap-3">
+                  <td className="px-5 py-3.5 min-w-[260px]">
+                    <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-3">
                       <div>
                         <div className="mb-1 flex items-center justify-between text-[10px] font-mono text-gray-500"><span>CPU</span><span>{Math.round(cpuPct)}%</span></div>
                         <BlockProgress value={cpuPct} blocks={10} color="auto" />
@@ -151,8 +151,9 @@ export function FleetView(): JSX.Element {
                         <div className="mb-1 flex items-center justify-between text-[10px] font-mono text-gray-500"><span>MEM</span><span>{Math.round(memPct)}%</span></div>
                         <BlockProgress value={memPct} blocks={10} color="auto" />
                       </div>
-                      <div className="flex justify-end">
-                        <ArcGauge value={gpuPct} size={62} color="auto" label={String(Math.round(gpuPct))} />
+                      <div className="flex items-center">
+                        <div className="mb-1 text-[10px] font-mono text-gray-500">GPU</div>
+                        <div className="ml-2"><GpuHeatCells gpus={gpus} /></div>
                       </div>
                     </div>
                   </td>

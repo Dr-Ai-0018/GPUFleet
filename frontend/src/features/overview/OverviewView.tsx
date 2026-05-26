@@ -11,8 +11,10 @@ import { RingGauge } from "../../ui/RingGauge";
 import { ArcGauge } from "../../ui/ArcGauge";
 import { BlockProgress } from "../../ui/BlockProgress";
 import { MiniSparkline } from "../../ui/MiniSparkline";
+import { GpuHeatCells } from "../../ui/GpuHeatCells";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative, bytesToReadable } from "../../lib/format";
+import { DeltaBadge } from "../../ui/DeltaBadge";
 
 echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -31,9 +33,14 @@ const beijingDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
 export function OverviewView(): JSX.Element {
   const store = useConsoleStore();
   const overview = store.overview;
+  const prevOverview = store.prevOverview;
   const nodeCounts = overview?.node_counts ?? { total: 0, online: 0, offline: 0, disabled: 0, never_seen: 0 };
   const taskCounts = overview?.task_counts ?? {} as Record<string, number>;
   const recentTasks = overview?.recent_tasks ?? [];
+
+  // Previous snapshot for delta calculation
+  const prevNodeCounts = prevOverview?.node_counts ?? null;
+  const prevTaskCounts = prevOverview?.task_counts ?? null;
 
   const gpuStats = useMemo(() => {
     if (!overview) return { totalGpus: 0, avgUtil: 0, totalVram: 0, usedVram: 0 };
@@ -48,6 +55,19 @@ export function OverviewView(): JSX.Element {
     }
     return { totalGpus, avgUtil: totalGpus > 0 ? Math.round(totalUtil / totalGpus) : 0, totalVram, usedVram };
   }, [overview]);
+
+  const prevGpuStats = useMemo(() => {
+    if (!prevOverview) return null;
+    let totalGpus = 0, totalUtil = 0;
+    for (const node of prevOverview.nodes) {
+      if (!node.latest_status) continue;
+      for (const gpu of node.latest_status.gpus) {
+        const g = gpu as Record<string, unknown>;
+        totalGpus++; totalUtil += Number(g.utilization_percent ?? 0);
+      }
+    }
+    return { avgUtil: totalGpus > 0 ? Math.round(totalUtil / totalGpus) : 0 };
+  }, [prevOverview]);
 
   const totalTasks = Object.values(taskCounts).reduce((a: number, b: number) => a + (b as number), 0);
   const succeededTasks = (taskCounts as Record<string, number>).succeeded ?? 0;
@@ -116,6 +136,9 @@ export function OverviewView(): JSX.Element {
             </div>
             <RingGauge value={onlineRate} size={92} label={String(onlineRate)} sublabel="ONLINE" />
           </div>
+          <div className="mt-2">
+            <DeltaBadge current={nodeCounts.online} previous={prevNodeCounts ? Number(prevNodeCounts.online) : null} suffix=" 在线" precision={0} />
+          </div>
           <div className="mt-5 space-y-3">
             {nodeDist.map((item) => {
               const width = nodeCounts.total > 0 ? (item.value / nodeCounts.total) * 100 : 0;
@@ -143,7 +166,10 @@ export function OverviewView(): JSX.Element {
             </div>
             <ArcGauge value={gpuStats.avgUtil} size={112} color="auto" label={String(gpuStats.avgUtil)} sublabel="AVG UTIL" />
           </div>
-          <div className="mt-5">
+          <div className="mt-2">
+            <DeltaBadge current={gpuStats.avgUtil} previous={prevGpuStats?.avgUtil ?? null} suffix="%" />
+          </div>
+          <div className="mt-4">
             <div className="mb-2 flex items-center justify-between text-[11px] font-mono">
               <span className="text-gray-500">VRAM footprint</span>
               <span className="text-white">{gpuStats.usedVram}/{gpuStats.totalVram} MB</span>
@@ -173,10 +199,13 @@ export function OverviewView(): JSX.Element {
               {store.warnings.length > 0 ? `${store.warnings.length} warnings` : "secure"}
             </div>
           </div>
-          <div className="mt-5">
-            <MiniSparkline data={throughputSeries} width={260} height={56} className="w-full" />
+          <div className="mt-2">
+            <DeltaBadge current={runningTasks} previous={prevTaskCounts ? (Number(prevTaskCounts.running ?? 0) + Number(prevTaskCounts.claimed ?? 0)) : null} suffix=" 运行" precision={0} />
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="mt-4">
+            <MiniSparkline data={throughputSeries} width={260} height={56} className="w-full" thresholdValue={Math.max(...throughputSeries) * 0.85} thresholdColor="#f0b040" thresholdLabel="85%" />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
               <div className="text-[10px] font-mono uppercase text-gray-500">Succeeded</div>
               <div className="mt-1 text-[15px] font-bold font-mono text-emerald-300">{succeededTasks}</div>
@@ -253,17 +282,15 @@ export function OverviewView(): JSX.Element {
             {overview.nodes.map((node) => {
               const cpu = node.latest_status?.cpu as { usage_percent?: number } | undefined;
               const mem = node.latest_status?.memory as { usage_percent?: number } | undefined;
-              const gpu = node.latest_status?.gpus?.[0] as { utilization_percent?: number } | undefined;
               const cpuPct = Number(cpu?.usage_percent ?? 0);
               const memPct = Number(mem?.usage_percent ?? 0);
-              const gpuPct = Number(gpu?.utilization_percent ?? 0);
               return (
                 <div key={node.node_id} className="flex items-center gap-4 py-2 border-b border-white/[0.03] last:border-0 cursor-pointer hover:bg-white/[0.02] -mx-2 px-2 rounded" onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}>
                   <div className="w-[140px] shrink-0"><span className="text-[13px] text-white font-medium">{node.display_name}</span></div>
                   <div className="flex-1 grid grid-cols-3 gap-4">
                     <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">CPU</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full" style={{ width: `${cpuPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(cpuPct)}%</span></div>
                     <div className="space-y-1"><span className="text-[10px] text-gray-500 font-mono">MEM</span><BlockProgress value={memPct} blocks={10} height={7} color="auto" /><div className="text-right text-[11px] font-mono text-gray-400">{Math.round(memPct)}%</div></div>
-                    <div className="flex items-center justify-between gap-3"><div><span className="text-[10px] text-gray-500 font-mono block">GPU</span><span className="text-[11px] font-mono text-gray-400">{Math.round(gpuPct)}%</span></div><ArcGauge value={gpuPct} size={74} color="auto" label={String(Math.round(gpuPct))} /></div>
+                    <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono">GPU</span><GpuHeatCells gpus={node.latest_status?.gpus ?? []} size={14} /></div>
                   </div>
                 </div>
               );
