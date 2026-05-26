@@ -7,9 +7,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
-from app.deps import get_current_admin, get_db
+from app.deps import get_current_admin, get_db, get_settings_dep
 from app.routers.admin_auth import limiter
+from app.review import LLMReviewer, ReviewContext
 from app.schemas import (
     AdminTaskArtifactView,
     AdminTaskCreateRequest,
@@ -17,6 +19,9 @@ from app.schemas import (
     AdminTaskListItem,
     AdminTaskLogView,
     AdminTaskResultSummary,
+    ReviewApproveRequest,
+    ReviewEscalateRequest,
+    ReviewRejectRequest,
 )
 from app.task_utils import (
     ACTIVE_TASK_STATUSES,
@@ -33,6 +38,8 @@ router = APIRouter(prefix="/api/admin/tasks", tags=["admin-tasks"])
 
 MODAL_ONLY_TASK_TYPES = {"modal_command"}
 MODAL_RUNNER_ALLOWED_TASK_TYPES = {"modal_command", "health_check"}
+HUMAN_REVIEW_COOLDOWN_SEC = 10
+REVIEW_TIMEOUT_MINUTES = 30
 
 
 def _task_row_to_list_item(row: object) -> AdminTaskListItem:
@@ -119,15 +126,130 @@ def _load_artifacts(conn: object, task_id: str) -> list[AdminTaskArtifactView]:
     ]
 
 
+def _task_row_to_detail(
+    conn: object,
+    row: object,
+    *,
+    include_logs: bool = True,
+    include_artifacts: bool = True,
+    include_result: bool = True,
+) -> AdminTaskDetail:
+    task_id = row["task_id"]
+    logs = _load_log_views(conn, task_id) if include_logs else []
+    artifacts = _load_artifacts(conn, task_id) if include_artifacts else []
+    result = _load_result_summary(conn, task_id) if include_result else None
+    return AdminTaskDetail(
+        **_task_row_to_list_item(row).model_dump(),
+        idempotency_key=row["idempotency_key"],
+        payload=json.loads(row["payload_json"]),
+        env=json.loads(row["env_json"]),
+        kill_grace_sec=row["kill_grace_sec"],
+        logs=logs,
+        artifacts=artifacts,
+        result=result,
+        review_stage=row["review_stage"],
+        review_decision=row["review_decision"],
+    )
+
+
+def _insert_review_audit(
+    conn: object,
+    *,
+    task_id: str,
+    stage: int,
+    reviewer_type: str,
+    reviewer_id: str | None,
+    decision: str,
+    risk_score: float | None,
+    risk_factors_json: str | None,
+    reasoning: str | None,
+    created_at: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO task_reviews (task_id, stage, reviewer_type, reviewer_id, decision,
+                                  risk_score, risk_factors_json, reasoning, duration_sec, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            task_id,
+            stage,
+            reviewer_type,
+            reviewer_id,
+            decision,
+            risk_score,
+            risk_factors_json,
+            reasoning,
+            None,
+            created_at,
+        ),
+    )
+
+
+def _create_review_alert(
+    conn: object,
+    *,
+    task_id: str,
+    payload: AdminTaskCreateRequest,
+    admin_username: str,
+    now_iso: str,
+    summary: str,
+) -> None:
+    alert_detail = {
+        "task_id": task_id,
+        "task_type": payload.type,
+        "node_id": payload.node_id,
+        "command": payload.payload.get("command") or payload.payload.get("script", ""),
+        "env": payload.env,
+        "payload": payload.payload,
+        "admin_username": admin_username,
+        "dangerous_match": detect_dangerous_command(payload.type, payload.payload),
+    }
+    expires_at = (datetime.now(UTC) + timedelta(minutes=REVIEW_TIMEOUT_MINUTES)).replace(microsecond=0).isoformat()
+    conn.execute(
+        """
+        INSERT INTO alert_messages (alert_type, severity, title, summary, detail_json,
+                                    target_type, target_id, status, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "command_review",
+            "critical",
+            f"危险命令审核: {payload.type} @ {payload.node_id}",
+            summary,
+            dumps_json(alert_detail),
+            "task",
+            task_id,
+            "unread",
+            expires_at,
+            now_iso,
+        ),
+    )
+
+
+def _mark_task_alerts_actioned(conn: object, task_id: str, now_iso: str) -> None:
+    conn.execute(
+        """
+        UPDATE alert_messages
+        SET status = 'actioned', actioned_at = ?
+        WHERE target_type = 'task' AND target_id = ? AND status = 'unread'
+        """,
+        (now_iso, task_id),
+    )
+
+
 @router.post("", response_model=AdminTaskDetail, status_code=status.HTTP_201_CREATED)
 @limiter.limit("30/minute")
-def create_task(
+async def create_task(
     payload: AdminTaskCreateRequest,
     request: Request,
     admin: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
 ) -> AdminTaskDetail:
     now_iso = utc_now_iso()
+    reviewer = LLMReviewer(settings)
+    ai_result = None
     with db.connect() as conn:
         node = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (payload.node_id,)).fetchone()
         if node is None:
@@ -176,10 +298,41 @@ def create_task(
                 )
 
             initial_status = "reviewing"
-            review_stage = 3
+            review_stage = 1
             review_started_at = now_iso
-            review_decision_val = "pending_human"
-            review_detail_val = dumps_json({"reason": "L2 task awaiting human review"})
+
+            if reviewer.is_configured:
+                legacy_match = detect_dangerous_command(payload.type, payload.payload)
+                review_ctx = ReviewContext(
+                    task_type=payload.type,
+                    node_id=payload.node_id,
+                    node_type=node["node_type"],
+                    payload=payload.payload,
+                    workdir=payload.workdir,
+                    env=payload.env,
+                    requested_gpu_ids=payload.requested_gpu_ids,
+                    admin_username=admin["username"],
+                    node_os=node["os_type"],
+                    node_tags=json.loads(node["tags_json"]),
+                    legacy_blacklist_match=legacy_match,
+                )
+                ai_result = await reviewer.review(review_ctx)
+                review_decision_val = ai_result.decision
+                review_detail_val = ai_result.model_dump_json()
+                review_finished_at = utc_now_iso()
+
+                if ai_result.decision == "approve":
+                    initial_status = "pending"
+                    if ai_result.risk_score >= 0.3:
+                        payload.danger_level = "elevated"
+                else:
+                    initial_status = "reviewing"
+                    if ai_result.decision == "uncertain":
+                        review_stage = 3
+            else:
+                review_stage = 3
+                review_decision_val = "skipped"
+                review_detail_val = dumps_json({"reason": "REVIEW_LLM_API_KEY not configured"})
 
         task_id = payload.task_id or f"tsk_{secrets.token_hex(8)}"
         idempotency_key = payload.idempotency_key or f"manual-{secrets.token_hex(12)}"
@@ -221,36 +374,27 @@ def create_task(
                 review_finished_at,
             ),
         )
+        if review_stage is not None and review_decision_val:
+            _insert_review_audit(
+                conn,
+                task_id=task_id,
+                stage=1,
+                reviewer_type="llm" if reviewer.is_configured else "skip",
+                reviewer_id=settings.review_llm_model if reviewer.is_configured else None,
+                decision=review_decision_val,
+                risk_score=ai_result.risk_score if ai_result is not None else None,
+                risk_factors_json=review_detail_val,
+                reasoning=ai_result.reasoning if ai_result is not None else None,
+                created_at=now_iso,
+            )
         if initial_status == "reviewing":
-            alert_detail = {
-                "task_id": task_id,
-                "task_type": payload.type,
-                "node_id": payload.node_id,
-                "command": payload.payload.get("command") or payload.payload.get("script", ""),
-                "env": payload.env,
-                "payload": payload.payload,
-                "admin_username": admin["username"],
-                "dangerous_match": detect_dangerous_command(payload.type, payload.payload),
-            }
-            expires_at = (datetime.now(UTC) + timedelta(minutes=30)).replace(microsecond=0).isoformat()
-            conn.execute(
-                """
-                INSERT INTO alert_messages (alert_type, severity, title, summary, detail_json,
-                                            target_type, target_id, status, expires_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    "command_review",
-                    "critical",
-                    f"危险命令审核: {payload.type} @ {payload.node_id}",
-                    f"任务 {task_id} 需要人工审核",
-                    dumps_json(alert_detail),
-                    "task",
-                    task_id,
-                    "unread",
-                    expires_at,
-                    now_iso,
-                ),
+            _create_review_alert(
+                conn,
+                task_id=task_id,
+                payload=payload,
+                admin_username=admin["username"],
+                now_iso=now_iso,
+                summary=f"任务 {task_id} 需要人工审核",
             )
         conn.execute(
             """
@@ -270,18 +414,9 @@ def create_task(
         )
         row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
 
-    return AdminTaskDetail(
-        **_task_row_to_list_item(row).model_dump(),
-        idempotency_key=row["idempotency_key"],
-        payload=json.loads(row["payload_json"]),
-        env=json.loads(row["env_json"]),
-        kill_grace_sec=row["kill_grace_sec"],
-        logs=[],
-        artifacts=[],
-        result=None,
-        review_stage=row["review_stage"],
-        review_decision=row["review_decision"],
-    )
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        return _task_row_to_detail(conn, row, include_logs=False, include_artifacts=False, include_result=False)
 
 
 @router.get("", response_model=list[AdminTaskListItem])
@@ -309,23 +444,7 @@ def get_task(
         row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-
-        logs = _load_log_views(conn, task_id)
-        artifacts = _load_artifacts(conn, task_id)
-        result = _load_result_summary(conn, task_id)
-
-    return AdminTaskDetail(
-        **_task_row_to_list_item(row).model_dump(),
-        idempotency_key=row["idempotency_key"],
-        payload=json.loads(row["payload_json"]),
-        env=json.loads(row["env_json"]),
-        kill_grace_sec=row["kill_grace_sec"],
-        logs=logs,
-        artifacts=artifacts,
-        result=result,
-        review_stage=row["review_stage"],
-        review_decision=row["review_decision"],
-    )
+        return _task_row_to_detail(conn, row)
 
 
 @router.post("/{task_id}/cancel", response_model=AdminTaskDetail)
@@ -376,22 +495,212 @@ def cancel_task(
             ),
         )
         saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
-        logs = _load_log_views(conn, task_id)
-        artifacts = _load_artifacts(conn, task_id)
-        result = _load_result_summary(conn, task_id)
+        return _task_row_to_detail(conn, saved)
 
-    return AdminTaskDetail(
-        **_task_row_to_list_item(saved).model_dump(),
-        idempotency_key=saved["idempotency_key"],
-        payload=json.loads(saved["payload_json"]),
-        env=json.loads(saved["env_json"]),
-        kill_grace_sec=saved["kill_grace_sec"],
-        logs=logs,
-        artifacts=artifacts,
-        result=result,
-        review_stage=saved["review_stage"],
-        review_decision=saved["review_decision"],
-    )
+
+@router.post("/{task_id}/review/escalate", response_model=AdminTaskDetail)
+@limiter.limit("30/minute")
+def escalate_review(
+    task_id: str,
+    payload: ReviewEscalateRequest,
+    request: Request,
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> AdminTaskDetail:
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        if row["status"] != "reviewing":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is not under review")
+        if row["review_stage"] == 3:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is already in human review stage")
+
+        conn.execute(
+            """
+            UPDATE tasks
+            SET review_stage = 3, review_decision = 'pending_human', review_started_at = ?, review_finished_at = NULL
+            WHERE task_id = ?
+            """,
+            (now_iso, task_id),
+        )
+
+        task_payload = AdminTaskCreateRequest(
+            node_id=row["node_id"],
+            type=row["type"],
+            payload=json.loads(row["payload_json"]),
+            task_id=row["task_id"],
+            revision=row["revision"],
+            idempotency_key=row["idempotency_key"],
+            workdir=row["workdir"],
+            env=json.loads(row["env_json"]),
+            requested_gpu_ids=json.loads(row["requested_gpu_ids_json"]),
+            timeout_sec=row["timeout_sec"],
+            kill_grace_sec=row["kill_grace_sec"],
+            danger_level=row["danger_level"],
+        )
+        _create_review_alert(
+            conn,
+            task_id=task_id,
+            payload=task_payload,
+            admin_username=admin["username"],
+            now_iso=now_iso,
+            summary=f"任务 {task_id} 已升级到人工审核",
+        )
+        conn.execute(
+            """
+            INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                str(admin["id"]),
+                "escalate_task_review",
+                "task",
+                task_id,
+                request.client.host if request.client else None,
+                dumps_json({"note": payload.note}),
+                now_iso,
+            ),
+        )
+        saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        return _task_row_to_detail(conn, saved)
+
+
+@router.post("/{task_id}/review/approve", response_model=AdminTaskDetail)
+@limiter.limit("30/minute")
+def approve_review(
+    task_id: str,
+    payload: ReviewApproveRequest,
+    request: Request,
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> AdminTaskDetail:
+    now = datetime.now(UTC)
+    now_iso = now.replace(microsecond=0).isoformat()
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        if row["status"] != "reviewing" or row["review_stage"] != 3:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is not awaiting human approval")
+
+        review_started_at = row["review_started_at"]
+        if review_started_at:
+            started = datetime.fromisoformat(review_started_at)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=UTC)
+            if (now - started).total_seconds() < HUMAN_REVIEW_COOLDOWN_SEC:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"Human review cooldown not reached ({HUMAN_REVIEW_COOLDOWN_SEC}s)",
+                )
+
+        conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'pending',
+                review_decision = 'human_approved',
+                danger_level = 'human_approved',
+                review_admin_id = ?,
+                review_finished_at = ?
+            WHERE task_id = ? AND status = 'reviewing'
+            """,
+            (admin["id"], now_iso, task_id),
+        )
+        _insert_review_audit(
+            conn,
+            task_id=task_id,
+            stage=3,
+            reviewer_type="human",
+            reviewer_id=str(admin["id"]),
+            decision="approve",
+            risk_score=None,
+            risk_factors_json=dumps_json({"note": payload.note}),
+            reasoning=payload.note,
+            created_at=now_iso,
+        )
+        _mark_task_alerts_actioned(conn, task_id, now_iso)
+        conn.execute(
+            """
+            INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                str(admin["id"]),
+                "approve_task_review",
+                "task",
+                task_id,
+                request.client.host if request.client else None,
+                dumps_json({"note": payload.note}),
+                now_iso,
+            ),
+        )
+        saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        return _task_row_to_detail(conn, saved)
+
+
+@router.post("/{task_id}/review/reject", response_model=AdminTaskDetail)
+@limiter.limit("30/minute")
+def reject_review(
+    task_id: str,
+    payload: ReviewRejectRequest,
+    request: Request,
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> AdminTaskDetail:
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        if row["status"] != "reviewing":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is not under review")
+
+        conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'rejected',
+                review_decision = 'human_rejected',
+                review_admin_id = ?,
+                review_finished_at = ?
+            WHERE task_id = ? AND status = 'reviewing'
+            """,
+            (admin["id"], now_iso, task_id),
+        )
+        _insert_review_audit(
+            conn,
+            task_id=task_id,
+            stage=3 if row["review_stage"] == 3 else (row["review_stage"] or 3),
+            reviewer_type="human",
+            reviewer_id=str(admin["id"]),
+            decision="reject",
+            risk_score=None,
+            risk_factors_json=dumps_json({"note": payload.note}),
+            reasoning=payload.note,
+            created_at=now_iso,
+        )
+        _mark_task_alerts_actioned(conn, task_id, now_iso)
+        conn.execute(
+            """
+            INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                str(admin["id"]),
+                "reject_task_review",
+                "task",
+                task_id,
+                request.client.host if request.client else None,
+                dumps_json({"note": payload.note}),
+                now_iso,
+            ),
+        )
+        saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        return _task_row_to_detail(conn, saved)
 
 
 @router.get("/{task_id}/logs", response_model=list[AdminTaskLogView])

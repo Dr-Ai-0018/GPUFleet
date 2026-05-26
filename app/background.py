@@ -170,12 +170,44 @@ def _mark_lost_tasks(db: Database) -> None:
                             logger.info("Task %s marked lost (node %s never seen)", task_id, task["node_id"])
 
 
+def _expire_reviewing_tasks(db: Database) -> None:
+    now_iso = utc_now_iso()
+    cutoff = (datetime.now(UTC) - timedelta(minutes=30)).replace(microsecond=0).isoformat()
+    with db.connect() as conn:
+        expired = conn.execute(
+            """
+            SELECT task_id
+            FROM tasks
+            WHERE status = 'reviewing' AND review_started_at IS NOT NULL AND review_started_at < ?
+            """,
+            (cutoff,),
+        ).fetchall()
+        for row in expired:
+            conn.execute(
+                """
+                UPDATE tasks
+                SET status = 'review_expired', review_decision = 'expired', review_finished_at = ?
+                WHERE task_id = ? AND status = 'reviewing'
+                """,
+                (now_iso, row["task_id"]),
+            )
+            conn.execute(
+                """
+                UPDATE alert_messages
+                SET status = 'expired'
+                WHERE target_type = 'task' AND target_id = ? AND status = 'unread'
+                """,
+                (row["task_id"],),
+            )
+
+
 async def lost_task_scanner(db: Database) -> None:
     """Periodically scan for lost/timed-out tasks."""
     while True:
         try:
             db.prune_expired_nonces(utc_now_iso())
             _mark_lost_tasks(db)
+            _expire_reviewing_tasks(db)
         except Exception:
             logger.exception("Error in lost task scanner")
         await asyncio.sleep(SCAN_INTERVAL_SEC)

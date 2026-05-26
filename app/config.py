@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     nonce_ttl_sec: int = 120
     max_status_history_per_node: int = 200
     max_artifact_bytes: int = 500 * 1024 * 1024  # 500 MB
+    review_llm_base_url: str = "https://api.openai.com/v1"
+    review_llm_api_key: str = ""
+    review_llm_model: str = "gpt-5.4"
+    review_llm_timeout_sec: int = 30
+    review_llm_max_tokens: int = 1024
+    review_llm_temperature: float = 0.1
     cors_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://127.0.0.1:5173",
