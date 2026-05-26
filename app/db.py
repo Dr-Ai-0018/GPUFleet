@@ -260,45 +260,45 @@ class Database:
         }
 
     def claim_next_task_for_node(self, conn: sqlite3.Connection, node_id: str, claimed_at: str) -> sqlite3.Row | None:
-        active_task = conn.execute(
-            """
-            SELECT 1
-            FROM tasks
-            WHERE node_id = ? AND status IN ('claimed', 'running', 'cancel_requested')
-            LIMIT 1
-            """,
-            (node_id,),
-        ).fetchone()
-        if active_task:
-            return None
-
-        pending = conn.execute(
-            """
-            SELECT task_id
-            FROM tasks
-            WHERE node_id = ? AND status = 'pending'
-            ORDER BY created_at ASC, id ASC
-            LIMIT 1
-            """,
-            (node_id,),
-        ).fetchone()
-        if pending is None:
-            return None
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE")
 
         updated = conn.execute(
             """
             UPDATE tasks
             SET status = 'claimed', claimed_at = ?
-            WHERE task_id = ? AND status = 'pending'
+            WHERE task_id = (
+                SELECT t.task_id
+                FROM tasks t
+                WHERE t.node_id = ?
+                  AND t.status = 'pending'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM tasks t2
+                      WHERE t2.node_id = ?
+                        AND t2.status IN ('claimed', 'running', 'cancel_requested')
+                  )
+                ORDER BY t.created_at ASC, t.id ASC
+                LIMIT 1
+            )
+              AND status = 'pending'
             """,
-            (claimed_at, pending["task_id"]),
+            (claimed_at, node_id, node_id),
         )
         if updated.rowcount != 1:
             return None
 
         return conn.execute(
-            "SELECT * FROM tasks WHERE task_id = ?",
-            (pending["task_id"],),
+            """
+            SELECT *
+            FROM tasks
+            WHERE node_id = ?
+              AND status = 'claimed'
+              AND claimed_at = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (node_id, claimed_at),
         ).fetchone()
 
     def sync_reported_active_task(
