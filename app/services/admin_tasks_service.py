@@ -22,7 +22,6 @@ from app.schemas import (
 )
 from app.services.task_state import TaskStateError, get_task_row, transition_task
 from app.task_utils import (
-    ACTIVE_TASK_STATUSES,
     MODAL_TASK_TYPES,
     SHELL_TASK_TYPES,
     TASK_TYPE_LEVEL_L2,
