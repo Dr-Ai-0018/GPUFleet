@@ -23,6 +23,13 @@
   flex-shrink: 0;
 }
 
+.shape {
+  font-size: 8px;
+  line-height: 1;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
 .pulse { animation: status-blink 2s ease-in-out infinite; }
 
 .subtle { background: transparent; border-color: transparent; }

@@ -15,6 +15,7 @@ import { GpuHeatCells } from "../../ui/GpuHeatCells";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative, bytesToReadable } from "../../lib/format";
 import { DeltaBadge } from "../../ui/DeltaBadge";
+import { AnimatedNumber } from "../../ui/AnimatedNumber";
 
 echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -131,7 +132,7 @@ export function OverviewView(): JSX.Element {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">节点总览</p>
-              <h2 className="mt-2 text-4xl font-bold tracking-tight text-white">{nodeCounts.total}</h2>
+              <h2 className="mt-2 text-4xl font-bold tracking-tight text-white"><AnimatedNumber value={nodeCounts.total} /></h2>
               <p className="mt-1 text-[12px] text-gray-500">Fleet nodes currently registered</p>
             </div>
             <RingGauge value={onlineRate} size={92} label={String(onlineRate)} sublabel="ONLINE" />
@@ -161,7 +162,7 @@ export function OverviewView(): JSX.Element {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">GPU Cluster</div>
-              <div className="mt-2 text-3xl font-bold font-mono text-white">{gpuStats.totalGpus}</div>
+              <div className="mt-2 text-3xl font-bold font-mono text-white"><AnimatedNumber value={gpuStats.totalGpus} /></div>
               <div className="mt-1 text-[12px] text-gray-500">active accelerators</div>
             </div>
             <ArcGauge value={gpuStats.avgUtil} size={112} color="auto" label={String(gpuStats.avgUtil)} sublabel="AVG UTIL" />
@@ -192,7 +193,7 @@ export function OverviewView(): JSX.Element {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Task Pulse</div>
-              <div className="mt-2 text-3xl font-bold font-mono text-white">{runningTasks}</div>
+              <div className="mt-2 text-3xl font-bold font-mono text-white"><AnimatedNumber value={runningTasks} /></div>
               <div className="mt-1 text-[12px] text-gray-500">running now</div>
             </div>
             <div className="rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1 text-[11px] font-mono text-cyan-300 shadow-[0_0_24px_rgba(15,240,179,0.08)]">

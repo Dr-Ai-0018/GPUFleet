@@ -91,12 +91,12 @@ export function GpuHeatCells({ gpus, size = 16, gap = 3 }: GpuHeatCellsProps): J
                     <span style={{ color }}>
                       {Math.round(util)}% {getHeatLabel(util)}
                     </span>
-                    {gpu.total_vram_mb > 0 && (
+                    {(gpu.total_vram_mb ?? 0) > 0 && (
                       <span className="text-gray-400">
-                        {(gpu.used_vram_mb! / 1024).toFixed(1)}/{(gpu.total_vram_mb / 1024).toFixed(1)} GB
+                        {((gpu.used_vram_mb ?? 0) / 1024).toFixed(1)}/{((gpu.total_vram_mb ?? 0) / 1024).toFixed(1)} GB
                       </span>
                     )}
-                    {gpu.temperature_c > 0 && (
+                    {(gpu.temperature_c ?? 0) > 0 && (
                       <span className="text-gray-400">{gpu.temperature_c}°C</span>
                     )}
                   </div>

@@ -17,6 +17,8 @@ import { ArcGauge } from "../../ui/ArcGauge";
 import { BlockProgress } from "../../ui/BlockProgress";
 import { MiniSparkline } from "../../ui/MiniSparkline";
 import { useToast } from "../../ui/Toast";
+import { TempColorBand } from "../../ui/TempColorBand";
+import { AnimatedNumber } from "../../ui/AnimatedNumber";
 import { connectionLabel, connectionTone, onboardingLabel, onboardingTone } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 import { TaskComposer } from "../tasks/TaskComposer";
@@ -528,7 +530,7 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
                 </div>
                 <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[12px] font-mono text-gray-400">
                   <span>心跳 {formatRelative(latestStatus.reported_at)}</span>
-                  <span>GPU 温度 {primaryGpu?.temperature_c != null ? `${primaryGpu.temperature_c}°C` : "—"}</span>
+                  <span className="inline-flex items-center gap-1">GPU 温度 <TempColorBand temp={primaryGpu?.temperature_c != null ? Number(primaryGpu.temperature_c) : null} width={80} height={5} /></span>
                 </div>
               </div>
             </div>
@@ -732,6 +734,7 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
                     <span className="text-[14px] font-bold text-white">{String(g.model ?? "Unknown GPU")}</span>
                   </div>
                   <div className="flex items-center gap-3">
+                    <TempColorBand temp={temp} width={100} height={6} />
                     {pcieGen != null ? <span className="text-[10px] text-gray-500 font-mono">PCIe Gen{pcieGen} x{pcieWidth ?? "?"}</span> : null}
                     <span className="text-[11px] font-mono text-gray-500">{total} MB</span>
                     <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${util > 80 ? "bg-red-950/40 text-red-400 border-red-800/30" : util > 30 ? "bg-cyan-950/40 text-cyan-400 border-cyan-800/30" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/30"}`}>{util > 0 ? "Active" : "Idle"}</span>
@@ -767,7 +770,7 @@ function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, late
                   )}
                 </div>
                 <div className="mt-5 grid grid-cols-3 gap-x-6 gap-y-5">
-                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">TEMP</span><span className="text-[16px] font-bold font-mono text-white">{temp != null ? `${temp}°C` : "—"}</span></div>
+                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">TEMP</span><TempColorBand temp={temp} width={80} height={6} className="mt-1" /></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">POWER</span><span className="text-[16px] font-bold font-mono text-white">{powerDraw != null ? `${powerDraw.toFixed(0)}W` : "—"}</span></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">FAN</span><span className="text-[16px] font-bold font-mono text-white">{fan != null ? `${fan}%` : "N/A"}</span></div>
                     <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">CLOCK</span><span className="text-[16px] font-bold font-mono text-white">{clockCur ?? "—"} <span className="text-[11px] text-gray-600">MHz</span></span></div>
