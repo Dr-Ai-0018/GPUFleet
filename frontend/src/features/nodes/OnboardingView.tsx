@@ -86,7 +86,7 @@ export function OnboardingView(): JSX.Element {
         {awaiting.length === 0 ? (
           <div className="py-10 text-center text-[13px] text-gray-600 border border-dashed border-white/5 rounded-xl">当前没有待接入节点</div>
         ) : (
-          <div className="rounded-xl overflow-hidden border border-white/[0.04] bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)]">
+          <div className="rounded-xl overflow-hidden border border-[var(--card-border)] bg-[var(--surface-card)]">
             <table className="w-full text-left text-[13px]">
               <thead className="text-gray-500 text-[11px] font-mono uppercase tracking-wider border-b border-white/5">
                 <tr><th className="px-5 py-3">节点</th><th className="px-5 py-3">接入状态</th><th className="px-5 py-3">连接</th><th className="px-5 py-3">登记时间</th><th className="px-5 py-3">心跳</th><th className="px-5 py-3"></th></tr>

@@ -41,13 +41,11 @@ export function AppShell({ onLogout }: Props): JSX.Element {
       {/* Command Palette */}
       <CommandPalette />
 
-      {/* Background glow */}
-      <div className="fixed top-[-40%] left-[-20%] w-[60%] h-[60%] bg-cyan-950/10 blur-[200px] rounded-full pointer-events-none mix-blend-screen" />
-      <div className="fixed bottom-[-40%] right-[-20%] w-[60%] h-[60%] bg-emerald-950/5 blur-[200px] rounded-full pointer-events-none mix-blend-screen" />
-      <div className="fixed right-[8%] top-[20%] h-[30rem] w-[30rem] rounded-full bg-violet-950/10 blur-[180px] pointer-events-none mix-blend-screen" />
+      {/* Ambient glow — single subtle layer, no expensive multi-blur */}
+      <div className="fixed top-[-20%] left-[10%] w-[40%] h-[40%] bg-cyan-950/[0.04] blur-[120px] rounded-full pointer-events-none" />
 
       {/* Sidebar */}
-      <aside className="w-[250px] border-r border-white/5 bg-[#08090C]/90 backdrop-blur-2xl flex flex-col z-20 shrink-0">
+      <aside className="w-[250px] border-r border-white/5 bg-[#08090C] flex flex-col z-20 shrink-0">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -79,7 +77,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
                 {isActive && (
                   <>
                     <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-cyan-400 shadow-[0_0_16px_rgba(15,240,179,0.5)]" />
-                    <div className="absolute inset-0 rounded-lg border border-cyan-400/15 bg-[linear-gradient(90deg,rgba(15,240,179,0.12),rgba(15,240,179,0.03)_55%,rgba(255,255,255,0.02))] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]" />
+                    <div className="absolute inset-0 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.06]" />
                   </>
                 )}
                 <span className={`relative z-10 ${isActive ? "text-cyan-400" : "text-gray-500"}`}>{item.icon}</span>
@@ -127,7 +125,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
       {/* Main */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative z-10">
         {/* Header */}
-        <header className="h-14 flex items-center justify-between px-7 border-b border-white/5 bg-[#08090C]/50 backdrop-blur-md shrink-0">
+        <header className="h-14 flex items-center justify-between px-7 border-b border-white/5 bg-[#08090C] shrink-0">
           <Breadcrumb route={route} />
           <div className="flex items-center gap-3">
             <button

@@ -12,7 +12,7 @@ import { useToast } from "../../ui/Toast";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 
-const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
+const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[var(--surface-card)] border border-[var(--card-border)] shadow-[var(--shadow-card-lite)]";
 const ACTIVE_STATUSES = new Set(["pending", "claimed", "running", "cancel_requested"]);
 
 type Props = { taskId: string };

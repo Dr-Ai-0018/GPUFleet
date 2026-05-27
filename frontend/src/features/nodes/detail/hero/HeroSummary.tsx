@@ -34,7 +34,8 @@ export function HeroSummary({
   return (
     <>
       <div className={`${cardCls} relative overflow-hidden px-6 py-7`}>
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[radial-gradient(ellipse_at_right,_var(--tw-gradient-stops))] from-cyan-950/20 to-transparent pointer-events-none" />
+        {/* Subtle accent hint — no heavy radial-gradient */}
+        <div className="absolute right-0 top-0 bottom-0 w-1/4 bg-cyan-950/[0.06] pointer-events-none" />
         <div className="relative z-10 flex items-center justify-between">
           <div className="flex items-start gap-5">
             <div className="relative flex h-14 w-14 items-center justify-center rounded-xl border border-white/5 bg-[#0F1116]">

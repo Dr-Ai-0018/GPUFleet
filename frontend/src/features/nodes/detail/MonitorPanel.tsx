@@ -145,7 +145,7 @@ export function MonitorPanel({
 
   return (
     <div className="space-y-8">
-      <section className="overflow-hidden rounded-[14px] border border-white/[0.04] bg-[linear-gradient(180deg,rgba(16,18,23,0.98)_0%,rgba(9,10,13,1)_100%)]">
+      <section className="overflow-hidden rounded-[14px] border border-[var(--card-border)] bg-[var(--surface-card)]">
         <div className="flex items-center justify-between border-b border-white/[0.04] px-6 py-4">
           <div><div className={zhLabel}>运行概览</div></div>
           <div className="rounded-md border border-cyan-400/15 bg-cyan-400/[0.06] px-2.5 py-1 text-[11px] font-medium tracking-[0.06em] text-cyan-300">实时</div>
@@ -276,7 +276,7 @@ export function MonitorPanel({
               </div>
             </div>
 
-            <div className="border border-cyan-500/12 bg-[linear-gradient(180deg,rgba(34,211,238,0.05),rgba(9,22,28,0.82))] px-5 py-5">
+            <div className="border border-cyan-500/10 bg-cyan-950/20 px-5 py-5">
               <div className="text-[11px] font-medium tracking-[0.06em] text-cyan-300/70">CPU 负载</div>
               <div className="mt-3 flex items-end gap-2">
                 <span className="text-5xl font-bold font-mono leading-none text-cyan-300">{Math.round(cpuUse)}</span>
@@ -305,7 +305,7 @@ export function MonitorPanel({
                 {perCore.map((value, idx) => {
                   const pct = Math.max(0, Math.min(100, Math.round(value)));
                   return (
-                    <div key={idx} className="border border-white/[0.04] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] px-3 py-2.5">
+                    <div key={idx} className="border border-white/[0.04] bg-white/[0.02] rounded px-3 py-2.5">
                       <div className="mb-2 flex items-center justify-between text-[10px] font-mono"><span className="text-gray-500">C{idx}</span><span className="text-white/80">{pct}%</span></div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: pct >= 90 ? "#f85149" : pct >= 70 ? "#f0b040" : "#06b6d4" }} />
@@ -319,7 +319,7 @@ export function MonitorPanel({
         </section>
 
         <section className={`${cardCls} space-y-6`}>
-          <div className="border border-cyan-500/10 bg-[linear-gradient(180deg,rgba(34,211,238,0.05),rgba(255,255,255,0.01))] p-5">
+          <div className="border border-cyan-500/10 bg-cyan-950/20 p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className={zhLabel}>内存占用</p>

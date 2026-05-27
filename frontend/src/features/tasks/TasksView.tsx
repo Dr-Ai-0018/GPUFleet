@@ -8,7 +8,7 @@ import { RingGauge } from "../../ui/RingGauge";
 import { MiniSparkline } from "../../ui/MiniSparkline";
 import { PipelineBar, TASK_PIPELINE_SEGMENTS } from "../../ui/PipelineBar";
 
-const cardCls = "rounded-xl transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
+const cardCls = "rounded-xl transition-all duration-300 bg-[var(--surface-card)] border border-[var(--card-border)] shadow-[var(--shadow-card-lite)]";
 const inputCls = "bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-1.5 text-xs text-gray-300 outline-none focus:border-cyan-500/30 transition-all";
 
 const STATUS_GROUPS = [
