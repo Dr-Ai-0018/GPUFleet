@@ -572,7 +572,14 @@ def get_status_history(
 
         rows = conn.execute(
             """
-            SELECT reported_at, cpu_json, memory_json, gpu_json
+            SELECT reported_at,
+                   cpu_usage_percent,
+                   memory_usage_percent,
+                   gpu_utilization_percent,
+                   gpu_memory_percent,
+                   gpu_temperature_c,
+                   gpu_power_draw_w,
+                   gpu_json
             FROM node_status_snapshots
             WHERE node_id = ?
             ORDER BY reported_at DESC, id DESC
@@ -583,25 +590,18 @@ def get_status_history(
 
     items = []
     for row in reversed(rows):  # reverse to ascending order
-        cpu = json.loads(row["cpu_json"])
-        memory = json.loads(row["memory_json"])
-        gpu_data = json.loads(row["gpu_json"])
-        # gpu_json is stored as {"gpus": [...], "nvidia": {...}}
+        gpu_data = json.loads(row["gpu_json"]) if row["gpu_json"] else {}
         gpus_list = gpu_data.get("gpus", []) if isinstance(gpu_data, dict) else (gpu_data if isinstance(gpu_data, list) else [])
         first_gpu = gpus_list[0] if gpus_list else None
         items.append(
             NodeStatusHistoryItem(
                 reported_at=row["reported_at"],
-                cpu_usage_percent=cpu.get("usage_percent"),
-                memory_usage_percent=memory.get("usage_percent"),
-                gpu_utilization_percent=first_gpu.get("utilization_percent") if first_gpu else None,
-                gpu_memory_percent=(
-                    (float(first_gpu.get("used_vram_mb", 0)) / float(first_gpu.get("total_vram_mb", 1))) * 100
-                    if first_gpu and first_gpu.get("total_vram_mb")
-                    else None
-                ),
-                gpu_temperature_c=first_gpu.get("temperature_c") if first_gpu else None,
-                gpu_power_draw_w=first_gpu.get("power_draw_w") if first_gpu else None,
+                cpu_usage_percent=row["cpu_usage_percent"],
+                memory_usage_percent=row["memory_usage_percent"],
+                gpu_utilization_percent=row["gpu_utilization_percent"],
+                gpu_memory_percent=row["gpu_memory_percent"],
+                gpu_temperature_c=row["gpu_temperature_c"],
+                gpu_power_draw_w=row["gpu_power_draw_w"],
                 gpu_clock_graphics_mhz=first_gpu.get("clock_graphics_mhz") if first_gpu else None,
             )
         )

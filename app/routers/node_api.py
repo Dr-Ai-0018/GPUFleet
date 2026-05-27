@@ -250,6 +250,21 @@ def _sanitize_artifact_name(name: str) -> str:
     return sanitized
 
 
+def _first_gpu_metrics(payload: HeartbeatRequest) -> tuple[float | None, float | None, float | None, float | None]:
+    if not payload.gpus:
+        return None, None, None, None
+    first_gpu = payload.gpus[0]
+    gpu_memory_percent = None
+    if first_gpu.total_vram_mb and first_gpu.total_vram_mb > 0 and first_gpu.used_vram_mb is not None:
+        gpu_memory_percent = (float(first_gpu.used_vram_mb) / float(first_gpu.total_vram_mb)) * 100.0
+    return (
+        first_gpu.utilization_percent,
+        gpu_memory_percent,
+        first_gpu.temperature_c,
+        first_gpu.power_draw_w,
+    )
+
+
 @router.post("/heartbeat", response_model=HeartbeatResponse)
 @limiter.limit("60/minute", key_func=_node_rate_limit_key)
 async def heartbeat(
@@ -269,6 +284,7 @@ async def heartbeat(
         ) from exc
 
     now_iso = utc_now_iso()
+    gpu_utilization_percent, gpu_memory_percent, gpu_temperature_c, gpu_power_draw_w = _first_gpu_metrics(payload)
 
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -296,13 +312,21 @@ async def heartbeat(
         conn.execute(
             """
             INSERT INTO node_status_snapshots (
-                node_id, reported_at, cpu_json, memory_json, disk_json, gpu_json,
+                node_id, reported_at, cpu_usage_percent, memory_usage_percent,
+                gpu_utilization_percent, gpu_memory_percent, gpu_temperature_c, gpu_power_draw_w,
+                cpu_json, memory_json, disk_json, gpu_json,
                 python_env_json, task_runtime_json, raw_payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 node_id,
                 now_iso,
+                payload.cpu.usage_percent,
+                payload.memory.usage_percent,
+                gpu_utilization_percent,
+                gpu_memory_percent,
+                gpu_temperature_c,
+                gpu_power_draw_w,
                 dumps_json(payload.cpu.model_dump()),
                 dumps_json(payload.memory.model_dump()),
                 dumps_json([item.model_dump() for item in payload.disks]),

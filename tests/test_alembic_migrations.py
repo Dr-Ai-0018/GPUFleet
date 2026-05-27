@@ -26,9 +26,15 @@ def test_alembic_upgrade_and_downgrade_round_trip(_env_setup: None, monkeypatch)
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             ).fetchall()
         }
+        snapshot_columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(node_status_snapshots)").fetchall()
+        }
     assert "admins" in tables
     assert "tasks" in tables
     assert "alembic_version" in tables
+    assert "cpu_usage_percent" in snapshot_columns
+    assert "gpu_power_draw_w" in snapshot_columns
 
     command.downgrade(cfg, "base")
 

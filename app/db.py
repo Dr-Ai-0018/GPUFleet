@@ -83,6 +83,12 @@ class Database:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     node_id TEXT NOT NULL,
                     reported_at TEXT NOT NULL,
+                    cpu_usage_percent REAL,
+                    memory_usage_percent REAL,
+                    gpu_utilization_percent REAL,
+                    gpu_memory_percent REAL,
+                    gpu_temperature_c REAL,
+                    gpu_power_draw_w REAL,
                     cpu_json TEXT NOT NULL,
                     memory_json TEXT NOT NULL,
                     disk_json TEXT NOT NULL,
@@ -303,6 +309,42 @@ class Database:
             conn.execute("ALTER TABLE tasks ADD COLUMN review_started_at TEXT")
         if "review_finished_at" not in task_columns:
             conn.execute("ALTER TABLE tasks ADD COLUMN review_finished_at TEXT")
+
+        snapshot_columns = {
+            row["name"]: row
+            for row in conn.execute("PRAGMA table_info(node_status_snapshots)").fetchall()
+        }
+        if "cpu_usage_percent" not in snapshot_columns:
+            conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN cpu_usage_percent REAL")
+        if "memory_usage_percent" not in snapshot_columns:
+            conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN memory_usage_percent REAL")
+        if "gpu_utilization_percent" not in snapshot_columns:
+            conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN gpu_utilization_percent REAL")
+        if "gpu_memory_percent" not in snapshot_columns:
+            conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN gpu_memory_percent REAL")
+        if "gpu_temperature_c" not in snapshot_columns:
+            conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN gpu_temperature_c REAL")
+        if "gpu_power_draw_w" not in snapshot_columns:
+            conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN gpu_power_draw_w REAL")
+        conn.execute(
+            """
+            UPDATE node_status_snapshots
+            SET cpu_usage_percent = COALESCE(cpu_usage_percent, CAST(json_extract(cpu_json, '$.usage_percent') AS REAL)),
+                memory_usage_percent = COALESCE(memory_usage_percent, CAST(json_extract(memory_json, '$.usage_percent') AS REAL)),
+                gpu_utilization_percent = COALESCE(gpu_utilization_percent, CAST(json_extract(gpu_json, '$.gpus[0].utilization_percent') AS REAL)),
+                gpu_memory_percent = COALESCE(
+                    gpu_memory_percent,
+                    CASE
+                        WHEN CAST(json_extract(gpu_json, '$.gpus[0].total_vram_mb') AS REAL) > 0
+                        THEN CAST(json_extract(gpu_json, '$.gpus[0].used_vram_mb') AS REAL) * 100.0
+                             / CAST(json_extract(gpu_json, '$.gpus[0].total_vram_mb') AS REAL)
+                        ELSE NULL
+                    END
+                ),
+                gpu_temperature_c = COALESCE(gpu_temperature_c, CAST(json_extract(gpu_json, '$.gpus[0].temperature_c') AS REAL)),
+                gpu_power_draw_w = COALESCE(gpu_power_draw_w, CAST(json_extract(gpu_json, '$.gpus[0].power_draw_w') AS REAL))
+            """
+        )
 
         admin_columns = {
             row["name"]: row
