@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:types": "node ./scripts/generate-openapi-types.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run"

@@ -40,6 +40,8 @@ describe("TaskComposer", () => {
     last_seen_at: null,
     connection_status: "online",
     onboarding_status: "connected",
+    allow_shell: false,
+    allow_modal: false,
     created_at: "",
     updated_at: "",
   };

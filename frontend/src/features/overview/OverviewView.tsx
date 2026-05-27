@@ -16,6 +16,9 @@ import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative, bytesToReadable } from "../../lib/format";
 import { DeltaBadge } from "../../ui/DeltaBadge";
 import { AnimatedNumber } from "../../ui/AnimatedNumber";
+import type { components } from "../../types.generated";
+
+type GpuSnapshot = components["schemas"]["HeartbeatGpu"];
 
 echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -49,7 +52,7 @@ export function OverviewView(): JSX.Element {
     for (const node of overview.nodes) {
       if (!node.latest_status) continue;
       for (const gpu of node.latest_status.gpus) {
-        const g = gpu as Record<string, unknown>;
+        const g = gpu as GpuSnapshot;
         totalGpus++; totalUtil += Number(g.utilization_percent ?? 0);
         totalVram += Number(g.total_vram_mb ?? 0); usedVram += Number(g.used_vram_mb ?? 0);
       }
@@ -63,7 +66,7 @@ export function OverviewView(): JSX.Element {
     for (const node of prevOverview.nodes) {
       if (!node.latest_status) continue;
       for (const gpu of node.latest_status.gpus) {
-        const g = gpu as Record<string, unknown>;
+        const g = gpu as GpuSnapshot;
         totalGpus++; totalUtil += Number(g.utilization_percent ?? 0);
       }
     }
@@ -115,7 +118,7 @@ export function OverviewView(): JSX.Element {
       grid: { left: 100, right: 20, top: 10, bottom: 20 },
       xAxis: { type: "value" as const, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 10, formatter: "{value}%" } },
       yAxis: { type: "category" as const, data: nodes.map((n) => n.display_name), axisLabel: { color: "#8b949e", fontSize: 11 }, axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } } },
-      series: [{ type: "bar" as const, data: nodes.map((n) => { const g = n.latest_status!.gpus[0] as Record<string, unknown>; return { value: Number(g.utilization_percent ?? 0), itemStyle: { color: "#06b6d4", borderRadius: [0, 3, 3, 0] } }; }), barWidth: 16 }],
+      series: [{ type: "bar" as const, data: nodes.map((n) => { const g = n.latest_status!.gpus[0] as GpuSnapshot; return { value: Number(g.utilization_percent ?? 0), itemStyle: { color: "#06b6d4", borderRadius: [0, 3, 3, 0] } }; }), barWidth: 16 }],
     };
   }, [overview]);
 

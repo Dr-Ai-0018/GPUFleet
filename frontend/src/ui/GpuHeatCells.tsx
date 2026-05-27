@@ -4,6 +4,9 @@
  * 用于 FleetView 表格替换 ArcGauge，支持 8-GPU 节点不破版
  */
 import { useState } from "react";
+import type { components } from "../types.generated";
+
+type GpuSnapshot = components["schemas"]["HeartbeatGpu"];
 
 type GpuInfo = {
   index: number;
@@ -15,7 +18,7 @@ type GpuInfo = {
 };
 
 type GpuHeatCellsProps = {
-  gpus: Array<Record<string, unknown>>;
+  gpus: GpuSnapshot[];
   size?: number;  // cell size in px, default 16
   gap?: number;   // gap in px, default 3
 };
@@ -45,7 +48,7 @@ export function GpuHeatCells({ gpus, size = 16, gap = 3 }: GpuHeatCellsProps): J
 
   const parsedGpus: GpuInfo[] = gpus.map((g, i) => ({
     index: Number(g.index ?? i),
-    name: String(g.name ?? g.gpu_name ?? "GPU"),
+    name: String(g.model ?? "GPU"),
     utilization_percent: Number(g.utilization_percent ?? 0),
     used_vram_mb: Number(g.used_vram_mb ?? 0),
     total_vram_mb: Number(g.total_vram_mb ?? 0),
