@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { buildHash, navigate, useRoute, type Route } from "../lib/routing";
 import { formatRelative } from "../lib/format";
+import { i18n, routeLabels } from "../lib/i18n";
 import { useConsoleStore } from "../state/ConsoleStore";
 import { OnboardingView } from "../features/nodes/OnboardingView";
 import { FleetView } from "../features/nodes/FleetView";
@@ -9,7 +10,7 @@ import { TasksView } from "../features/tasks/TasksView";
 import { TaskDetailView } from "../features/tasks/TaskDetailView";
 import { SecurityView } from "../features/observability/SecurityView";
 import { OverviewView } from "../features/overview/OverviewView";
-import { Button } from "../ui/Button";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { PageTransition } from "../ui/Motion";
 import { CommandPalette } from "../ui/CommandPalette";
 
@@ -28,11 +29,11 @@ export function AppShell({ onLogout }: Props): JSX.Element {
   const activeKey: NavKey = route.name === "node-detail" ? "fleet" : route.name === "task-detail" ? "tasks" : route.name;
 
   const navItems = [
-    { id: "overview" as const, label: "系统总览", icon: <IconDashboard /> },
-    { id: "onboarding" as const, label: "节点接入", icon: <IconServer />, badge: awaitingCount || undefined },
-    { id: "fleet" as const, label: "节点舰队", icon: <IconBox /> },
-    { id: "tasks" as const, label: "任务管理", icon: <IconActivity /> },
-    { id: "security" as const, label: "安全审计", icon: <IconShield />, badge: warningCount || undefined },
+    { id: "overview" as const, label: i18n.shell.nav.overview, icon: <IconDashboard /> },
+    { id: "onboarding" as const, label: i18n.shell.nav.onboarding, icon: <IconServer />, badge: awaitingCount || undefined },
+    { id: "fleet" as const, label: i18n.shell.nav.fleet, icon: <IconBox /> },
+    { id: "tasks" as const, label: i18n.shell.nav.tasks, icon: <IconActivity /> },
+    { id: "security" as const, label: i18n.shell.nav.security, icon: <IconShield />, badge: warningCount || undefined },
   ];
 
   return (
@@ -64,7 +65,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
         <nav className="flex-1 px-3.5 py-6 space-y-1">
           <div className="mb-3 flex items-center gap-2 px-2.5">
             <div className="h-3 w-px bg-cyan-400/60" />
-            <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest font-mono">Operations</div>
+            <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest font-mono">{i18n.shell.operations}</div>
           </div>
           {navItems.map((item) => {
             const isActive = activeKey === item.id;
@@ -103,10 +104,10 @@ export function AppShell({ onLogout }: Props): JSX.Element {
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-medium text-white truncate">{store.me?.username ?? "admin"}</div>
               <div className="text-[10px] text-emerald-400 flex items-center gap-1.5 mt-0.5 font-mono">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Online
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> {i18n.shell.online}
               </div>
             </div>
-            <button type="button" onClick={onLogout} className="text-gray-500 hover:text-white transition-colors p-1.5 hover:bg-white/5 rounded-md" title="退出">
+            <button type="button" onClick={onLogout} className="text-gray-500 hover:text-white transition-colors p-1.5 hover:bg-white/5 rounded-md" title={i18n.shell.logoutTitle}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </button>
           </div>
@@ -116,7 +117,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
               <div className="mt-1 text-[13px] font-bold font-mono text-white">{onlineCount}/{store.nodes.length || 0}</div>
             </div>
             <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
-              <div className="text-[9px] font-mono uppercase text-gray-500">Last Sync</div>
+              <div className="text-[9px] font-mono uppercase text-gray-500">{i18n.shell.lastSync}</div>
               <div className="mt-1 text-[13px] font-bold font-mono text-white">{lastSync ? formatRelative(lastSync) : "—"}</div>
             </div>
           </div>
@@ -135,12 +136,12 @@ export function AppShell({ onLogout }: Props): JSX.Element {
               className="relative w-48 flex items-center gap-2 bg-[#050507] border border-white/5 rounded-md pl-3 pr-2 py-1.5 text-xs text-gray-500 hover:border-cyan-500/20 hover:text-gray-400 transition-all cursor-pointer group"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <span className="flex-1 text-left">搜索...</span>
+              <span className="flex-1 text-left">{i18n.shell.commandSearchPlaceholder}</span>
               <kbd className="text-[9px] font-mono border border-white/[0.08] rounded px-1 py-0.5 bg-white/[0.03] text-gray-600 group-hover:text-gray-400 transition-colors">⌘K</kbd>
             </button>
             <button type="button" onClick={() => void store.refresh()} className="bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-md text-[12px] font-medium text-gray-300 hover:text-white flex items-center gap-2 transition-all">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-              同步数据
+              {i18n.common.refresh}
             </button>
             <HeaderClock />
           </div>
@@ -149,15 +150,23 @@ export function AppShell({ onLogout }: Props): JSX.Element {
         {/* Error */}
         {store.lastError ? (
           <div className="mx-7 mt-3 px-4 py-3 rounded-lg text-[13px] bg-red-500/8 border border-red-500/20 text-red-400 flex gap-2 items-center">
-            <span>数据异常</span><code className="text-[11px] opacity-80">{store.lastError}</code>
+            <span>{i18n.shell.dataIssue}</span><code className="text-[11px] opacity-80">{store.lastError}</code>
           </div>
         ) : null}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-7 pt-6">
-          <PageTransition id={route.name === "node-detail" ? `node-${route.nodeId}` : route.name === "task-detail" ? `task-${route.taskId}` : route.name}>
-            <RouteOutlet route={route} />
-          </PageTransition>
+          <ErrorBoundary
+            fallbackTitle={i18n.errorBoundary.routeTitle}
+            fallbackDescription={i18n.errorBoundary.routeDescription}
+            actionLabel={i18n.common.retry}
+            onAction={() => window.location.reload()}
+            resetKeys={[route.name, route.name === "node-detail" ? route.nodeId : route.name === "task-detail" ? route.taskId : ""]}
+          >
+            <PageTransition id={route.name === "node-detail" ? `node-${route.nodeId}` : route.name === "task-detail" ? `task-${route.taskId}` : route.name}>
+              <RouteOutlet route={route} />
+            </PageTransition>
+          </ErrorBoundary>
         </div>
       </main>
     </div>
@@ -174,7 +183,7 @@ function HeaderClock(): JSX.Element {
 
   return (
     <div className="rounded-md border border-white/5 bg-[#050507] px-3 py-1.5 text-right">
-      <div className="text-[9px] font-mono uppercase tracking-[0.18em] text-gray-600">Beijing Time</div>
+      <div className="text-[9px] font-mono uppercase tracking-[0.18em] text-gray-600">{i18n.shell.beijingTime}</div>
       <div className="text-[12px] font-mono text-cyan-300">{new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Shanghai" }).format(clock)}</div>
     </div>
   );
@@ -184,22 +193,22 @@ function Breadcrumb({ route }: { route: Route }): JSX.Element {
   const store = useConsoleStore();
   const parts: { label: string; to?: Route }[] = [];
   switch (route.name) {
-    case "overview": parts.push({ label: "系统总览" }); break;
-    case "onboarding": parts.push({ label: "节点接入" }); break;
-    case "fleet": parts.push({ label: "节点舰队" }); break;
+    case "overview": parts.push({ label: routeLabels.overview }); break;
+    case "onboarding": parts.push({ label: routeLabels.onboarding }); break;
+    case "fleet": parts.push({ label: routeLabels.fleet }); break;
     case "node-detail": {
-      parts.push({ label: "节点舰队", to: { name: "fleet" } });
+      parts.push({ label: routeLabels.fleet, to: { name: "fleet" } });
       const node = store.nodes.find((n) => n.node_id === route.nodeId);
       parts.push({ label: node?.display_name ?? route.nodeId });
       break;
     }
-    case "tasks": parts.push({ label: "任务管理" }); break;
-    case "task-detail": parts.push({ label: "任务管理", to: { name: "tasks" } }); parts.push({ label: route.taskId }); break;
-    case "security": parts.push({ label: "安全审计" }); break;
+    case "tasks": parts.push({ label: routeLabels.tasks }); break;
+    case "task-detail": parts.push({ label: routeLabels.tasks, to: { name: "tasks" } }); parts.push({ label: route.taskId }); break;
+    case "security": parts.push({ label: routeLabels.security }); break;
   }
   return (
     <div className="flex items-center text-[13px]">
-      <span className="text-gray-500">GPUFleet Node-Network</span>
+      <span className="text-gray-500">{i18n.shell.brandTrail}</span>
       {parts.map((p, i) => (
         <span key={i} className="flex items-center">
           <svg className="mx-2 text-gray-700" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>

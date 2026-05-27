@@ -18,6 +18,9 @@ import type {
 } from "./types";
 
 const API_ROOT = "";
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 200;
 
 class ApiError extends Error {
   status: number;
@@ -27,6 +30,47 @@ class ApiError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isRetriableStatus(status: number): boolean {
+  return status >= 500;
+}
+
+async function fetchWithPolicy(input: string, init: RequestInit): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      window.clearTimeout(timeoutId);
+
+      if (!isRetriableStatus(response.status) || attempt === MAX_RETRY_ATTEMPTS) {
+        return response;
+      }
+
+      await sleep(RETRY_BASE_DELAY_MS * (2 ** attempt));
+      continue;
+    } catch (error) {
+      window.clearTimeout(timeoutId);
+      lastError = error;
+      if (attempt === MAX_RETRY_ATTEMPTS) {
+        break;
+      }
+      await sleep(RETRY_BASE_DELAY_MS * (2 ** attempt));
+    }
+  }
+
+  if (lastError instanceof DOMException && lastError.name === "AbortError") {
+    throw new Error("请求超时，请稍后重试");
+  }
+  throw lastError instanceof Error ? lastError : new Error("请求失败");
 }
 
 async function request<T>(
@@ -41,7 +85,7 @@ async function request<T>(
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const response = await fetch(`${API_ROOT}${path}`, { ...init, headers });
+  const response = await fetchWithPolicy(`${API_ROOT}${path}`, { ...init, headers });
   if (!response.ok) {
     const text = await response.text();
     let detail = text;
