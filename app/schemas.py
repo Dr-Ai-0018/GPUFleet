@@ -303,6 +303,8 @@ class AdminTaskLogView(BaseModel):
     last_offset: int
     preview_text: str
     center_log_path: str | None
+    is_truncated: bool = False
+    truncated_notice: str | None = None
     updated_at: str
 
 

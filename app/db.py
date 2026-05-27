@@ -153,6 +153,8 @@ class Database:
                     last_offset INTEGER NOT NULL DEFAULT 0,
                     preview_text TEXT NOT NULL DEFAULT '',
                     center_log_path TEXT,
+                    is_truncated INTEGER NOT NULL DEFAULT 0,
+                    truncated_notice TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL,
                     UNIQUE(task_id, stream),
                     FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
@@ -352,6 +354,15 @@ class Database:
         }
         if "tokens_invalidated_at" not in admin_columns:
             conn.execute("ALTER TABLE admins ADD COLUMN tokens_invalidated_at TEXT")
+
+        task_log_columns = {
+            row["name"]: row
+            for row in conn.execute("PRAGMA table_info(task_logs)").fetchall()
+        }
+        if "is_truncated" not in task_log_columns:
+            conn.execute("ALTER TABLE task_logs ADD COLUMN is_truncated INTEGER NOT NULL DEFAULT 0")
+        if "truncated_notice" not in task_log_columns:
+            conn.execute("ALTER TABLE task_logs ADD COLUMN truncated_notice TEXT NOT NULL DEFAULT ''")
 
     def trim_node_status_history(self, node_id: str, keep: int) -> None:
         with self.connect() as conn:

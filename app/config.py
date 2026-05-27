@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     snapshot_retention_days: int = 7
     task_log_retention_days: int = 30
     artifact_retention_days: int = 30
+    task_log_stream_max_bytes: int = 100 * 1024 * 1024
+    storage_quota_bytes: int = 5 * 1024 * 1024 * 1024
     review_llm_base_url: str = "https://api.openai.com/v1"
     review_llm_api_key: str = ""
     review_llm_model: str = "gpt-5.4"

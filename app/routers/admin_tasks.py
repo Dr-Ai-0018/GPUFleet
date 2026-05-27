@@ -63,7 +63,7 @@ def _task_row_to_list_item(row: object) -> AdminTaskListItem:
 def _load_log_views(conn: object, task_id: str) -> list[AdminTaskLogView]:
     rows = conn.execute(
         """
-        SELECT stream, last_offset, preview_text, center_log_path, updated_at
+        SELECT stream, last_offset, preview_text, center_log_path, is_truncated, truncated_notice, updated_at
         FROM task_logs
         WHERE task_id = ?
         ORDER BY stream ASC
@@ -76,6 +76,8 @@ def _load_log_views(conn: object, task_id: str) -> list[AdminTaskLogView]:
             last_offset=row["last_offset"],
             preview_text=row["preview_text"],
             center_log_path=row["center_log_path"],
+            is_truncated=bool(row["is_truncated"]),
+            truncated_notice=row["truncated_notice"] or None,
             updated_at=row["updated_at"],
         )
         for row in rows

@@ -30,11 +30,17 @@ def test_alembic_upgrade_and_downgrade_round_trip(_env_setup: None, monkeypatch)
             row[1]
             for row in conn.execute("PRAGMA table_info(node_status_snapshots)").fetchall()
         }
+        task_log_columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(task_logs)").fetchall()
+        }
     assert "admins" in tables
     assert "tasks" in tables
     assert "alembic_version" in tables
     assert "cpu_usage_percent" in snapshot_columns
     assert "gpu_power_draw_w" in snapshot_columns
+    assert "is_truncated" in task_log_columns
+    assert "truncated_notice" in task_log_columns
 
     command.downgrade(cfg, "base")
 

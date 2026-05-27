@@ -4,6 +4,7 @@ import json
 import sqlite3
 from base64 import b64decode
 from datetime import UTC, datetime, timedelta
+import gzip
 from pathlib import Path
 from typing import Annotated
 
@@ -230,13 +231,96 @@ def _upsert_task_attempt(
     )
 
 
-def _append_log_chunk(storage_root: Path, task_id: str, stream: str, text: str) -> str:
+def _storage_usage_bytes(storage_root: Path) -> int:
+    if not storage_root.exists():
+        return 0
+    return sum(path.stat().st_size for path in storage_root.rglob("*") if path.is_file())
+
+
+def _next_log_archive_path(log_path: Path) -> Path:
+    stream_name = log_path.stem
+    for index in range(1, 100_000):
+        candidate = log_path.with_name(f"{stream_name}.{index:05d}.log.gz")
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"Too many archived log slices for {log_path}")
+
+
+def _rotate_log_stream(log_path: Path) -> None:
+    if not log_path.exists() or log_path.stat().st_size == 0:
+        return
+    archive_path = _next_log_archive_path(log_path)
+    with log_path.open("rb") as src, gzip.open(archive_path, "wb", compresslevel=6) as dst:
+        dst.write(src.read())
+    log_path.write_bytes(b"")
+
+
+def _take_text_prefix_by_bytes(text: str, byte_limit: int) -> tuple[str, str]:
+    if byte_limit <= 0 or not text:
+        return "", text
+    encoded = text.encode("utf-8")
+    if len(encoded) <= byte_limit:
+        return text, ""
+    left = 0
+    right = len(text)
+    while left < right:
+        mid = (left + right + 1) // 2
+        if len(text[:mid].encode("utf-8")) <= byte_limit:
+            left = mid
+        else:
+            right = mid - 1
+    return text[:left], text[left:]
+
+
+def _append_log_chunk(storage_root: Path, task_id: str, stream: str, text: str, max_stream_bytes: int) -> str:
     log_dir = storage_root / "logs" / task_id
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{stream}.log"
-    with log_path.open("a", encoding="utf-8") as fh:
-        fh.write(text)
+    remaining_text = text
+    while remaining_text:
+        current_size = log_path.stat().st_size if log_path.exists() else 0
+        remaining_bytes = max_stream_bytes - current_size
+        if remaining_bytes <= 0:
+            _rotate_log_stream(log_path)
+            current_size = 0
+            remaining_bytes = max_stream_bytes
+        chunk_text, remaining_text = _take_text_prefix_by_bytes(remaining_text, remaining_bytes)
+        if not chunk_text:
+            _rotate_log_stream(log_path)
+            continue
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(chunk_text)
+        if log_path.stat().st_size >= max_stream_bytes:
+            _rotate_log_stream(log_path)
     return str(log_path)
+
+
+def _mark_log_truncated(
+    conn: object,
+    *,
+    task_id: str,
+    stream: str,
+    existing: object | None,
+    now_iso: str,
+    reason: str,
+) -> None:
+    if existing is None:
+        conn.execute(
+            """
+            INSERT INTO task_logs (task_id, stream, last_offset, preview_text, center_log_path, is_truncated, truncated_notice, updated_at)
+            VALUES (?, ?, 0, '', NULL, 1, ?, ?)
+            """,
+            (task_id, stream, reason, now_iso),
+        )
+        return
+    conn.execute(
+        """
+        UPDATE task_logs
+        SET is_truncated = 1, truncated_notice = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (reason, now_iso, existing["id"]),
+    )
 
 
 def _sanitize_artifact_name(name: str) -> str:
@@ -455,10 +539,11 @@ async def task_log_chunk(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task log chunk payload") from exc
 
     now_iso = utc_now_iso()
+    quota_exceeded = False
     with db.connect() as conn:
         _load_task_for_node(conn, node_id, payload.task_id)
         existing = conn.execute(
-            "SELECT id, preview_text, last_offset FROM task_logs WHERE task_id = ? AND stream = ?",
+            "SELECT id, preview_text, last_offset, is_truncated FROM task_logs WHERE task_id = ? AND stream = ?",
             (payload.task_id, payload.stream),
         ).fetchone()
         append_text = payload.text
@@ -480,40 +565,70 @@ async def task_log_chunk(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Log offset gap detected for {payload.stream}",
                 )
-
-        log_path = _append_log_chunk(settings.storage_path, payload.task_id, payload.stream, append_text)
-        preview = append_text[-4000:]
-        if existing is None:
-            conn.execute(
-                """
-                INSERT INTO task_logs (task_id, stream, last_offset, preview_text, center_log_path, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    payload.task_id,
-                    payload.stream,
-                    payload.offset_start + len(payload.text),
-                    preview,
-                    log_path,
-                    now_iso,
-                ),
+        if existing is not None and bool(existing["is_truncated"]):
+            raise HTTPException(
+                status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+                detail=f"Log stream {payload.stream} is already truncated",
             )
+        append_bytes = len(append_text.encode("utf-8"))
+        if append_bytes and _storage_usage_bytes(settings.storage_path) + append_bytes > settings.storage_quota_bytes:
+            _mark_log_truncated(
+                conn,
+                task_id=payload.task_id,
+                stream=payload.stream,
+                existing=existing,
+                now_iso=now_iso,
+                reason="storage_quota_exceeded",
+            )
+            quota_exceeded = True
+        if quota_exceeded:
+            pass
         else:
-            merged_preview = (existing["preview_text"] + append_text)[-4000:]
-            conn.execute(
-                """
-                UPDATE task_logs
-                SET last_offset = ?, preview_text = ?, center_log_path = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    max(existing["last_offset"], payload.offset_start + len(payload.text)),
-                    merged_preview,
-                    log_path,
-                    now_iso,
-                    existing["id"],
-                ),
+            log_path = _append_log_chunk(
+                settings.storage_path,
+                payload.task_id,
+                payload.stream,
+                append_text,
+                settings.task_log_stream_max_bytes,
             )
+            preview = append_text[-4000:]
+            if existing is None:
+                conn.execute(
+                    """
+                    INSERT INTO task_logs (task_id, stream, last_offset, preview_text, center_log_path, is_truncated, truncated_notice, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 0, '', ?)
+                    """,
+                    (
+                        payload.task_id,
+                        payload.stream,
+                        payload.offset_start + len(payload.text),
+                        preview,
+                        log_path,
+                        now_iso,
+                    ),
+                )
+            else:
+                merged_preview = (existing["preview_text"] + append_text)[-4000:]
+                conn.execute(
+                    """
+                    UPDATE task_logs
+                    SET last_offset = ?, preview_text = ?, center_log_path = ?, is_truncated = 0, truncated_notice = '', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        max(existing["last_offset"], payload.offset_start + len(payload.text)),
+                        merged_preview,
+                        log_path,
+                        now_iso,
+                        existing["id"],
+                    ),
+                )
+
+    if quota_exceeded:
+        raise HTTPException(
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            detail="Storage quota exceeded; log chunk rejected",
+        )
     return {
         "ok": True,
         "task_id": payload.task_id,
