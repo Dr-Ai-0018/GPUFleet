@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     max_status_history_per_node: int = 200
     max_artifact_bytes: int = 500 * 1024 * 1024  # 500 MB
     sqlite_busy_timeout_ms: int = 5000
+    snapshot_retention_days: int = 7
+    task_log_retention_days: int = 30
+    artifact_retention_days: int = 30
     review_llm_base_url: str = "https://api.openai.com/v1"
     review_llm_api_key: str = ""
     review_llm_model: str = "gpt-5.4"

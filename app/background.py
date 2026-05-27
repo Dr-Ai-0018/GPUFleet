@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+from app.config import get_settings
 from app.db import Database, dumps_json, utc_now_iso
+from app.task_utils import TERMINAL_TASK_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,113 @@ def _latest_cancel_requested_at(conn: object, task_id: str) -> datetime | None:
     if row is None:
         return None
     return _parse_utc_or_none(row["created_at"])
+
+
+def _is_within_root(root: Path, candidate: Path) -> bool:
+    try:
+        candidate.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _cleanup_path(path: Path, expected_root: Path) -> None:
+    if not _is_within_root(expected_root, path):
+        logger.warning("Skip deleting path outside storage root: %s", path)
+        return
+    if path.is_file():
+        path.unlink(missing_ok=True)
+    if path.parent != expected_root and _is_within_root(expected_root, path.parent):
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
+
+
+def _prune_old_status_snapshots(db: Database) -> None:
+    settings = get_settings()
+    cutoff = (datetime.now(UTC) - timedelta(days=settings.snapshot_retention_days)).replace(microsecond=0).isoformat()
+    with db.connect() as conn:
+        conn.execute(
+            "DELETE FROM node_status_snapshots WHERE reported_at < ?",
+            (cutoff,),
+        )
+
+
+def _prune_old_task_logs(db: Database) -> None:
+    settings = get_settings()
+    cutoff = (datetime.now(UTC) - timedelta(days=settings.task_log_retention_days)).replace(microsecond=0).isoformat()
+    logs_root = settings.storage_path / "logs"
+    terminal_statuses = tuple(sorted(TERMINAL_TASK_STATUSES))
+    placeholders = ", ".join("?" for _ in terminal_statuses)
+    with db.connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT tl.id, tl.center_log_path
+            FROM task_logs tl
+            JOIN tasks t ON t.task_id = tl.task_id
+            WHERE t.status IN ({placeholders})
+              AND t.finished_at IS NOT NULL
+              AND t.finished_at < ?
+            """,
+            (*terminal_statuses, cutoff),
+        ).fetchall()
+        for row in rows:
+            log_path = row["center_log_path"]
+            if log_path:
+                _cleanup_path(Path(log_path), logs_root)
+        conn.execute(
+            f"""
+            DELETE FROM task_logs
+            WHERE id IN (
+                SELECT tl.id
+                FROM task_logs tl
+                JOIN tasks t ON t.task_id = tl.task_id
+                WHERE t.status IN ({placeholders})
+                  AND t.finished_at IS NOT NULL
+                  AND t.finished_at < ?
+            )
+            """,
+            (*terminal_statuses, cutoff),
+        )
+
+
+def _prune_old_artifacts(db: Database) -> None:
+    settings = get_settings()
+    cutoff = (datetime.now(UTC) - timedelta(days=settings.artifact_retention_days)).replace(microsecond=0).isoformat()
+    artifacts_root = settings.storage_path / "artifacts"
+    terminal_statuses = tuple(sorted(TERMINAL_TASK_STATUSES))
+    placeholders = ", ".join("?" for _ in terminal_statuses)
+    with db.connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT a.id, a.storage_path
+            FROM artifacts a
+            JOIN tasks t ON t.task_id = a.task_id
+            WHERE t.status IN ({placeholders})
+              AND t.finished_at IS NOT NULL
+              AND t.finished_at < ?
+            """,
+            (*terminal_statuses, cutoff),
+        ).fetchall()
+        for row in rows:
+            storage_path = row["storage_path"]
+            if storage_path:
+                _cleanup_path(Path(storage_path), artifacts_root)
+        conn.execute(
+            f"""
+            DELETE FROM artifacts
+            WHERE id IN (
+                SELECT a.id
+                FROM artifacts a
+                JOIN tasks t ON t.task_id = a.task_id
+                WHERE t.status IN ({placeholders})
+                  AND t.finished_at IS NOT NULL
+                  AND t.finished_at < ?
+            )
+            """,
+            (*terminal_statuses, cutoff),
+        )
 
 
 def _mark_lost_tasks(db: Database) -> None:
@@ -208,6 +318,9 @@ async def lost_task_scanner(db: Database) -> None:
             db.prune_expired_nonces(utc_now_iso())
             _mark_lost_tasks(db)
             _expire_reviewing_tasks(db)
+            _prune_old_status_snapshots(db)
+            _prune_old_task_logs(db)
+            _prune_old_artifacts(db)
         except Exception:
             logger.exception("Error in lost task scanner")
         await asyncio.sleep(SCAN_INTERVAL_SEC)
