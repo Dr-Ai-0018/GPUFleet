@@ -5,7 +5,6 @@ import type { OnlineStatus } from "../../types";
 import { StatusPill } from "../../ui/StatusPill";
 import { connectionLabel, connectionTone, nodeTypeLabel, osLabel } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
-import { BlockProgress } from "../../ui/BlockProgress";
 import { GpuHeatCells } from "../../ui/GpuHeatCells";
 
 const cardCls = "rounded-xl transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)] hover:border-white/[0.08]";
@@ -145,11 +144,15 @@ export function FleetView(): JSX.Element {
                     <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-3">
                       <div>
                         <div className="mb-1 flex items-center justify-between text-[10px] font-mono text-gray-500"><span>CPU</span><span>{Math.round(cpuPct)}%</span></div>
-                        <BlockProgress value={cpuPct} blocks={10} color="auto" />
+                        <div className="h-[7px] overflow-hidden rounded-full bg-white/[0.06]">
+                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${cpuPct}%`, backgroundColor: cpuPct >= 90 ? "#f85149" : cpuPct >= 70 ? "#f0b040" : "#06b6d4" }} />
+                        </div>
                       </div>
                       <div>
                         <div className="mb-1 flex items-center justify-between text-[10px] font-mono text-gray-500"><span>MEM</span><span>{Math.round(memPct)}%</span></div>
-                        <BlockProgress value={memPct} blocks={10} color="auto" />
+                        <div className="h-[7px] overflow-hidden rounded-full bg-white/[0.06]">
+                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${memPct}%`, backgroundColor: memPct >= 90 ? "#f85149" : memPct >= 70 ? "#f0b040" : "#06b6d4" }} />
+                        </div>
                       </div>
                       <div className="flex items-center">
                         <div className="mb-1 text-[10px] font-mono text-gray-500">GPU</div>

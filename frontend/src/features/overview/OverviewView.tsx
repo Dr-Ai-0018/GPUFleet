@@ -8,8 +8,6 @@ import { useConsoleStore } from "../../state/ConsoleStore";
 import { navigate } from "../../lib/routing";
 import { StatusPill } from "../../ui/StatusPill";
 import { RingGauge } from "../../ui/RingGauge";
-import { ArcGauge } from "../../ui/ArcGauge";
-import { BlockProgress } from "../../ui/BlockProgress";
 import { MiniSparkline } from "../../ui/MiniSparkline";
 import { GpuHeatCells } from "../../ui/GpuHeatCells";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
@@ -168,7 +166,7 @@ export function OverviewView(): JSX.Element {
               <div className="mt-2 text-3xl font-bold font-mono text-white"><AnimatedNumber value={gpuStats.totalGpus} /></div>
               <div className="mt-1 text-[12px] text-gray-500">active accelerators</div>
             </div>
-            <ArcGauge value={gpuStats.avgUtil} size={112} color="auto" label={String(gpuStats.avgUtil)} sublabel="AVG UTIL" />
+            <RingGauge value={gpuStats.avgUtil} size={92} color={gpuStats.avgUtil >= 85 ? "#f85149" : gpuStats.avgUtil >= 60 ? "#f0b040" : "#0ff0b3"} label={String(gpuStats.avgUtil)} sublabel="AVG UTIL" />
           </div>
           <div className="mt-2">
             <DeltaBadge current={gpuStats.avgUtil} previous={prevGpuStats?.avgUtil ?? null} suffix="%" />
@@ -178,7 +176,11 @@ export function OverviewView(): JSX.Element {
               <span className="text-gray-500">VRAM footprint</span>
               <span className="text-white">{gpuStats.usedVram}/{gpuStats.totalVram} MB</span>
             </div>
-            <BlockProgress value={gpuStats.totalVram > 0 ? (gpuStats.usedVram / gpuStats.totalVram) * 100 : 0} blocks={18} />
+            {(() => { const vramPct = gpuStats.totalVram > 0 ? (gpuStats.usedVram / gpuStats.totalVram) * 100 : 0; return (
+              <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${vramPct}%`, backgroundColor: vramPct >= 90 ? "#f85149" : vramPct >= 70 ? "#f0b040" : "#0ff0b3" }} />
+              </div>
+            ); })()}
           </div>
           <div className="mt-5 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
@@ -293,7 +295,7 @@ export function OverviewView(): JSX.Element {
                   <div className="w-[140px] shrink-0"><span className="text-[13px] text-white font-medium">{node.display_name}</span></div>
                   <div className="flex-1 grid grid-cols-3 gap-4">
                     <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">CPU</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 rounded-full" style={{ width: `${cpuPct}%` }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(cpuPct)}%</span></div>
-                    <div className="space-y-1"><span className="text-[10px] text-gray-500 font-mono">MEM</span><BlockProgress value={memPct} blocks={10} height={7} color="auto" /><div className="text-right text-[11px] font-mono text-gray-400">{Math.round(memPct)}%</div></div>
+                    <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono w-8">MEM</span><div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${memPct}%`, backgroundColor: memPct >= 90 ? "#f85149" : memPct >= 70 ? "#f0b040" : "#0ff0b3" }} /></div><span className="text-[11px] font-mono text-gray-400 w-10 text-right">{Math.round(memPct)}%</span></div>
                     <div className="flex items-center gap-2"><span className="text-[10px] text-gray-500 font-mono">GPU</span><GpuHeatCells gpus={node.latest_status?.gpus ?? []} size={14} /></div>
                   </div>
                 </div>

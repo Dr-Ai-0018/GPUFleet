@@ -7,7 +7,6 @@ import { CanvasRenderer } from "echarts/renderers";
 import { api } from "../../../api";
 import { bytesToReadable, formatRelative, prettyJson } from "../../../lib/format";
 import { CodeBlock } from "../../../ui/CodeBlock";
-import { BlockProgress } from "../../../ui/BlockProgress";
 import { MiniSparkline } from "../../../ui/MiniSparkline";
 import { TempColorBand } from "../../../ui/TempColorBand";
 import { useConsoleStore } from "../../../state/ConsoleStore";
@@ -308,7 +307,9 @@ export function MonitorPanel({
                   return (
                     <div key={idx} className="border border-white/[0.04] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] px-3 py-2.5">
                       <div className="mb-2 flex items-center justify-between text-[10px] font-mono"><span className="text-gray-500">C{idx}</span><span className="text-white/80">{pct}%</span></div>
-                      <BlockProgress value={pct} blocks={8} height={6} color="auto" />
+                      <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: pct >= 90 ? "#f85149" : pct >= 70 ? "#f0b040" : "#06b6d4" }} />
+                      </div>
                     </div>
                   );
                 })}
