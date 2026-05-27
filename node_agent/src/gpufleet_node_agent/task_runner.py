@@ -35,6 +35,7 @@ from gpufleet_node_agent.state import load_json, save_json
 
 
 ACTIVE_PROCESSES: dict[str, subprocess.Popen[str]] = {}
+LOG_CHUNK_SIZE = 3500
 
 
 def _now_iso() -> str:
@@ -471,34 +472,11 @@ def _build_result_summary(task: dict[str, Any], run_dir: Path, workdir: Path, co
 
 
 def _upload_log_text(settings: AgentSettings, task_id: str, stream: str, text: str) -> None:
-    offset = 0
-    chunk_size = 3500
-    if not text:
-        send_task_log_chunk(
-            settings,
-            {
-                "task_id": task_id,
-                "stream": stream,
-                "offset_start": 0,
-                "text": "",
-                "is_final": True,
-            },
-        )
-        return
-
-    while offset < len(text):
-        chunk = text[offset : offset + chunk_size]
-        send_task_log_chunk(
-            settings,
-            {
-                "task_id": task_id,
-                "stream": stream,
-                "offset_start": offset,
-                "text": chunk,
-                "is_final": offset + len(chunk) >= len(text),
-            },
-        )
-        offset += len(chunk)
+    _init_log_offsets(settings, task_id)
+    try:
+        _send_log_chunks_with_ack(settings, task_id, stream, text, start_offset=0, final=True)
+    finally:
+        _clear_log_offsets(settings, task_id)
 
 
 def _set_current_task(settings: AgentSettings, payload: dict[str, Any]) -> None:
@@ -518,6 +496,90 @@ def _load_current_task(settings: AgentSettings) -> dict[str, Any]:
     return load_json(settings.state_dir / "current_task.json", {})
 
 
+def _log_offsets_path(settings: AgentSettings) -> Path:
+    return settings.state_dir / "log_offsets.json"
+
+
+def _load_log_offsets(settings: AgentSettings) -> dict[str, Any]:
+    return load_json(_log_offsets_path(settings), {})
+
+
+def _save_log_offsets(settings: AgentSettings, data: dict[str, Any]) -> None:
+    save_json(_log_offsets_path(settings), data)
+
+
+def _init_log_offsets(settings: AgentSettings, task_id: str) -> None:
+    offsets = _load_log_offsets(settings)
+    offsets.setdefault(task_id, {})
+    offsets[task_id].setdefault("stdout", {"acked_offset": 0})
+    offsets[task_id].setdefault("stderr", {"acked_offset": 0})
+    _save_log_offsets(settings, offsets)
+
+
+def _acked_log_offset(settings: AgentSettings, task_id: str, stream: str) -> int:
+    offsets = _load_log_offsets(settings)
+    return int(offsets.get(task_id, {}).get(stream, {}).get("acked_offset", 0))
+
+
+def _store_acked_log_offset(settings: AgentSettings, task_id: str, stream: str, acked_offset: int) -> None:
+    offsets = _load_log_offsets(settings)
+    offsets.setdefault(task_id, {})
+    offsets[task_id].setdefault(stream, {})
+    offsets[task_id][stream]["acked_offset"] = int(acked_offset)
+    _save_log_offsets(settings, offsets)
+
+
+def _clear_log_offsets(settings: AgentSettings, task_id: str) -> None:
+    offsets = _load_log_offsets(settings)
+    if task_id in offsets:
+        offsets.pop(task_id, None)
+        _save_log_offsets(settings, offsets)
+
+
+def _send_log_chunks_with_ack(
+    settings: AgentSettings,
+    task_id: str,
+    stream: str,
+    text: str,
+    *,
+    start_offset: int,
+    final: bool,
+) -> int:
+    offset = start_offset
+    if not text:
+        if final:
+            send_task_log_chunk(
+                settings,
+                {
+                    "task_id": task_id,
+                    "stream": stream,
+                    "offset_start": start_offset,
+                    "text": "",
+                    "is_final": True,
+                },
+            )
+            _store_acked_log_offset(settings, task_id, stream, start_offset)
+        return start_offset
+
+    relative_offset = 0
+    while relative_offset < len(text):
+        chunk = text[relative_offset : relative_offset + LOG_CHUNK_SIZE]
+        send_task_log_chunk(
+            settings,
+            {
+                "task_id": task_id,
+                "stream": stream,
+                "offset_start": offset,
+                "text": chunk,
+                "is_final": final and relative_offset + len(chunk) >= len(text),
+            },
+        )
+        offset += len(chunk)
+        relative_offset += len(chunk)
+        _store_acked_log_offset(settings, task_id, stream, offset)
+    return offset
+
+
 def _read_text_slice(path: Path, offset: int) -> tuple[str, int]:
     if not path.exists():
         return "", offset
@@ -528,26 +590,27 @@ def _read_text_slice(path: Path, offset: int) -> tuple[str, int]:
 
 
 def _upload_incremental_logs(settings: AgentSettings, state: dict[str, Any], *, final: bool = False) -> dict[str, Any]:
+    _init_log_offsets(settings, state["task_id"])
     for stream in ("stdout", "stderr"):
         path_value = state.get(f"{stream}_path")
         if not path_value:
             continue
         path = Path(path_value)
         offset_key = f"{stream}_offset"
-        previous_offset = int(state.get(offset_key, 0))
+        previous_offset = _acked_log_offset(settings, state["task_id"], stream)
         text, new_offset = _read_text_slice(path, previous_offset)
         if text or final:
-            send_task_log_chunk(
+            acked_offset = _send_log_chunks_with_ack(
                 settings,
-                {
-                    "task_id": state["task_id"],
-                    "stream": stream,
-                    "offset_start": previous_offset,
-                    "text": text,
-                    "is_final": final,
-                },
+                state["task_id"],
+                stream,
+                text,
+                start_offset=previous_offset,
+                final=final,
             )
-        state[offset_key] = new_offset
+        else:
+            acked_offset = previous_offset
+        state[offset_key] = acked_offset if text else new_offset
     save_json(settings.state_dir / "current_task.json", state)
     return state
 
@@ -656,6 +719,7 @@ def _start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dic
         stdout_handle.close()
         stderr_handle.close()
     ACTIVE_PROCESSES[task_id] = process
+    _init_log_offsets(settings, task_id)
     state = {
         "task_id": task_id,
         "type": task["type"],
@@ -734,6 +798,7 @@ def _finalize_background_task(
         preview={"final_status": final_status, "exit_code": exit_code},
     )
     ACTIVE_PROCESSES.pop(state["task_id"], None)
+    _clear_log_offsets(settings, state["task_id"])
     _clear_current_task(settings)
     return {"task_id": state["task_id"], "final_status": final_status, "exit_code": exit_code}
 
