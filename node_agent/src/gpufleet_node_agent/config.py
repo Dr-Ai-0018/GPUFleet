@@ -4,14 +4,16 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AgentSettings(BaseSettings):
     control_plane_url: str = "http://127.0.0.1:8000"
     node_id: str = "node-example"
-    node_secret: str = "replace-me"
+    node_secret: str = ""
+    node_secret_encrypted_path: Path | None = None
+    node_secret_passphrase: str = ""
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
     tls_skip_verify: bool = False
     deployment_mode: Literal["auto", "windows_server", "linux_server", "cloud_gpu_runner"] = "auto"
@@ -42,6 +44,7 @@ class AgentSettings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+    _resolved_node_secret: str | None = PrivateAttr(default=None)
 
     def ensure_dirs(self) -> None:
         for path in (
@@ -61,6 +64,20 @@ class AgentSettings(BaseSettings):
         if path.is_absolute():
             return path.resolve(strict=False)
         return (Path.cwd() / path).resolve(strict=False)
+
+    def secret_store_path(self) -> Path:
+        candidate = self.node_secret_encrypted_path or (self.state_dir / "node_secret.enc")
+        resolved = self.resolve_agent_path(candidate)
+        if resolved is None:
+            raise ValueError("node_secret_encrypted_path could not be resolved")
+        return resolved
+
+    def get_node_secret(self) -> str:
+        if self._resolved_node_secret is None:
+            from gpufleet_node_agent.security import load_or_seal_node_secret
+
+            self._resolved_node_secret = load_or_seal_node_secret(self)
+        return self._resolved_node_secret
 
     def effective_deployment_mode(self) -> str:
         if self.deployment_mode != "auto":

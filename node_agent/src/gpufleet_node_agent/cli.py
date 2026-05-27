@@ -149,6 +149,7 @@ def main() -> None:
 
     settings = AgentSettings()
     settings.ensure_dirs()
+    settings.get_node_secret()
 
     if args.command == "heartbeat-once":
         run_once(settings)

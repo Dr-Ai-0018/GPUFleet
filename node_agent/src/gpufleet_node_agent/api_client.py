@@ -84,6 +84,7 @@ def post_signed_json(settings: AgentSettings, path: str, payload: dict[str, Any]
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     url = f"{settings.control_plane_url.rstrip('/')}{path}"
     verify_tls = not getattr(settings, "tls_skip_verify", False)
+    node_secret = settings.get_node_secret() if hasattr(settings, "get_node_secret") else settings.node_secret
     _CIRCUIT_BREAKER.allow_request()
     failure_threshold = int(getattr(settings, "circuit_breaker_failure_threshold", 3))
     open_sec = int(getattr(settings, "circuit_breaker_open_sec", 60))
@@ -94,7 +95,7 @@ def post_signed_json(settings: AgentSettings, path: str, payload: dict[str, Any]
             response = requests.post(
                 url,
                 data=body,
-                headers=build_headers(settings.node_id, settings.node_secret, body),
+                headers=build_headers(settings.node_id, node_secret, body),
                 timeout=timeout,
                 verify=verify_tls,
             )
