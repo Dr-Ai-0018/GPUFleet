@@ -15,6 +15,7 @@ from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_db, get_settings_dep
 from app.routers.admin_auth import limiter
+from app.services.task_state import TaskStateError, finalize_task_result, transition_task
 from app.schemas import (
     HeartbeatRequest,
     HeartbeatResponse,
@@ -26,7 +27,7 @@ from app.schemas import (
     TaskEnvelope,
 )
 from app.security import decrypt_node_signing_key, hash_request_body, verify_node_request_signature
-from app.task_utils import RESULT_ACCEPTING_TASK_STATUSES, TASK_EVENT_TRANSITIONS, TERMINAL_TASK_STATUSES
+from app.task_utils import TERMINAL_TASK_STATUSES
 
 router = APIRouter(prefix="/api/node", tags=["node"])
 
@@ -494,23 +495,20 @@ async def task_events(
     now_iso = utc_now_iso()
     with db.connect() as conn:
         row = _load_task_for_node(conn, node_id, payload.task_id)
-        if row["status"] not in TASK_EVENT_TRANSITIONS[payload.event]:
+        try:
+            updated_row = transition_task(
+                conn,
+                payload.task_id,
+                payload.event,
+                now_iso=now_iso,
+                started_at=now_iso,
+                finished_at=now_iso,
+            )
+        except TaskStateError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Invalid task state transition: {row['status']} -> {payload.event}",
-            )
-
-        started_at = row["started_at"]
-        finished_at = row["finished_at"]
-        if payload.event == "running" and started_at is None:
-            started_at = now_iso
-        if payload.event in TERMINAL_TASK_STATUSES and finished_at is None:
-            finished_at = now_iso
-
-        conn.execute(
-            "UPDATE tasks SET status = ?, started_at = ?, finished_at = ? WHERE task_id = ?",
-            (payload.event, started_at, finished_at, payload.task_id),
-        )
+                detail=str(exc),
+            ) from exc
         _upsert_task_attempt(
             conn,
             payload.task_id,
@@ -519,8 +517,8 @@ async def task_events(
             boot_id=payload.boot_id,
             pid=payload.pid,
             pgid_or_job_id=payload.pgid_or_job_id,
-            started_at=started_at,
-            finished_at=finished_at,
+            started_at=updated_row["started_at"],
+            finished_at=updated_row["finished_at"],
         )
     return {"ok": True, "task_id": payload.task_id, "status": payload.event}
 
@@ -653,33 +651,25 @@ async def task_result(
 
     now_iso = utc_now_iso()
     with db.connect() as conn:
-        row = _load_task_for_node(conn, node_id, payload.task_id)
-        if row["status"] not in RESULT_ACCEPTING_TASK_STATUSES and row["status"] not in TERMINAL_TASK_STATUSES:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Task in status {row['status']} cannot accept final result yet",
-            )
-
         finished_at = payload.finished_at or now_iso
-        started_at = payload.started_at or row["started_at"] or now_iso
-        updated = conn.execute(
-            """
-            UPDATE tasks
-            SET status = ?, started_at = ?, finished_at = ?, result_locked_at = ?
-            WHERE task_id = ?
-              AND result_locked_at IS NULL
-              AND status IN ('claimed', 'running', 'cancel_requested')
-            """,
-            (payload.final_status, started_at, finished_at, now_iso, payload.task_id),
-        )
-        if updated.rowcount != 1:
-            row = _load_task_for_node(conn, node_id, payload.task_id)
-            if row["status"] in TERMINAL_TASK_STATUSES:
-                return {"ok": True, "task_id": payload.task_id, "status": row["status"], "duplicate": True}
+        current_row = _load_task_for_node(conn, node_id, payload.task_id)
+        started_at = payload.started_at or current_row["started_at"] or now_iso
+        try:
+            updated_row, duplicate = finalize_task_result(
+                conn,
+                payload.task_id,
+                final_status=payload.final_status,
+                started_at=started_at,
+                finished_at=finished_at,
+                now_iso=now_iso,
+            )
+        except TaskStateError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Task in status {row['status']} cannot accept final result yet",
-            )
+                detail=str(exc),
+            ) from exc
+        if duplicate:
+            return {"ok": True, "task_id": payload.task_id, "status": updated_row["status"], "duplicate": True}
         _upsert_task_attempt(
             conn,
             payload.task_id,

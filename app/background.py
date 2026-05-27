@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.db import Database, dumps_json, utc_now_iso
+from app.services.task_state import transition_task
 from app.task_utils import TERMINAL_TASK_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -185,10 +186,7 @@ def _mark_lost_tasks(db: Database) -> None:
                     started = started.replace(tzinfo=UTC)
                 deadline = started + timedelta(seconds=task["timeout_sec"])
                 if now > deadline:
-                    conn.execute(
-                        "UPDATE tasks SET status = 'timeout', finished_at = ? WHERE task_id = ?",
-                        (now_iso, task_id),
-                    )
+                    transition_task(conn, task_id, "background_timeout", now_iso=now_iso, finished_at=now_iso)
                     conn.execute(
                         """
                         INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, detail_json, created_at)
@@ -207,10 +205,7 @@ def _mark_lost_tasks(db: Database) -> None:
             if status == "cancel_requested":
                 cancel_requested_at = _latest_cancel_requested_at(conn, task_id)
                 if cancel_requested_at and now - cancel_requested_at > timedelta(seconds=CANCEL_ACK_TIMEOUT_SEC):
-                    conn.execute(
-                        "UPDATE tasks SET status = 'lost', finished_at = ? WHERE task_id = ?",
-                        (now_iso, task_id),
-                    )
+                    transition_task(conn, task_id, "background_lost", now_iso=now_iso, finished_at=now_iso)
                     conn.execute(
                         """
                         INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, detail_json, created_at)
@@ -236,10 +231,7 @@ def _mark_lost_tasks(db: Database) -> None:
                     last_seen = _parse_utc_or_none(last_seen_at)
                     threshold = timedelta(seconds=3 * heartbeat_interval)
                     if last_seen and now - last_seen > threshold:
-                        conn.execute(
-                            "UPDATE tasks SET status = 'lost', finished_at = ? WHERE task_id = ?",
-                            (now_iso, task_id),
-                        )
+                        transition_task(conn, task_id, "background_lost", now_iso=now_iso, finished_at=now_iso)
                         conn.execute(
                             """
                             INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, detail_json, created_at)
@@ -262,10 +254,7 @@ def _mark_lost_tasks(db: Database) -> None:
                     if claimed_at:
                         claimed = _parse_utc_or_none(claimed_at)
                         if claimed and now - claimed > timedelta(seconds=3 * heartbeat_interval):
-                            conn.execute(
-                                "UPDATE tasks SET status = 'lost', finished_at = ? WHERE task_id = ?",
-                                (now_iso, task_id),
-                            )
+                            transition_task(conn, task_id, "background_lost", now_iso=now_iso, finished_at=now_iso)
                             conn.execute(
                                 """
                                 INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, detail_json, created_at)
@@ -293,14 +282,7 @@ def _expire_reviewing_tasks(db: Database) -> None:
             (cutoff,),
         ).fetchall()
         for row in expired:
-            conn.execute(
-                """
-                UPDATE tasks
-                SET status = 'review_expired', review_decision = 'expired', review_finished_at = ?
-                WHERE task_id = ? AND status = 'reviewing'
-                """,
-                (now_iso, row["task_id"]),
-            )
+            transition_task(conn, row["task_id"], "review_expire", now_iso=now_iso)
             conn.execute(
                 """
                 UPDATE alert_messages

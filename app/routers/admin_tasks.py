@@ -12,6 +12,7 @@ from app.db import Database, dumps_json, utc_now_iso
 from app.deps import get_current_admin, get_db, get_settings_dep
 from app.routers.admin_auth import limiter
 from app.review import LLMReviewer, ReviewContext
+from app.services.task_state import TaskStateError, get_task_row, transition_task
 from app.schemas import (
     AdminTaskArtifactView,
     AdminTaskCreateRequest,
@@ -459,27 +460,14 @@ def cancel_task(
 ) -> AdminTaskDetail:
     now_iso = utc_now_iso()
     with db.connect() as conn:
-        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-
+        try:
+            row = get_task_row(conn, task_id)
+            saved = transition_task(conn, task_id, "cancel", now_iso=now_iso, finished_at=now_iso)
+        except TaskStateError as exc:
+            if str(exc) == "Task not found":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         current_status = row["status"]
-        if current_status in TERMINAL_TASK_STATUSES:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is already terminal")
-
-        if current_status == "pending":
-            new_status = "cancelled"
-            finished_at = now_iso
-        elif current_status in ACTIVE_TASK_STATUSES:
-            new_status = "cancel_requested"
-            finished_at = row["finished_at"]
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task cannot be cancelled now")
-
-        conn.execute(
-            "UPDATE tasks SET status = ?, finished_at = COALESCE(?, finished_at) WHERE task_id = ?",
-            (new_status, finished_at, task_id),
-        )
         conn.execute(
             """
             INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
@@ -492,11 +480,10 @@ def cancel_task(
                 "task",
                 task_id,
                 request.client.host if request.client else None,
-                dumps_json({"from_status": current_status, "to_status": new_status}),
+                dumps_json({"from_status": current_status, "to_status": saved["status"]}),
                 now_iso,
             ),
         )
-        saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return _task_row_to_detail(conn, saved)
 
 
@@ -511,22 +498,13 @@ def escalate_review(
 ) -> AdminTaskDetail:
     now_iso = utc_now_iso()
     with db.connect() as conn:
-        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-        if row["status"] != "reviewing":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is not under review")
-        if row["review_stage"] == 3:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is already in human review stage")
-
-        conn.execute(
-            """
-            UPDATE tasks
-            SET review_stage = 3, review_decision = 'pending_human', review_started_at = ?, review_finished_at = NULL
-            WHERE task_id = ?
-            """,
-            (now_iso, task_id),
-        )
+        try:
+            row = get_task_row(conn, task_id)
+            saved = transition_task(conn, task_id, "review_escalate", now_iso=now_iso)
+        except TaskStateError as exc:
+            if str(exc) == "Task not found":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
         task_payload = AdminTaskCreateRequest(
             node_id=row["node_id"],
@@ -566,7 +544,6 @@ def escalate_review(
                 now_iso,
             ),
         )
-        saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return _task_row_to_detail(conn, saved)
 
 
@@ -582,8 +559,9 @@ def approve_review(
     now = datetime.now(UTC)
     now_iso = now.replace(microsecond=0).isoformat()
     with db.connect() as conn:
-        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
-        if row is None:
+        try:
+            row = get_task_row(conn, task_id)
+        except TaskStateError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         if row["status"] != "reviewing" or row["review_stage"] != 3:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is not awaiting human approval")
@@ -599,18 +577,17 @@ def approve_review(
                     detail=f"Human review cooldown not reached ({HUMAN_REVIEW_COOLDOWN_SEC}s)",
                 )
 
-        conn.execute(
-            """
-            UPDATE tasks
-            SET status = 'pending',
-                review_decision = 'human_approved',
-                danger_level = 'human_approved',
-                review_admin_id = ?,
-                review_finished_at = ?
-            WHERE task_id = ? AND status = 'reviewing'
-            """,
-            (admin["id"], now_iso, task_id),
-        )
+        try:
+            saved = transition_task(
+                conn,
+                task_id,
+                "review_approve",
+                now_iso=now_iso,
+                review_admin_id=admin["id"],
+                danger_level="human_approved",
+            )
+        except TaskStateError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         _insert_review_audit(
             conn,
             task_id=task_id,
@@ -640,7 +617,6 @@ def approve_review(
                 now_iso,
             ),
         )
-        saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return _task_row_to_detail(conn, saved)
 
 
@@ -655,23 +631,19 @@ def reject_review(
 ) -> AdminTaskDetail:
     now_iso = utc_now_iso()
     with db.connect() as conn:
-        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-        if row["status"] != "reviewing":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is not under review")
-
-        conn.execute(
-            """
-            UPDATE tasks
-            SET status = 'rejected',
-                review_decision = 'human_rejected',
-                review_admin_id = ?,
-                review_finished_at = ?
-            WHERE task_id = ? AND status = 'reviewing'
-            """,
-            (admin["id"], now_iso, task_id),
-        )
+        try:
+            row = get_task_row(conn, task_id)
+            saved = transition_task(
+                conn,
+                task_id,
+                "review_reject",
+                now_iso=now_iso,
+                review_admin_id=admin["id"],
+            )
+        except TaskStateError as exc:
+            if str(exc) == "Task not found":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         _insert_review_audit(
             conn,
             task_id=task_id,
@@ -701,7 +673,6 @@ def reject_review(
                 now_iso,
             ),
         )
-        saved = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return _task_row_to_detail(conn, saved)
 
 
