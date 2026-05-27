@@ -15,6 +15,8 @@ class AgentSettings(BaseSettings):
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
     tls_skip_verify: bool = False
     deployment_mode: Literal["auto", "windows_server", "linux_server", "cloud_gpu_runner"] = "auto"
+    circuit_breaker_failure_threshold: int = Field(default=3, ge=1, le=20)
+    circuit_breaker_open_sec: int = Field(default=60, ge=1, le=3600)
 
     agent_root: Path = Field(default=Path("./runtime"))
     repos_dir: Path = Field(default=Path("./runtime/repos"))

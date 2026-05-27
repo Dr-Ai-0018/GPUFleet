@@ -21,6 +21,54 @@ BACKOFF_BASE_SEC = 1.0  # 1s, 2s, 4s
 _TRANSIENT_STATUS_CODES = {500, 502, 503, 504, 429}
 
 
+class CircuitOpenError(RuntimeError):
+    """Raised when the client circuit breaker is open."""
+
+
+class _CircuitBreaker:
+    def __init__(self) -> None:
+        self.state = "closed"
+        self.consecutive_failures = 0
+        self.open_until = 0.0
+
+    def allow_request(self) -> None:
+        now = time.monotonic()
+        if self.state == "open":
+            if now < self.open_until:
+                raise CircuitOpenError(f"Control plane circuit open for another {self.open_until - now:.1f}s")
+            self.state = "half_open"
+
+    def on_success(self) -> None:
+        self.state = "closed"
+        self.consecutive_failures = 0
+        self.open_until = 0.0
+
+    def on_transient_failure(self, *, threshold: int, open_sec: int) -> None:
+        if self.state == "half_open":
+            self.state = "open"
+            self.consecutive_failures = threshold
+            self.open_until = time.monotonic() + open_sec
+            return
+        self.consecutive_failures += 1
+        if self.consecutive_failures >= threshold:
+            self.state = "open"
+            self.open_until = time.monotonic() + open_sec
+
+    def on_non_transient_failure(self) -> None:
+        if self.state == "half_open":
+            self.state = "closed"
+            self.open_until = 0.0
+        self.consecutive_failures = 0
+
+    def reset(self) -> None:
+        self.state = "closed"
+        self.consecutive_failures = 0
+        self.open_until = 0.0
+
+
+_CIRCUIT_BREAKER = _CircuitBreaker()
+
+
 def _is_transient_error(exc: Exception) -> bool:
     """Determine if an error is transient (worth retrying)."""
     if isinstance(exc, requests.exceptions.ConnectionError):
@@ -36,6 +84,9 @@ def post_signed_json(settings: AgentSettings, path: str, payload: dict[str, Any]
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     url = f"{settings.control_plane_url.rstrip('/')}{path}"
     verify_tls = not getattr(settings, "tls_skip_verify", False)
+    _CIRCUIT_BREAKER.allow_request()
+    failure_threshold = int(getattr(settings, "circuit_breaker_failure_threshold", 3))
+    open_sec = int(getattr(settings, "circuit_breaker_open_sec", 60))
 
     last_exc: Exception | None = None
     for attempt in range(MAX_RETRIES):
@@ -48,10 +99,16 @@ def post_signed_json(settings: AgentSettings, path: str, payload: dict[str, Any]
                 verify=verify_tls,
             )
             response.raise_for_status()
+            _CIRCUIT_BREAKER.on_success()
             return response.json()
         except Exception as exc:
             last_exc = exc
-            if not _is_transient_error(exc) or attempt == MAX_RETRIES - 1:
+            is_transient = _is_transient_error(exc)
+            if not is_transient:
+                _CIRCUIT_BREAKER.on_non_transient_failure()
+                raise
+            if attempt == MAX_RETRIES - 1:
+                _CIRCUIT_BREAKER.on_transient_failure(threshold=failure_threshold, open_sec=open_sec)
                 raise
             wait = BACKOFF_BASE_SEC * (2 ** attempt)
             logger.warning(
