@@ -16,6 +16,8 @@ import type { GpuSnapshot, MonitorPanelProps, NetworkSnapshot, NvidiaSnapshot } 
 
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
+const CHART_OPTS = { renderer: "canvas" as const };
+
 export function MonitorPanel({
   nodeId,
   cpu,
@@ -295,7 +297,7 @@ export function MonitorPanel({
               <span className={zhLabel}>CPU 历史</span>
               <span className="text-[11px] font-mono text-gray-600">{formatRelative(latestStatus.reported_at)}</span>
             </div>
-            {historyItems.length > 0 ? <ReactEChartsCore echarts={echarts} option={cpuHistoryOption} style={{ height: 150 }} opts={{ renderer: "canvas" }} /> : <div className="flex h-[150px] items-center justify-center text-[11px] text-gray-600">等待历史数据…</div>}
+            {historyItems.length > 0 ? <HistoryChart chartKey={`${nodeId}:cpu`} option={cpuHistoryOption} height={150} /> : <div className="flex h-[150px] items-center justify-center text-[11px] text-gray-600">等待历史数据…</div>}
           </div>
 
           {perCore.length > 0 ? (
@@ -427,12 +429,12 @@ export function MonitorPanel({
                   </div>
                   <div>
                     <div className="mb-3 flex items-center justify-between"><div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Load Timeline</div><div className="text-[11px] font-mono text-gray-600">Util / VRAM</div></div>
-                    {idx === 0 && historyItems.length > 1 ? <ReactEChartsCore echarts={echarts} option={gpuLoadHistoryOption} style={{ height: 160 }} opts={{ renderer: "canvas" }} /> : <div className="flex h-[160px] items-center justify-center text-[11px] text-gray-600">等待 GPU 历史数据…</div>}
+                    {idx === 0 && historyItems.length > 1 ? <HistoryChart chartKey={`${nodeId}:gpu-load`} option={gpuLoadHistoryOption} height={160} /> : <div className="flex h-[160px] items-center justify-center text-[11px] text-gray-600">等待 GPU 历史数据…</div>}
                   </div>
                 </div>
                 <div className="mt-5 border-t border-white/[0.04] pt-4">
                   <div className="mb-3 flex items-center justify-between"><div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Thermal / Power Timeline</div><div className="text-[11px] font-mono text-gray-600">Temp / Power / Clock</div></div>
-                  {idx === 0 && historyItems.length > 1 ? <ReactEChartsCore echarts={echarts} option={gpuThermalHistoryOption} style={{ height: 140 }} opts={{ renderer: "canvas" }} /> : <div className="flex h-[140px] items-center justify-center text-[11px] text-gray-600">等待 GPU 历史数据…</div>}
+                  {idx === 0 && historyItems.length > 1 ? <HistoryChart chartKey={`${nodeId}:gpu-thermal`} option={gpuThermalHistoryOption} height={140} /> : <div className="flex h-[140px] items-center justify-center text-[11px] text-gray-600">等待 GPU 历史数据…</div>}
                 </div>
                 <div className="mt-5 grid grid-cols-3 gap-x-6 gap-y-5">
                   <div><span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">TEMP</span><TempColorBand temp={temp} width={80} height={6} className="mt-1" /></div>
@@ -466,6 +468,20 @@ export function MonitorPanel({
         {showJson ? <div className="mt-4"><CodeBlock label="snapshot.json" value={prettyJson(latestStatus)} maxHeight={300} /></div> : null}
       </div>
     </div>
+  );
+}
+
+function HistoryChart({ chartKey, option, height }: { chartKey: string; option: object; height: number }): JSX.Element {
+  return (
+    <ReactEChartsCore
+      key={chartKey}
+      echarts={echarts}
+      option={option}
+      style={{ height }}
+      opts={CHART_OPTS}
+      notMerge={false}
+      lazyUpdate
+    />
   );
 }
 
