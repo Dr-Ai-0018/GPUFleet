@@ -20,7 +20,7 @@ from app.schemas import (
 )
 from app.services import admin_tasks_service
 
-router = APIRouter(prefix="/api/admin/tasks", tags=["admin-tasks"])
+router = APIRouter(prefix="/api/v1/admin/tasks", tags=["admin-tasks"])
 
 
 @router.post("", response_model=AdminTaskDetail, status_code=status.HTTP_201_CREATED)

@@ -10,7 +10,7 @@ from app.db import Database, utc_now_iso
 from app.deps import get_current_admin, get_db
 from app.schemas import DashboardNodeCard, DashboardOverview, DashboardTaskSummary, NodeStatusPreview
 
-router = APIRouter(prefix="/api/admin/dashboard", tags=["admin-dashboard"])
+router = APIRouter(prefix="/api/v1/admin/dashboard", tags=["admin-dashboard"])
 
 
 def _decode_gpu_snapshot(raw_gpu_json: str) -> tuple[list[dict[str, object]], dict[str, object]]:

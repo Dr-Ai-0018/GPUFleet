@@ -10,7 +10,7 @@ from app.deps import get_current_admin, get_db
 from app.errors import ApiError
 from app.schemas import AlertMessageView
 
-router = APIRouter(prefix="/api/admin/alerts", tags=["admin-alerts"])
+router = APIRouter(prefix="/api/v1/admin/alerts", tags=["admin-alerts"])
 
 
 def _row_to_alert(row: object) -> AlertMessageView:

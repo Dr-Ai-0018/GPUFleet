@@ -7,7 +7,6 @@ import openapiTS, { astToString } from "openapi-typescript";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const frontendDir = resolve(scriptDir, "..");
 const repoRoot = resolve(frontendDir, "..");
-const pythonExe = resolve(repoRoot, ".venv", "Scripts", "python.exe");
 const cacheDir = resolve(frontendDir, ".cache");
 const openapiJsonPath = resolve(cacheDir, "openapi.json");
 const outputPath = resolve(frontendDir, "src", "types.generated.ts");
@@ -21,7 +20,11 @@ const pythonCode = [
   "    json.dump(app.openapi(), fh, ensure_ascii=False, indent=2)",
 ].join("\n");
 
-execFileSync(pythonExe, ["-c", pythonCode], {
+const pythonCommand = process.env.GPUFLEET_PYTHON_EXE;
+const command = pythonCommand ?? "uv";
+const args = pythonCommand ? ["-c", pythonCode] : ["run", "python", "-c", pythonCode];
+
+execFileSync(command, args, {
   cwd: repoRoot,
   stdio: "inherit",
 });

@@ -19,7 +19,7 @@ from app.security import (
     verify_password,
 )
 
-router = APIRouter(prefix="/api/admin", tags=["admin-auth"])
+router = APIRouter(prefix="/api/v1/admin", tags=["admin-auth"])
 limiter = Limiter(key_func=get_remote_address)
 
 

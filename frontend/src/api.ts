@@ -18,6 +18,7 @@ import type {
 } from "./types";
 
 const API_ROOT = "";
+const API_BASE = "/api/v1";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 200;
@@ -138,38 +139,38 @@ async function requestAllPages<T>(
 
 export const api = {
   login(username: string, password: string): Promise<TokenPair> {
-    return request<TokenPair>("/api/admin/login", {
+    return request<TokenPair>(`${API_BASE}/admin/login`, {
       method: "POST",
       body: JSON.stringify({ username, password }),
     });
   },
 
   refresh(refreshToken: string): Promise<TokenPair> {
-    return request<TokenPair>("/api/admin/refresh", {
+    return request<TokenPair>(`${API_BASE}/admin/refresh`, {
       method: "POST",
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
   },
 
   getMe(token: string): Promise<AdminProfile> {
-    return request<AdminProfile>("/api/admin/me", {}, token);
+    return request<AdminProfile>(`${API_BASE}/admin/me`, {}, token);
   },
 
   getOverview(token: string): Promise<DashboardOverview> {
-    return request<DashboardOverview>("/api/admin/dashboard/overview", {}, token);
+    return request<DashboardOverview>(`${API_BASE}/admin/dashboard/overview`, {}, token);
   },
 
   getNodes(token: string, query?: ListQuery): Promise<NodeResponse[]> {
-    return request<NodeResponse[]>(`/api/admin/nodes${buildListQuery(query)}`, {}, token);
+    return request<NodeResponse[]>(`${API_BASE}/admin/nodes${buildListQuery(query)}`, {}, token);
   },
 
   listAllNodes(token: string): Promise<NodeResponse[]> {
-    return requestAllPages<NodeResponse>(token, "/api/admin/nodes");
+    return requestAllPages<NodeResponse>(token, `${API_BASE}/admin/nodes`);
   },
 
   getNode(token: string, nodeId: string): Promise<NodeResponse> {
     return request<NodeResponse>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}`,
       {},
       token,
     );
@@ -177,7 +178,7 @@ export const api = {
 
   createNode(token: string, payload: NodeCreatePayload): Promise<NodeCreateResponse> {
     return request<NodeCreateResponse>(
-      "/api/admin/nodes",
+      `${API_BASE}/admin/nodes`,
       { method: "POST", body: JSON.stringify(payload) },
       token,
     );
@@ -185,7 +186,7 @@ export const api = {
 
   updateNode(token: string, nodeId: string, payload: NodeUpdatePayload): Promise<NodeResponse> {
     return request<NodeResponse>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}`,
       { method: "PATCH", body: JSON.stringify(payload) },
       token,
     );
@@ -193,7 +194,7 @@ export const api = {
 
   enableNode(token: string, nodeId: string): Promise<NodeResponse> {
     return request<NodeResponse>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}/enable`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/enable`,
       { method: "POST" },
       token,
     );
@@ -201,7 +202,7 @@ export const api = {
 
   disableNode(token: string, nodeId: string): Promise<NodeResponse> {
     return request<NodeResponse>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}/disable`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/disable`,
       { method: "POST" },
       token,
     );
@@ -209,7 +210,7 @@ export const api = {
 
   getLatestNodeStatus(token: string, nodeId: string): Promise<NodeStatusPreview> {
     return request<NodeStatusPreview>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}/status/latest`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/status/latest`,
       {},
       token,
     );
@@ -217,7 +218,7 @@ export const api = {
 
   resetNodeSecret(token: string, nodeId: string): Promise<NodeResetSecretResponse> {
     return request<NodeResetSecretResponse>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}/reset-secret`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/reset-secret`,
       { method: "POST" },
       token,
     );
@@ -225,7 +226,7 @@ export const api = {
 
   deleteNode(token: string, nodeId: string): Promise<void> {
     return request<void>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}`,
       { method: "DELETE" },
       token,
     );
@@ -236,23 +237,23 @@ export const api = {
     nodeId: string,
   ): Promise<{ status: string; node_id: string; note?: string }> {
     return request(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}/refresh-fingerprint`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/refresh-fingerprint`,
       { method: "POST" },
       token,
     );
   },
 
   listTasks(token: string, query?: ListQuery): Promise<AdminTaskListItem[]> {
-    return request<AdminTaskListItem[]>(`/api/admin/tasks${buildListQuery(query)}`, {}, token);
+    return request<AdminTaskListItem[]>(`${API_BASE}/admin/tasks${buildListQuery(query)}`, {}, token);
   },
 
   listAllTasks(token: string): Promise<AdminTaskListItem[]> {
-    return requestAllPages<AdminTaskListItem>(token, "/api/admin/tasks");
+    return requestAllPages<AdminTaskListItem>(token, `${API_BASE}/admin/tasks`);
   },
 
   getTaskDetail(token: string, taskId: string): Promise<AdminTaskDetail> {
     return request<AdminTaskDetail>(
-      `/api/admin/tasks/${encodeURIComponent(taskId)}`,
+      `${API_BASE}/admin/tasks/${encodeURIComponent(taskId)}`,
       {},
       token,
     );
@@ -260,7 +261,7 @@ export const api = {
 
   createTask(token: string, payload: TaskCreatePayload): Promise<AdminTaskDetail> {
     return request<AdminTaskDetail>(
-      "/api/admin/tasks",
+      `${API_BASE}/admin/tasks`,
       { method: "POST", body: JSON.stringify(payload) },
       token,
     );
@@ -268,7 +269,7 @@ export const api = {
 
   cancelTask(token: string, taskId: string): Promise<AdminTaskDetail> {
     return request<AdminTaskDetail>(
-      `/api/admin/tasks/${encodeURIComponent(taskId)}/cancel`,
+      `${API_BASE}/admin/tasks/${encodeURIComponent(taskId)}/cancel`,
       { method: "POST" },
       token,
     );
@@ -276,7 +277,7 @@ export const api = {
 
   getAuditEvents(token: string, limit = 50): Promise<AuditEventView[]> {
     return request<AuditEventView[]>(
-      `/api/admin/audit-events?limit=${limit}`,
+      `${API_BASE}/admin/audit-events?limit=${limit}`,
       {},
       token,
     );
@@ -284,7 +285,7 @@ export const api = {
 
   getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {
     return request<SecurityWarningView[]>(
-      `/api/admin/security-warnings?limit=${limit}`,
+      `${API_BASE}/admin/security-warnings?limit=${limit}`,
       {},
       token,
     );
@@ -292,7 +293,7 @@ export const api = {
 
   getNodeStatusHistory(token: string, nodeId: string, limit = 60): Promise<NodeStatusHistoryResponse> {
     return request<NodeStatusHistoryResponse>(
-      `/api/admin/nodes/${encodeURIComponent(nodeId)}/status/history?limit=${limit}`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/status/history?limit=${limit}`,
       {},
       token,
     );

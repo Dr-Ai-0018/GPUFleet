@@ -1,5 +1,5 @@
 export interface paths {
-    "/api/admin/login": {
+    "/api/v1/admin/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -9,14 +9,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Login */
-        post: operations["login_api_admin_login_post"];
+        post: operations["login_api_v1_admin_login_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/refresh": {
+    "/api/v1/admin/refresh": {
         parameters: {
             query?: never;
             header?: never;
@@ -26,14 +26,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Refresh */
-        post: operations["refresh_api_admin_refresh_post"];
+        post: operations["refresh_api_v1_admin_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/logout": {
+    "/api/v1/admin/logout": {
         parameters: {
             query?: never;
             header?: never;
@@ -43,14 +43,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Logout */
-        post: operations["logout_api_admin_logout_post"];
+        post: operations["logout_api_v1_admin_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/me": {
+    "/api/v1/admin/me": {
         parameters: {
             query?: never;
             header?: never;
@@ -58,7 +58,7 @@ export interface paths {
             cookie?: never;
         };
         /** Me */
-        get: operations["me_api_admin_me_get"];
+        get: operations["me_api_v1_admin_me_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -67,7 +67,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/dashboard/overview": {
+    "/api/v1/admin/dashboard/overview": {
         parameters: {
             query?: never;
             header?: never;
@@ -75,7 +75,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Overview */
-        get: operations["get_overview_api_admin_dashboard_overview_get"];
+        get: operations["get_overview_api_v1_admin_dashboard_overview_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -84,7 +84,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/nodes": {
+    "/api/v1/admin/nodes": {
         parameters: {
             query?: never;
             header?: never;
@@ -92,17 +92,17 @@ export interface paths {
             cookie?: never;
         };
         /** List Nodes */
-        get: operations["list_nodes_api_admin_nodes_get"];
+        get: operations["list_nodes_api_v1_admin_nodes_get"];
         put?: never;
         /** Create Node */
-        post: operations["create_node_api_admin_nodes_post"];
+        post: operations["create_node_api_v1_admin_nodes_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/nodes/{node_id}": {
+    "/api/v1/admin/nodes/{node_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -110,18 +110,18 @@ export interface paths {
             cookie?: never;
         };
         /** Get Node */
-        get: operations["get_node_api_admin_nodes__node_id__get"];
+        get: operations["get_node_api_v1_admin_nodes__node_id__get"];
         put?: never;
         post?: never;
         /** Delete Node */
-        delete: operations["delete_node_api_admin_nodes__node_id__delete"];
+        delete: operations["delete_node_api_v1_admin_nodes__node_id__delete"];
         options?: never;
         head?: never;
         /** Update Node */
-        patch: operations["update_node_api_admin_nodes__node_id__patch"];
+        patch: operations["update_node_api_v1_admin_nodes__node_id__patch"];
         trace?: never;
     };
-    "/api/admin/nodes/{node_id}/disable": {
+    "/api/v1/admin/nodes/{node_id}/disable": {
         parameters: {
             query?: never;
             header?: never;
@@ -131,14 +131,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Disable Node */
-        post: operations["disable_node_api_admin_nodes__node_id__disable_post"];
+        post: operations["disable_node_api_v1_admin_nodes__node_id__disable_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/nodes/{node_id}/enable": {
+    "/api/v1/admin/nodes/{node_id}/enable": {
         parameters: {
             query?: never;
             header?: never;
@@ -148,14 +148,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Enable Node */
-        post: operations["enable_node_api_admin_nodes__node_id__enable_post"];
+        post: operations["enable_node_api_v1_admin_nodes__node_id__enable_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/nodes/{node_id}/reset-secret": {
+    "/api/v1/admin/nodes/{node_id}/reset-secret": {
         parameters: {
             query?: never;
             header?: never;
@@ -165,14 +165,42 @@ export interface paths {
         get?: never;
         put?: never;
         /** Reset Node Secret */
-        post: operations["reset_node_secret_api_admin_nodes__node_id__reset_secret_post"];
+        post: operations["reset_node_secret_api_v1_admin_nodes__node_id__reset_secret_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/nodes/{node_id}/status/latest": {
+    "/api/v1/admin/nodes/{node_id}/refresh-fingerprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Fingerprint
+         * @description 触发节点重采完整指纹 (CPU 型号 / GPU 详情 / 虚拟化 / 网络 / Python 环境等).
+         *
+         *     机制:
+         *     - 把 node_id 加进 app.state.pending_fingerprint_refresh in-memory set;
+         *     - 下次该节点心跳到达时, response.refresh_fingerprint=True;
+         *     - 节点收到后异步重采, 下一次心跳带新指纹进库.
+         *
+         *     服务端重启时 pending 丢失, 但操作幂等 (set 性质 + 节点重采也幂等), 重试即可.
+         *     单实例 DB 零改动. 多实例时换 redis/db.
+         */
+        post: operations["refresh_fingerprint_api_v1_admin_nodes__node_id__refresh_fingerprint_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/nodes/{node_id}/status/latest": {
         parameters: {
             query?: never;
             header?: never;
@@ -180,7 +208,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Latest Status */
-        get: operations["get_latest_status_api_admin_nodes__node_id__status_latest_get"];
+        get: operations["get_latest_status_api_v1_admin_nodes__node_id__status_latest_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -189,7 +217,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/nodes/{node_id}/status/history": {
+    "/api/v1/admin/nodes/{node_id}/status/history": {
         parameters: {
             query?: never;
             header?: never;
@@ -197,7 +225,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Status History */
-        get: operations["get_status_history_api_admin_nodes__node_id__status_history_get"];
+        get: operations["get_status_history_api_v1_admin_nodes__node_id__status_history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -206,7 +234,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/audit-events": {
+    "/api/v1/admin/audit-events": {
         parameters: {
             query?: never;
             header?: never;
@@ -214,7 +242,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Audit Events */
-        get: operations["list_audit_events_api_admin_audit_events_get"];
+        get: operations["list_audit_events_api_v1_admin_audit_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -223,7 +251,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/security-warnings": {
+    "/api/v1/admin/security-warnings": {
         parameters: {
             query?: never;
             header?: never;
@@ -231,7 +259,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Security Warnings */
-        get: operations["list_security_warnings_api_admin_security_warnings_get"];
+        get: operations["list_security_warnings_api_v1_admin_security_warnings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -240,7 +268,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks": {
+    "/api/v1/admin/tasks": {
         parameters: {
             query?: never;
             header?: never;
@@ -248,17 +276,17 @@ export interface paths {
             cookie?: never;
         };
         /** List Tasks */
-        get: operations["list_tasks_api_admin_tasks_get"];
+        get: operations["list_tasks_api_v1_admin_tasks_get"];
         put?: never;
         /** Create Task */
-        post: operations["create_task_api_admin_tasks_post"];
+        post: operations["create_task_api_v1_admin_tasks_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks/{task_id}": {
+    "/api/v1/admin/tasks/{task_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -266,7 +294,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Task */
-        get: operations["get_task_api_admin_tasks__task_id__get"];
+        get: operations["get_task_api_v1_admin_tasks__task_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -275,7 +303,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks/{task_id}/cancel": {
+    "/api/v1/admin/tasks/{task_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -285,14 +313,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Cancel Task */
-        post: operations["cancel_task_api_admin_tasks__task_id__cancel_post"];
+        post: operations["cancel_task_api_v1_admin_tasks__task_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks/{task_id}/review/escalate": {
+    "/api/v1/admin/tasks/{task_id}/review/escalate": {
         parameters: {
             query?: never;
             header?: never;
@@ -302,14 +330,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Escalate Review */
-        post: operations["escalate_review_api_admin_tasks__task_id__review_escalate_post"];
+        post: operations["escalate_review_api_v1_admin_tasks__task_id__review_escalate_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks/{task_id}/review/approve": {
+    "/api/v1/admin/tasks/{task_id}/review/approve": {
         parameters: {
             query?: never;
             header?: never;
@@ -319,14 +347,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Approve Review */
-        post: operations["approve_review_api_admin_tasks__task_id__review_approve_post"];
+        post: operations["approve_review_api_v1_admin_tasks__task_id__review_approve_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks/{task_id}/review/reject": {
+    "/api/v1/admin/tasks/{task_id}/review/reject": {
         parameters: {
             query?: never;
             header?: never;
@@ -336,14 +364,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Reject Review */
-        post: operations["reject_review_api_admin_tasks__task_id__review_reject_post"];
+        post: operations["reject_review_api_v1_admin_tasks__task_id__review_reject_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks/{task_id}/logs": {
+    "/api/v1/admin/tasks/{task_id}/logs": {
         parameters: {
             query?: never;
             header?: never;
@@ -351,7 +379,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Task Logs */
-        get: operations["get_task_logs_api_admin_tasks__task_id__logs_get"];
+        get: operations["get_task_logs_api_v1_admin_tasks__task_id__logs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -360,7 +388,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tasks/{task_id}/artifacts": {
+    "/api/v1/admin/tasks/{task_id}/artifacts": {
         parameters: {
             query?: never;
             header?: never;
@@ -368,7 +396,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Task Artifacts */
-        get: operations["get_task_artifacts_api_admin_tasks__task_id__artifacts_get"];
+        get: operations["get_task_artifacts_api_v1_admin_tasks__task_id__artifacts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -377,7 +405,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/alerts": {
+    "/api/v1/admin/alerts": {
         parameters: {
             query?: never;
             header?: never;
@@ -385,7 +413,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Alerts */
-        get: operations["list_alerts_api_admin_alerts_get"];
+        get: operations["list_alerts_api_v1_admin_alerts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -394,7 +422,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/alerts/unread-count": {
+    "/api/v1/admin/alerts/unread-count": {
         parameters: {
             query?: never;
             header?: never;
@@ -402,7 +430,7 @@ export interface paths {
             cookie?: never;
         };
         /** Unread Count */
-        get: operations["unread_count_api_admin_alerts_unread_count_get"];
+        get: operations["unread_count_api_v1_admin_alerts_unread_count_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -411,7 +439,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/alerts/{alert_id}/read": {
+    "/api/v1/admin/alerts/{alert_id}/read": {
         parameters: {
             query?: never;
             header?: never;
@@ -421,14 +449,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Mark Read */
-        post: operations["mark_read_api_admin_alerts__alert_id__read_post"];
+        post: operations["mark_read_api_v1_admin_alerts__alert_id__read_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/node/heartbeat": {
+    "/api/v1/node/heartbeat": {
         parameters: {
             query?: never;
             header?: never;
@@ -438,14 +466,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Heartbeat */
-        post: operations["heartbeat_api_node_heartbeat_post"];
+        post: operations["heartbeat_api_v1_node_heartbeat_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/node/task-events": {
+    "/api/v1/node/task-events": {
         parameters: {
             query?: never;
             header?: never;
@@ -455,14 +483,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Task Events */
-        post: operations["task_events_api_node_task_events_post"];
+        post: operations["task_events_api_v1_node_task_events_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/node/task-log-chunk": {
+    "/api/v1/node/task-log-chunk": {
         parameters: {
             query?: never;
             header?: never;
@@ -472,14 +500,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Task Log Chunk */
-        post: operations["task_log_chunk_api_node_task_log_chunk_post"];
+        post: operations["task_log_chunk_api_v1_node_task_log_chunk_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/node/task-result": {
+    "/api/v1/node/task-result": {
         parameters: {
             query?: never;
             header?: never;
@@ -489,14 +517,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Task Result */
-        post: operations["task_result_api_node_task_result_post"];
+        post: operations["task_result_api_v1_node_task_result_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/node/artifact-upload": {
+    "/api/v1/node/artifact-upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -506,7 +534,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Artifact Upload */
-        post: operations["artifact_upload_api_node_artifact_upload_post"];
+        post: operations["artifact_upload_api_v1_node_artifact_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1276,6 +1304,12 @@ export interface components {
             tasks?: components["schemas"]["TaskEnvelope"][];
             /** Task Controls */
             task_controls?: components["schemas"]["TaskControlCommand"][];
+            /**
+             * Refresh Fingerprint
+             * @description 若为 true, 节点收到后应异步重采完整指纹 (CPU 型号 / GPU 详情 / 虚拟化 / 网络 / Python 环境等), 下次心跳带新指纹.
+             * @default false
+             */
+            refresh_fingerprint: boolean;
         };
         /** HeartbeatTaskRuntime */
         HeartbeatTaskRuntime: {
@@ -1652,7 +1686,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    login_api_admin_login_post: {
+    login_api_v1_admin_login_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1685,7 +1719,7 @@ export interface operations {
             };
         };
     };
-    refresh_api_admin_refresh_post: {
+    refresh_api_v1_admin_refresh_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1718,7 +1752,7 @@ export interface operations {
             };
         };
     };
-    logout_api_admin_logout_post: {
+    logout_api_v1_admin_logout_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1740,7 +1774,7 @@ export interface operations {
             };
         };
     };
-    me_api_admin_me_get: {
+    me_api_v1_admin_me_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1760,7 +1794,7 @@ export interface operations {
             };
         };
     };
-    get_overview_api_admin_dashboard_overview_get: {
+    get_overview_api_v1_admin_dashboard_overview_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1780,7 +1814,7 @@ export interface operations {
             };
         };
     };
-    list_nodes_api_admin_nodes_get: {
+    list_nodes_api_v1_admin_nodes_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -1812,7 +1846,7 @@ export interface operations {
             };
         };
     };
-    create_node_api_admin_nodes_post: {
+    create_node_api_v1_admin_nodes_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1845,7 +1879,7 @@ export interface operations {
             };
         };
     };
-    get_node_api_admin_nodes__node_id__get: {
+    get_node_api_v1_admin_nodes__node_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1876,7 +1910,7 @@ export interface operations {
             };
         };
     };
-    delete_node_api_admin_nodes__node_id__delete: {
+    delete_node_api_v1_admin_nodes__node_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -1905,7 +1939,7 @@ export interface operations {
             };
         };
     };
-    update_node_api_admin_nodes__node_id__patch: {
+    update_node_api_v1_admin_nodes__node_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -1940,7 +1974,7 @@ export interface operations {
             };
         };
     };
-    disable_node_api_admin_nodes__node_id__disable_post: {
+    disable_node_api_v1_admin_nodes__node_id__disable_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1971,7 +2005,7 @@ export interface operations {
             };
         };
     };
-    enable_node_api_admin_nodes__node_id__enable_post: {
+    enable_node_api_v1_admin_nodes__node_id__enable_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2002,7 +2036,7 @@ export interface operations {
             };
         };
     };
-    reset_node_secret_api_admin_nodes__node_id__reset_secret_post: {
+    reset_node_secret_api_v1_admin_nodes__node_id__reset_secret_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2033,7 +2067,40 @@ export interface operations {
             };
         };
     };
-    get_latest_status_api_admin_nodes__node_id__status_latest_get: {
+    refresh_fingerprint_api_v1_admin_nodes__node_id__refresh_fingerprint_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_latest_status_api_v1_admin_nodes__node_id__status_latest_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2064,10 +2131,14 @@ export interface operations {
             };
         };
     };
-    get_status_history_api_admin_nodes__node_id__status_history_get: {
+    get_status_history_api_v1_admin_nodes__node_id__status_history_get: {
         parameters: {
             query?: {
                 limit?: number;
+                /** @description ISO8601: 取 reported_at >= since */
+                since?: string | null;
+                /** @description ISO8601: 取 reported_at <= until */
+                until?: string | null;
             };
             header?: never;
             path: {
@@ -2097,7 +2168,7 @@ export interface operations {
             };
         };
     };
-    list_audit_events_api_admin_audit_events_get: {
+    list_audit_events_api_v1_admin_audit_events_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -2128,7 +2199,7 @@ export interface operations {
             };
         };
     };
-    list_security_warnings_api_admin_security_warnings_get: {
+    list_security_warnings_api_v1_admin_security_warnings_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -2159,7 +2230,7 @@ export interface operations {
             };
         };
     };
-    list_tasks_api_admin_tasks_get: {
+    list_tasks_api_v1_admin_tasks_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -2191,7 +2262,7 @@ export interface operations {
             };
         };
     };
-    create_task_api_admin_tasks_post: {
+    create_task_api_v1_admin_tasks_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2224,7 +2295,7 @@ export interface operations {
             };
         };
     };
-    get_task_api_admin_tasks__task_id__get: {
+    get_task_api_v1_admin_tasks__task_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2255,7 +2326,7 @@ export interface operations {
             };
         };
     };
-    cancel_task_api_admin_tasks__task_id__cancel_post: {
+    cancel_task_api_v1_admin_tasks__task_id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2286,7 +2357,7 @@ export interface operations {
             };
         };
     };
-    escalate_review_api_admin_tasks__task_id__review_escalate_post: {
+    escalate_review_api_v1_admin_tasks__task_id__review_escalate_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2321,7 +2392,7 @@ export interface operations {
             };
         };
     };
-    approve_review_api_admin_tasks__task_id__review_approve_post: {
+    approve_review_api_v1_admin_tasks__task_id__review_approve_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2356,7 +2427,7 @@ export interface operations {
             };
         };
     };
-    reject_review_api_admin_tasks__task_id__review_reject_post: {
+    reject_review_api_v1_admin_tasks__task_id__review_reject_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2391,7 +2462,7 @@ export interface operations {
             };
         };
     };
-    get_task_logs_api_admin_tasks__task_id__logs_get: {
+    get_task_logs_api_v1_admin_tasks__task_id__logs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2422,7 +2493,7 @@ export interface operations {
             };
         };
     };
-    get_task_artifacts_api_admin_tasks__task_id__artifacts_get: {
+    get_task_artifacts_api_v1_admin_tasks__task_id__artifacts_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2453,7 +2524,7 @@ export interface operations {
             };
         };
     };
-    list_alerts_api_admin_alerts_get: {
+    list_alerts_api_v1_admin_alerts_get: {
         parameters: {
             query?: {
                 status?: string | null;
@@ -2486,7 +2557,7 @@ export interface operations {
             };
         };
     };
-    unread_count_api_admin_alerts_unread_count_get: {
+    unread_count_api_v1_admin_alerts_unread_count_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2508,7 +2579,7 @@ export interface operations {
             };
         };
     };
-    mark_read_api_admin_alerts__alert_id__read_post: {
+    mark_read_api_v1_admin_alerts__alert_id__read_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2539,7 +2610,7 @@ export interface operations {
             };
         };
     };
-    heartbeat_api_node_heartbeat_post: {
+    heartbeat_api_v1_node_heartbeat_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2559,7 +2630,7 @@ export interface operations {
             };
         };
     };
-    task_events_api_node_task_events_post: {
+    task_events_api_v1_node_task_events_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2581,7 +2652,7 @@ export interface operations {
             };
         };
     };
-    task_log_chunk_api_node_task_log_chunk_post: {
+    task_log_chunk_api_v1_node_task_log_chunk_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2603,7 +2674,7 @@ export interface operations {
             };
         };
     };
-    task_result_api_node_task_result_post: {
+    task_result_api_v1_node_task_result_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2625,7 +2696,7 @@ export interface operations {
             };
         };
     };
-    artifact_upload_api_node_artifact_upload_post: {
+    artifact_upload_api_v1_node_artifact_upload_post: {
         parameters: {
             query?: never;
             header?: never;

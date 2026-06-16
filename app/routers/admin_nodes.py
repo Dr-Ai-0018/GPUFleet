@@ -17,7 +17,7 @@ from app.schemas import (
 )
 from app.services import admin_nodes_service
 
-router = APIRouter(prefix="/api/admin/nodes", tags=["admin-nodes"])
+router = APIRouter(prefix="/api/v1/admin/nodes", tags=["admin-nodes"])
 
 
 @router.get("", response_model=list[NodeResponse])

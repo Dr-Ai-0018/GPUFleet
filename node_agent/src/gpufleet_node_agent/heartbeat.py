@@ -51,4 +51,4 @@ def send_heartbeat(
     sample_buffer: SampleRingBuffer | None = None,
 ) -> dict[str, Any]:
     payload = build_heartbeat_payload(settings, sample_buffer=sample_buffer)
-    return post_signed_json(settings, "/api/node/heartbeat", payload, timeout=30)
+    return post_signed_json(settings, "/api/v1/node/heartbeat", payload, timeout=30)

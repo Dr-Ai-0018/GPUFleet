@@ -146,7 +146,7 @@ async def _prometheus_http_metrics(
 
 
 def _path_template_or_raw(request: Request) -> str:
-    """优先返回 FastAPI route 的 path template (如 /api/admin/nodes/{node_id}).
+    """优先返回 FastAPI route 的 path template (如 /api/v1/admin/nodes/{node_id}).
 
     未命中路由 (404) / 静态文件 时, 把 path 收敛成"模糊桶"避免 cardinality 爆炸:
     - /metrics / /healthz / /readyz 用原 path

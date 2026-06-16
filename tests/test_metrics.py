@@ -69,7 +69,7 @@ def test_http_middleware_counts_requests_by_path_template(
     auth_headers: dict[str, str],
     monkeypatch,
 ) -> None:
-    """请求 /api/admin/nodes 与 /api/admin/nodes/{id} 应在不同 path_template 标签下计数, 不爆 cardinality."""
+    """请求 /api/v1/admin/nodes 与 /api/v1/admin/nodes/{id} 应在不同 path_template 标签下计数, 不爆 cardinality."""
     from app.config import get_settings
 
     monkeypatch.setenv("GPUFLEET_METRICS_TOKEN", "test-token")
@@ -78,7 +78,7 @@ def test_http_middleware_counts_requests_by_path_template(
     try:
         # 触发若干请求
         resp = client.post(
-            "/api/admin/nodes",
+            "/api/v1/admin/nodes",
             headers=auth_headers,
             json={
                 "node_id": "metrics-test-node",
@@ -91,8 +91,8 @@ def test_http_middleware_counts_requests_by_path_template(
             },
         )
         assert resp.status_code == 201
-        client.get("/api/admin/nodes", headers=auth_headers)
-        client.get("/api/admin/nodes/metrics-test-node", headers=auth_headers)
+        client.get("/api/v1/admin/nodes", headers=auth_headers)
+        client.get("/api/v1/admin/nodes/metrics-test-node", headers=auth_headers)
 
         # 抓 metrics
         metrics_resp = client.get("/metrics", headers={"Authorization": "Bearer test-token"})
@@ -101,9 +101,9 @@ def test_http_middleware_counts_requests_by_path_template(
 
         # path_template 应保留 {node_id} 占位符, 不展开成具体 node_id
         # (避免 cardinality 爆炸)
-        assert 'path_template="/api/admin/nodes/{node_id}"' in text
-        # 普通 list 端点 path_template 是 "/api/admin/nodes"
-        assert 'path_template="/api/admin/nodes"' in text
+        assert 'path_template="/api/v1/admin/nodes/{node_id}"' in text
+        # 普通 list 端点 path_template 是 "/api/v1/admin/nodes"
+        assert 'path_template="/api/v1/admin/nodes"' in text
     finally:
         monkeypatch.delenv("GPUFLEET_METRICS_TOKEN", raising=False)
         get_settings.cache_clear()
@@ -116,7 +116,7 @@ def test_http_middleware_counts_requests_by_path_template(
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str) -> dict:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -155,7 +155,7 @@ def test_heartbeat_metrics_count_ok_and_record_duration(
         body = json.dumps(payload).encode("utf-8")
         headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
         # 一次心跳即可验证 counter 递增 (重复发会撞 last_request_ts 单调校验, 测试反而失败)
-        hb = client.post("/api/node/heartbeat", content=body, headers=headers)
+        hb = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
         assert hb.status_code == 200
 
         text = client.get("/metrics", headers={"Authorization": "Bearer tk"}).text
@@ -200,7 +200,7 @@ def test_heartbeat_metrics_count_reject_on_bad_payload(
             }
         ).encode("utf-8")
         headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
-        resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
         assert resp.status_code == 422
 
         text = client.get("/metrics", headers={"Authorization": "Bearer tk"}).text

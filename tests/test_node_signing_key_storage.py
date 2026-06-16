@@ -18,7 +18,7 @@ from app.security import (
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "secure-node") -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -71,7 +71,7 @@ class TestNodeSigningKeyStorage:
         body = json.dumps(payload).encode("utf-8")
         headers = build_signed_headers_for_test(node_data["node_id"], node_data["node_secret"], body)
 
-        resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
 
         assert resp.status_code == 200, resp.text
         assert resp.json()["node_id"] == node_data["node_id"]
@@ -92,7 +92,7 @@ class TestNodeSigningKeyStorage:
                 ("reset-node",),
             ).fetchone()
 
-        reset_resp = client.post("/api/admin/nodes/reset-node/reset-secret", headers=auth_headers)
+        reset_resp = client.post("/api/v1/admin/nodes/reset-node/reset-secret", headers=auth_headers)
         assert reset_resp.status_code == 200, reset_resp.text
         new_secret = reset_resp.json()["node_secret"]
         assert new_secret != old_secret
@@ -111,11 +111,11 @@ class TestNodeSigningKeyStorage:
         body = json.dumps(payload).encode("utf-8")
 
         old_headers = build_signed_headers_for_test("reset-node", old_secret, body)
-        old_resp = client.post("/api/node/heartbeat", content=body, headers=old_headers)
+        old_resp = client.post("/api/v1/node/heartbeat", content=body, headers=old_headers)
         assert old_resp.status_code == 401
 
         new_headers = build_signed_headers_for_test("reset-node", new_secret, body)
-        new_resp = client.post("/api/node/heartbeat", content=body, headers=new_headers)
+        new_resp = client.post("/api/v1/node/heartbeat", content=body, headers=new_headers)
         assert new_resp.status_code == 200, new_resp.text
 
     def test_legacy_plaintext_signing_key_is_migrated_to_encrypted_storage(self, tmp_path) -> None:

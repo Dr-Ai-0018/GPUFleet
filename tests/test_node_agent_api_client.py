@@ -77,7 +77,7 @@ def test_post_signed_json_retries_transient_errors(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(api_client.requests, "post", fake_post)
     monkeypatch.setattr(api_client.time, "sleep", lambda _: None)
 
-    result = api_client.post_signed_json(_settings(), "/api/node/task-events", {"x": 1})
+    result = api_client.post_signed_json(_settings(), "/api/v1/node/task-events", {"x": 1})
     assert result == {"ok": True}
     assert calls["count"] == 3
 
@@ -93,7 +93,7 @@ def test_post_signed_json_does_not_retry_permanent_http_errors(monkeypatch: pyte
     monkeypatch.setattr(api_client.requests, "post", fake_post)
 
     with pytest.raises(requests.exceptions.HTTPError):
-        api_client.post_signed_json(_settings(), "/api/node/task-events", {"x": 1})
+        api_client.post_signed_json(_settings(), "/api/v1/node/task-events", {"x": 1})
     assert calls["count"] == 1
 
 
@@ -114,11 +114,11 @@ def test_post_signed_json_opens_circuit_after_consecutive_transient_failures(mon
     monkeypatch.setattr(api_client.time, "monotonic", lambda: clock["now"])
 
     with pytest.raises(requests.exceptions.ConnectionError):
-        api_client.post_signed_json(settings, "/api/node/heartbeat", {"x": 1})
+        api_client.post_signed_json(settings, "/api/v1/node/heartbeat", {"x": 1})
     with pytest.raises(requests.exceptions.ConnectionError):
-        api_client.post_signed_json(settings, "/api/node/heartbeat", {"x": 1})
+        api_client.post_signed_json(settings, "/api/v1/node/heartbeat", {"x": 1})
     with pytest.raises(api_client.CircuitOpenError):
-        api_client.post_signed_json(settings, "/api/node/heartbeat", {"x": 1})
+        api_client.post_signed_json(settings, "/api/v1/node/heartbeat", {"x": 1})
 
     assert api_client._CIRCUIT_BREAKER.state == "open"
     assert calls["count"] == api_client.MAX_RETRIES * 2
@@ -141,9 +141,9 @@ def test_post_signed_json_half_open_probe_closes_circuit_on_success(monkeypatch:
     monkeypatch.setattr(api_client.time, "monotonic", lambda: clock["now"])
 
     with pytest.raises(requests.exceptions.ConnectionError):
-        api_client.post_signed_json(settings, "/api/node/heartbeat", {"x": 1})
+        api_client.post_signed_json(settings, "/api/v1/node/heartbeat", {"x": 1})
     with pytest.raises(api_client.CircuitOpenError):
-        api_client.post_signed_json(settings, "/api/node/heartbeat", {"x": 1})
+        api_client.post_signed_json(settings, "/api/v1/node/heartbeat", {"x": 1})
 
     clock["now"] += 11
 
@@ -152,7 +152,7 @@ def test_post_signed_json_half_open_probe_closes_circuit_on_success(monkeypatch:
         return _Response(200, {"ok": True, "probe": "success"})
 
     monkeypatch.setattr(api_client.requests, "post", success_post)
-    result = api_client.post_signed_json(settings, "/api/node/heartbeat", {"x": 1})
+    result = api_client.post_signed_json(settings, "/api/v1/node/heartbeat", {"x": 1})
 
     assert result["probe"] == "success"
     assert api_client._CIRCUIT_BREAKER.state == "closed"

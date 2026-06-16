@@ -9,7 +9,7 @@ from app.db import Database
 from app.deps import get_current_admin, get_db
 from app.schemas import AuditEventView, SecurityWarningView
 
-router = APIRouter(prefix="/api/admin", tags=["admin-observability"])
+router = APIRouter(prefix="/api/v1/admin", tags=["admin-observability"])
 
 
 @router.get("/audit-events", response_model=list[AuditEventView])

@@ -123,19 +123,19 @@ def post_signed_json(settings: AgentSettings, path: str, payload: dict[str, Any]
 
 
 def send_heartbeat(settings: AgentSettings, payload: dict[str, Any]) -> dict[str, Any]:
-    return post_signed_json(settings, "/api/node/heartbeat", payload, timeout=30)
+    return post_signed_json(settings, "/api/v1/node/heartbeat", payload, timeout=30)
 
 
 def send_task_event(settings: AgentSettings, payload: dict[str, Any]) -> dict[str, Any]:
-    return post_signed_json(settings, "/api/node/task-events", payload, timeout=30)
+    return post_signed_json(settings, "/api/v1/node/task-events", payload, timeout=30)
 
 
 def send_task_log_chunk(settings: AgentSettings, payload: dict[str, Any]) -> dict[str, Any]:
-    return post_signed_json(settings, "/api/node/task-log-chunk", payload, timeout=60)
+    return post_signed_json(settings, "/api/v1/node/task-log-chunk", payload, timeout=60)
 
 
 def send_task_result(settings: AgentSettings, payload: dict[str, Any]) -> dict[str, Any]:
-    return post_signed_json(settings, "/api/node/task-result", payload, timeout=60)
+    return post_signed_json(settings, "/api/v1/node/task-result", payload, timeout=60)
 
 
 def send_artifact_file(
@@ -156,4 +156,4 @@ def send_artifact_file(
         "content_type": content_type,
         "preview": preview or {},
     }
-    return post_signed_json(settings, "/api/node/artifact-upload", payload, timeout=120)
+    return post_signed_json(settings, "/api/v1/node/artifact-upload", payload, timeout=120)

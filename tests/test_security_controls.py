@@ -8,7 +8,7 @@ from httpx import Response
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "node-rate") -> None:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -36,7 +36,7 @@ def _assert_rate_limited(resp: Response) -> None:
 class TestCorsPolicy:
     def test_preflight_returns_whitelisted_methods_and_headers(self, client: TestClient) -> None:
         resp = client.options(
-            "/api/admin/login",
+            "/api/v1/admin/login",
             headers={
                 "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "POST",
@@ -62,16 +62,16 @@ class TestRateLimits:
             "X-Signature": "invalid",
         }
         for i in range(60):
-            resp = client.post("/api/node/heartbeat", headers=headers, json={"boot_id": "boot-1"})
+            resp = client.post("/api/v1/node/heartbeat", headers=headers, json={"boot_id": "boot-1"})
             assert resp.status_code == 401, f"Attempt {i + 1} should be 401"
 
-        resp = client.post("/api/node/heartbeat", headers=headers, json={"boot_id": "boot-1"})
+        resp = client.post("/api/v1/node/heartbeat", headers=headers, json={"boot_id": "boot-1"})
         _assert_rate_limited(resp)
 
     def test_create_node_rate_limit(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         for i in range(30):
             resp = client.post(
-                "/api/admin/nodes",
+                "/api/v1/admin/nodes",
                 headers=auth_headers,
                 json={
                     "node_id": f"node-{i:02d}",
@@ -86,7 +86,7 @@ class TestRateLimits:
             assert resp.status_code == 201, f"Attempt {i + 1} failed: {resp.text}"
 
         resp = client.post(
-            "/api/admin/nodes",
+            "/api/v1/admin/nodes",
             headers=auth_headers,
             json={
                 "node_id": "node-31",
@@ -105,7 +105,7 @@ class TestRateLimits:
 
         for i in range(30):
             resp = client.post(
-                "/api/admin/tasks",
+                "/api/v1/admin/tasks",
                 headers=auth_headers,
                 json={
                     "node_id": "node-rate",
@@ -118,7 +118,7 @@ class TestRateLimits:
             assert resp.status_code == 201, f"Attempt {i + 1} failed: {resp.text}"
 
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "node-rate",

@@ -1,4 +1,4 @@
-"""GET /api/admin/nodes/{node_id}/status/history 时间窗 since/until + 提升 limit 上限."""
+"""GET /api/v1/admin/nodes/{node_id}/status/history 时间窗 since/until + 提升 limit 上限."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.config import get_settings
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str) -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -74,7 +74,7 @@ def test_history_since_filters_older_rows(client: TestClient, auth_headers: dict
 
     # since=11:45 → 只剩 12:00 和 12:30
     resp = client.get(
-        f"/api/admin/nodes/{node['node_id']}/status/history?since=2026-06-16T11:45:00%2B00:00",
+        f"/api/v1/admin/nodes/{node['node_id']}/status/history?since=2026-06-16T11:45:00%2B00:00",
         headers=auth_headers,
     )
     assert resp.status_code == 200
@@ -97,7 +97,7 @@ def test_history_until_filters_newer_rows(client: TestClient, auth_headers: dict
         ],
     )
     resp = client.get(
-        f"/api/admin/nodes/{node['node_id']}/status/history?until=2026-06-16T12:30:00%2B00:00",
+        f"/api/v1/admin/nodes/{node['node_id']}/status/history?until=2026-06-16T12:30:00%2B00:00",
         headers=auth_headers,
     )
     items = resp.json()["items"]
@@ -120,7 +120,7 @@ def test_history_since_until_window(client: TestClient, auth_headers: dict[str, 
         ],
     )
     resp = client.get(
-        f"/api/admin/nodes/{node['node_id']}/status/history"
+        f"/api/v1/admin/nodes/{node['node_id']}/status/history"
         f"?since=2026-06-16T11:30:00%2B00:00&until=2026-06-16T13:30:00%2B00:00",
         headers=auth_headers,
     )
@@ -134,13 +134,13 @@ def test_history_limit_upper_bound_is_5000(client: TestClient, auth_headers: dic
     node = _create_node(client, auth_headers, "node-history-limit")
     # 5000 OK
     resp = client.get(
-        f"/api/admin/nodes/{node['node_id']}/status/history?limit=5000",
+        f"/api/v1/admin/nodes/{node['node_id']}/status/history?limit=5000",
         headers=auth_headers,
     )
     assert resp.status_code == 200
     # 5001 应 422 (Pydantic le=5000)
     resp_over = client.get(
-        f"/api/admin/nodes/{node['node_id']}/status/history?limit=5001",
+        f"/api/v1/admin/nodes/{node['node_id']}/status/history?limit=5001",
         headers=auth_headers,
     )
     assert resp_over.status_code == 422
@@ -152,7 +152,7 @@ def test_history_without_filters_backward_compatible(client: TestClient, auth_he
     _seed_snapshots(node["node_id"], [f"2026-06-16T12:00:{s:02d}+00:00" for s in range(10)])
 
     resp = client.get(
-        f"/api/admin/nodes/{node['node_id']}/status/history",
+        f"/api/v1/admin/nodes/{node['node_id']}/status/history",
         headers=auth_headers,
     )
     assert resp.status_code == 200

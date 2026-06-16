@@ -44,7 +44,7 @@ def client(_env_setup: None) -> Generator[TestClient, None, None]:
 @pytest.fixture()
 def admin_token(client: TestClient) -> str:
     """Login as admin and return the access token."""
-    resp = client.post("/api/admin/login", json={
+    resp = client.post("/api/v1/admin/login", json={
         "username": "admin",
         "password": "test-admin-pass",
     })

@@ -12,7 +12,7 @@ from app.routers.admin_auth import limiter
 from app.schemas import HeartbeatResponse
 from app.services import node_runtime_service
 
-router = APIRouter(prefix="/api/node", tags=["node"])
+router = APIRouter(prefix="/api/v1/node", tags=["node"])
 
 
 def _node_rate_limit_key(request: Request) -> str:

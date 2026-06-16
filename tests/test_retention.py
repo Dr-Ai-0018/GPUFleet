@@ -14,7 +14,7 @@ from app.db import Database, dumps_json
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "retention-node") -> None:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -31,7 +31,7 @@ def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str 
 
 def _create_terminal_task(client: TestClient, auth_headers: dict[str, str], node_id: str = "retention-node") -> str:
     resp = client.post(
-        "/api/admin/tasks",
+        "/api/v1/admin/tasks",
         headers=auth_headers,
         json={
             "node_id": node_id,

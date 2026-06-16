@@ -16,7 +16,7 @@ from app.security import build_signed_headers_for_test
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str) -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -39,7 +39,7 @@ def _send_heartbeat(
 ) -> None:
     body = json.dumps(payload).encode("utf-8")
     headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
-    resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+    resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
     assert resp.status_code == 200, resp.text
 
 
@@ -263,7 +263,7 @@ def test_invalid_sample_payload_rejected_with_422(
         }
     ).encode("utf-8")
     headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
-    resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+    resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
     assert resp.status_code == 422
     body_json = resp.json()
     assert body_json["code"] == "ERR_VALIDATION_INVALID_PAYLOAD"
@@ -276,7 +276,7 @@ def test_latest_status_endpoints_return_base_row_not_sample(
     client: TestClient,
     auth_headers: dict[str, str],
 ) -> None:
-    """回归保护: GET /api/admin/nodes/{id}/status/latest + GET /api/admin/dashboard/overview 必须只取基准行.
+    """回归保护: GET /api/v1/admin/nodes/{id}/status/latest + GET /api/v1/admin/dashboard/overview 必须只取基准行.
 
     Bug 背景: sample 行 ts 比基准行 reported_at 晚, 单纯 ORDER BY reported_at DESC 会拿到 sample 行,
     sample 行的 JSON 列全为 NULL, 触发 _decode_gpu_snapshot(None) 抛 TypeError.
@@ -311,14 +311,14 @@ def test_latest_status_endpoints_return_base_row_not_sample(
     )
 
     # status/latest endpoint 必须返基准行数据 (cpu_usage=25.0), 不是 sample 行 (cpu_pct=50+)
-    latest_resp = client.get(f"/api/admin/nodes/{node['node_id']}/status/latest", headers=auth_headers)
+    latest_resp = client.get(f"/api/v1/admin/nodes/{node['node_id']}/status/latest", headers=auth_headers)
     assert latest_resp.status_code == 200, latest_resp.text
     body = latest_resp.json()
     assert body["cpu"]["usage_percent"] == 25.0, f"got cpu={body['cpu']['usage_percent']} (sample 行污染了 latest)"
     assert body["gpus"][0]["utilization_percent"] == 25.0  # 不应该是 70+ (sample 行)
 
     # dashboard/overview 同样过滤
-    overview_resp = client.get("/api/admin/dashboard/overview", headers=auth_headers)
+    overview_resp = client.get("/api/v1/admin/dashboard/overview", headers=auth_headers)
     assert overview_resp.status_code == 200, overview_resp.text
     nodes = overview_resp.json().get("nodes", [])
     target = next((n for n in nodes if n["node_id"] == node["node_id"]), None)

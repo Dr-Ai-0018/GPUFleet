@@ -19,7 +19,7 @@ from app.security import build_signed_headers_for_test, derive_node_signing_key
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "result-node") -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -38,7 +38,7 @@ def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str 
 
 def _create_task(client: TestClient, auth_headers: dict[str, str], *, node_id: str, task_id: str) -> dict[str, object]:
     resp = client.post(
-        "/api/admin/tasks",
+        "/api/v1/admin/tasks",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -100,7 +100,7 @@ class TestTaskResultIdempotency:
             body,
             datetime.now(UTC).replace(microsecond=0).isoformat(),
         )
-        first = client.post("/api/node/task-result", content=body, headers=first_headers)
+        first = client.post("/api/v1/node/task-result", content=body, headers=first_headers)
         assert first.status_code == 200, first.text
         assert first.json()["status"] == "succeeded"
 
@@ -113,7 +113,7 @@ class TestTaskResultIdempotency:
                 body,
                 (base_time + timedelta(seconds=offset)).isoformat(),
             )
-            resp = client.post("/api/node/task-result", content=body, headers=headers)
+            resp = client.post("/api/v1/node/task-result", content=body, headers=headers)
             assert resp.status_code == 200, resp.text
             duplicate_responses.append(resp.json())
 
@@ -145,7 +145,7 @@ class TestTaskResultIdempotency:
                 (base_time + timedelta(seconds=offset)).isoformat(),
             )
             with TestClient(app) as thread_client:
-                resp = thread_client.post("/api/node/task-result", content=body, headers=headers)
+                resp = thread_client.post("/api/v1/node/task-result", content=body, headers=headers)
             return resp.status_code, resp.json()
 
         with ThreadPoolExecutor(max_workers=2) as executor:

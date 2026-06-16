@@ -20,7 +20,7 @@ from app.security import build_signed_headers_for_test, derive_node_signing_key
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "replay-node") -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -43,7 +43,7 @@ class TestNonceReplayProtection:
         body = json.dumps(payload).encode("utf-8")
         headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
 
-        first = client.post("/api/node/heartbeat", content=body, headers=headers)
+        first = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
         assert first.status_code == 200, first.text
 
         next_timestamp = (datetime.fromisoformat(headers["X-Timestamp"]) + timedelta(seconds=1)).isoformat()
@@ -59,7 +59,7 @@ class TestNonceReplayProtection:
             "X-Signature": reused_signature,
         }
 
-        second = client.post("/api/node/heartbeat", content=body, headers=second_headers)
+        second = client.post("/api/v1/node/heartbeat", content=body, headers=second_headers)
         assert second.status_code == 409
         assert second.json()["code"] == "ERR_AUTH_NONCE_DUPLICATE"
         assert second.json()["message"] == "Duplicate nonce"
@@ -70,7 +70,7 @@ class TestNonceReplayProtection:
         body = json.dumps(payload).encode("utf-8")
 
         headers_1 = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
-        first = client.post("/api/node/heartbeat", content=body, headers=headers_1)
+        first = client.post("/api/v1/node/heartbeat", content=body, headers=headers_1)
         assert first.status_code == 200, first.text
 
         headers_2 = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
@@ -80,7 +80,7 @@ class TestNonceReplayProtection:
         body_hash = hashlib.sha256(body).hexdigest()
         message = "\n".join([node["node_id"], repeated_timestamp, headers_2["X-Nonce"], body_hash]).encode("utf-8")
         headers_2["X-Signature"] = hmac.new(signing_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
-        second = client.post("/api/node/heartbeat", content=body, headers=headers_2)
+        second = client.post("/api/v1/node/heartbeat", content=body, headers=headers_2)
 
         assert second.status_code == 409
         assert second.json()["code"] == "ERR_AUTH_TIMESTAMP_REPLAY"
@@ -113,7 +113,7 @@ class TestNonceReplayProtection:
             }
             barrier.wait()
             with TestClient(app) as thread_client:
-                resp = thread_client.post("/api/node/heartbeat", content=body, headers=request_headers)
+                resp = thread_client.post("/api/v1/node/heartbeat", content=body, headers=request_headers)
             return resp.status_code, resp.json()
 
         with ThreadPoolExecutor(max_workers=10) as executor:
@@ -157,7 +157,7 @@ class TestNonceReplayProtection:
         def send(index: int) -> tuple[int, dict[str, object]]:
             barrier.wait()
             with TestClient(app) as thread_client:
-                resp = thread_client.post("/api/node/heartbeat", content=body, headers=prepared_headers[index])
+                resp = thread_client.post("/api/v1/node/heartbeat", content=body, headers=prepared_headers[index])
             return resp.status_code, resp.json()
 
         with ThreadPoolExecutor(max_workers=10) as executor:

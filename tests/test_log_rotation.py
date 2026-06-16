@@ -12,7 +12,7 @@ from app.security import build_signed_headers_for_test
 
 def _create_node_and_task(client: TestClient, auth_headers: dict[str, str]) -> tuple[str, str]:
     node_resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": "log-node",
@@ -26,7 +26,7 @@ def _create_node_and_task(client: TestClient, auth_headers: dict[str, str]) -> t
     )
     assert node_resp.status_code == 201, node_resp.text
     task_resp = client.post(
-        "/api/admin/tasks",
+        "/api/v1/admin/tasks",
         headers=auth_headers,
         json={
             "node_id": "log-node",
@@ -54,7 +54,7 @@ def test_large_log_chunk_rotates_to_gzip_archive(client: TestClient, auth_header
     }
     body = json.dumps(payload).encode("utf-8")
     headers = build_signed_headers_for_test("log-node", node_secret, body)
-    resp = client.post("/api/node/task-log-chunk", content=body, headers=headers)
+    resp = client.post("/api/v1/node/task-log-chunk", content=body, headers=headers)
     assert resp.status_code == 200, resp.text
 
     log_dir = settings.storage_path / "logs" / task_id
@@ -64,7 +64,7 @@ def test_large_log_chunk_rotates_to_gzip_archive(client: TestClient, auth_header
     assert active_log.exists()
     assert active_log.stat().st_size <= settings.task_log_stream_max_bytes
 
-    logs_resp = client.get(f"/api/admin/tasks/{task_id}/logs", headers=auth_headers)
+    logs_resp = client.get(f"/api/v1/admin/tasks/{task_id}/logs", headers=auth_headers)
     assert logs_resp.status_code == 200
     assert logs_resp.json()[0]["is_truncated"] is False
 
@@ -87,10 +87,10 @@ def test_storage_quota_rejects_new_log_chunk_and_marks_truncated(
     }
     body = json.dumps(payload).encode("utf-8")
     headers = build_signed_headers_for_test("log-node", node_secret, body)
-    resp = client.post("/api/node/task-log-chunk", content=body, headers=headers)
+    resp = client.post("/api/v1/node/task-log-chunk", content=body, headers=headers)
     assert resp.status_code == 507
 
-    logs_resp = client.get(f"/api/admin/tasks/{task_id}/logs", headers=auth_headers)
+    logs_resp = client.get(f"/api/v1/admin/tasks/{task_id}/logs", headers=auth_headers)
     assert logs_resp.status_code == 200
     assert logs_resp.json()[0]["is_truncated"] is True
     assert logs_resp.json()[0]["truncated_notice"] == "storage_quota_exceeded"

@@ -91,7 +91,7 @@ def test_api_error_shape_for_frozen_codes(code: str, status_code: int) -> None:
 
 
 def test_validation_errors_use_structured_shape(client: TestClient) -> None:
-    resp = client.post("/api/admin/login", json={"username": "admin"})
+    resp = client.post("/api/v1/admin/login", json={"username": "admin"})
 
     assert resp.status_code == 422
     body = resp.json()

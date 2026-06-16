@@ -13,7 +13,7 @@ from app.security import build_signed_headers_for_test
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "hot-columns-node") -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -54,7 +54,7 @@ def test_heartbeat_persists_hot_metric_columns_and_history_reads_them(
     body = json.dumps(payload).encode("utf-8")
     headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
 
-    heartbeat_resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+    heartbeat_resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
     assert heartbeat_resp.status_code == 200, heartbeat_resp.text
 
     settings = get_settings()
@@ -80,7 +80,7 @@ def test_heartbeat_persists_hot_metric_columns_and_history_reads_them(
     assert row["gpu_temperature_c"] == 69.0
     assert row["gpu_power_draw_w"] == 241.0
 
-    history_resp = client.get(f"/api/admin/nodes/{node['node_id']}/status/history", headers=auth_headers)
+    history_resp = client.get(f"/api/v1/admin/nodes/{node['node_id']}/status/history", headers=auth_headers)
     assert history_resp.status_code == 200, history_resp.text
     item = history_resp.json()["items"][-1]
     assert item["cpu_usage_percent"] == 41.5

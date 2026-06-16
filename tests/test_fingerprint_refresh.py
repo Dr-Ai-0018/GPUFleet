@@ -1,7 +1,7 @@
 """节点指纹手动刷新通道验收 (设计来源: docs/Probe_Rewrite_Plan.md §3.C).
 
 机制:
-- POST /api/admin/nodes/{node_id}/refresh-fingerprint → 加入 app.state.pending_fingerprint_refresh
+- POST /api/v1/admin/nodes/{node_id}/refresh-fingerprint → 加入 app.state.pending_fingerprint_refresh
 - 该节点下次心跳: HeartbeatResponse.refresh_fingerprint = True + 从 set 移除
 - 再次心跳: refresh_fingerprint = False (一次性触发)
 - DB schema 零改动: 全部用 in-memory set
@@ -28,7 +28,7 @@ def _next_ts() -> str:
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str) -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -56,7 +56,7 @@ def _send_heartbeat(client: TestClient, node: dict[str, object]) -> dict[str, ob
     headers = build_signed_headers_for_test(
         node["node_id"], node["node_secret"], body, timestamp=_next_ts()
     )
-    resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+    resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -80,7 +80,7 @@ def test_post_refresh_endpoint_queues_and_next_heartbeat_delivers(
 
     # 1. POST refresh - 期望 202 + queued status
     resp = client.post(
-        f"/api/admin/nodes/{node['node_id']}/refresh-fingerprint",
+        f"/api/v1/admin/nodes/{node['node_id']}/refresh-fingerprint",
         headers=auth_headers,
     )
     assert resp.status_code == 202, resp.text
@@ -106,7 +106,7 @@ def test_post_refresh_is_idempotent(
 
     for _ in range(3):
         resp = client.post(
-            f"/api/admin/nodes/{node['node_id']}/refresh-fingerprint",
+            f"/api/v1/admin/nodes/{node['node_id']}/refresh-fingerprint",
             headers=auth_headers,
         )
         assert resp.status_code == 202
@@ -124,7 +124,7 @@ def test_post_refresh_unknown_node_returns_404(
 ) -> None:
     """触发不存在的节点 → 404 ERR_NODE_NOT_FOUND."""
     resp = client.post(
-        "/api/admin/nodes/no-such-node/refresh-fingerprint",
+        "/api/v1/admin/nodes/no-such-node/refresh-fingerprint",
         headers=auth_headers,
     )
     assert resp.status_code == 404
@@ -139,12 +139,12 @@ def test_post_refresh_writes_audit_event(
     """触发 refresh → audit_events 表里有一条 action='refresh_node_fingerprint' 记录."""
     node = _create_node(client, auth_headers, "node-fp-audit")
     resp = client.post(
-        f"/api/admin/nodes/{node['node_id']}/refresh-fingerprint",
+        f"/api/v1/admin/nodes/{node['node_id']}/refresh-fingerprint",
         headers=auth_headers,
     )
     assert resp.status_code == 202
 
-    audit_resp = client.get("/api/admin/audit-events?limit=10", headers=auth_headers)
+    audit_resp = client.get("/api/v1/admin/audit-events?limit=10", headers=auth_headers)
     assert audit_resp.status_code == 200
     events = audit_resp.json()
     matching = [e for e in events if e["action"] == "refresh_node_fingerprint" and e["target_id"] == node["node_id"]]
@@ -161,7 +161,7 @@ def test_refresh_one_node_does_not_affect_others(
     node_b = _create_node(client, auth_headers, "node-fp-b")
 
     resp = client.post(
-        f"/api/admin/nodes/{node_a['node_id']}/refresh-fingerprint",
+        f"/api/v1/admin/nodes/{node_a['node_id']}/refresh-fingerprint",
         headers=auth_headers,
     )
     assert resp.status_code == 202

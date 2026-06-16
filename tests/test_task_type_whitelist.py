@@ -25,7 +25,7 @@ def _create_node(
     allow_modal: bool = False,
 ) -> dict[str, object]:
     resp = client.post(
-        "/api/admin/nodes",
+        "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
@@ -48,7 +48,7 @@ def _heartbeat(node_id: str, node_secret: str) -> tuple[int, dict[str, object]]:
     body = json.dumps(payload).encode("utf-8")
     headers = build_signed_headers_for_test(node_id, node_secret, body)
     with TestClient(app) as thread_client:
-        resp = thread_client.post("/api/node/heartbeat", content=body, headers=headers)
+        resp = thread_client.post("/api/v1/node/heartbeat", content=body, headers=headers)
     return resp.status_code, resp.json()
 
 
@@ -56,7 +56,7 @@ class TestTaskTypeWhitelistPhaseA:
     def test_l0_health_check_goes_pending(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         _create_node(client, auth_headers, node_id="l0-node")
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "l0-node",
@@ -71,7 +71,7 @@ class TestTaskTypeWhitelistPhaseA:
     def test_l1_git_pull_goes_pending(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         _create_node(client, auth_headers, node_id="l1-node")
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "l1-node",
@@ -86,7 +86,7 @@ class TestTaskTypeWhitelistPhaseA:
     def test_l2_shell_without_permission_returns_403(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         _create_node(client, auth_headers, node_id="l2-no-shell")
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "l2-no-shell",
@@ -108,7 +108,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "l2-shell",
@@ -128,7 +128,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "review-node",
@@ -149,7 +149,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "alert-node",
@@ -197,7 +197,7 @@ class TestTaskTypeWhitelistPhaseA:
         monkeypatch.setattr("app.review.LLMReviewer.review", fake_review)
 
         resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "ai-approve-node",
@@ -229,7 +229,7 @@ class TestTaskTypeWhitelistPhaseA:
         monkeypatch.setattr("app.review.LLMReviewer.review", fake_review)
 
         create_resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "escalate-node",
@@ -243,7 +243,7 @@ class TestTaskTypeWhitelistPhaseA:
         assert create_resp.json()["review_stage"] == 1
 
         escalate_resp = client.post(
-            f"/api/admin/tasks/{task_id}/review/escalate",
+            f"/api/v1/admin/tasks/{task_id}/review/escalate",
             headers=auth_headers,
             json={"note": "需要人工确认"},
         )
@@ -261,7 +261,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         create_resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "cooldown-node",
@@ -272,7 +272,7 @@ class TestTaskTypeWhitelistPhaseA:
         )
         task_id = create_resp.json()["task_id"]
         approve_resp = client.post(
-            f"/api/admin/tasks/{task_id}/review/approve",
+            f"/api/v1/admin/tasks/{task_id}/review/approve",
             headers=auth_headers,
             json={"note": "太快了"},
         )
@@ -287,7 +287,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         create_resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "approve-node",
@@ -303,7 +303,7 @@ class TestTaskTypeWhitelistPhaseA:
             conn.execute("UPDATE tasks SET review_started_at = ? WHERE task_id = ?", (old_iso, task_id))
 
         approve_resp = client.post(
-            f"/api/admin/tasks/{task_id}/review/approve",
+            f"/api/v1/admin/tasks/{task_id}/review/approve",
             headers=auth_headers,
             json={"note": "人工批准"},
         )
@@ -322,7 +322,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         create_resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "reject-node",
@@ -333,7 +333,7 @@ class TestTaskTypeWhitelistPhaseA:
         )
         task_id = create_resp.json()["task_id"]
         reject_resp = client.post(
-            f"/api/admin/tasks/{task_id}/review/reject",
+            f"/api/v1/admin/tasks/{task_id}/review/reject",
             headers=auth_headers,
             json={"note": "拒绝"},
         )
@@ -350,7 +350,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         create_resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "expired-node",
@@ -367,7 +367,7 @@ class TestTaskTypeWhitelistPhaseA:
 
         _expire_reviewing_tasks(db)
 
-        task_resp = client.get(f"/api/admin/tasks/{task_id}", headers=auth_headers)
+        task_resp = client.get(f"/api/v1/admin/tasks/{task_id}", headers=auth_headers)
         assert task_resp.status_code == 200
         assert task_resp.json()["status"] == "review_expired"
 
@@ -380,7 +380,7 @@ class TestTaskTypeWhitelistPhaseA:
         settings = get_settings()
         settings.review_llm_api_key = ""
         create_resp = client.post(
-            "/api/admin/tasks",
+            "/api/v1/admin/tasks",
             headers=auth_headers,
             json={
                 "node_id": "alerts-node",
@@ -391,15 +391,15 @@ class TestTaskTypeWhitelistPhaseA:
         )
         task_id = create_resp.json()["task_id"]
 
-        unread_resp = client.get("/api/admin/alerts/unread-count", headers=auth_headers)
+        unread_resp = client.get("/api/v1/admin/alerts/unread-count", headers=auth_headers)
         assert unread_resp.status_code == 200
         assert unread_resp.json()["unread_count"] > 0
 
-        list_resp = client.get("/api/admin/alerts?status=unread", headers=auth_headers)
+        list_resp = client.get("/api/v1/admin/alerts?status=unread", headers=auth_headers)
         assert list_resp.status_code == 200
         alerts = list_resp.json()
         target_alert = next(item for item in alerts if item["target_id"] == task_id)
 
-        read_resp = client.post(f"/api/admin/alerts/{target_alert['id']}/read", headers=auth_headers)
+        read_resp = client.post(f"/api/v1/admin/alerts/{target_alert['id']}/read", headers=auth_headers)
         assert read_resp.status_code == 200
         assert read_resp.json()["status"] == "read"
