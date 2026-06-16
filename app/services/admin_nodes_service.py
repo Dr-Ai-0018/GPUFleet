@@ -488,7 +488,7 @@ def get_latest_status(node_id: str, db: Database) -> NodeStatusPreview:
             """
             SELECT reported_at, cpu_json, memory_json, disk_json, gpu_json, python_env_json, task_runtime_json, raw_payload_json
             FROM node_status_snapshots
-            WHERE node_id = ?
+            WHERE node_id = ? AND cpu_json IS NOT NULL
             ORDER BY reported_at DESC, id DESC
             LIMIT 1
             """,

@@ -272,6 +272,61 @@ def test_invalid_sample_payload_rejected_with_422(
     assert rows == []
 
 
+def test_latest_status_endpoints_return_base_row_not_sample(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """回归保护: GET /api/admin/nodes/{id}/status/latest + GET /api/admin/dashboard/overview 必须只取基准行.
+
+    Bug 背景: sample 行 ts 比基准行 reported_at 晚, 单纯 ORDER BY reported_at DESC 会拿到 sample 行,
+    sample 行的 JSON 列全为 NULL, 触发 _decode_gpu_snapshot(None) 抛 TypeError.
+    修复: latest 类查询加 WHERE cpu_json IS NOT NULL 排除 sample 行.
+    """
+    node = _create_node(client, auth_headers, "node-latest-base-only")
+    # 构造一次带 samples 的心跳, sample 的 ts 故意比 utc_now 晚 (服务端落地时 sample 行 reported_at > 基准行)
+    samples = [
+        {
+            "ts": "2099-12-31T23:59:5{i}.123Z".replace("{i}", str(i)),
+            "cpu_percent": 50.0 + i,
+            "memory_percent": 50.0,
+            "gpus": [{"idx": 0, "util": 70.0 + i, "temp_c": 60.0, "vram_used_bytes": 1_000_000_000}],
+        }
+        for i in range(5)
+    ]
+    _send_heartbeat(
+        client,
+        node,
+        {
+            "boot_id": "boot-latest-regression",
+            "heartbeat_interval_sec": 5,
+            "sample_interval_sec": 1,
+            "cpu": {"usage_percent": 25.0},
+            "memory": {"usage_percent": 40.0},
+            "gpus": [
+                {"index": 0, "used_vram_mb": 8192, "total_vram_mb": 24576,
+                 "utilization_percent": 25.0, "temperature_c": 55.0, "power_draw_w": 100.0}
+            ],
+            "samples": samples,
+        },
+    )
+
+    # status/latest endpoint 必须返基准行数据 (cpu_usage=25.0), 不是 sample 行 (cpu_pct=50+)
+    latest_resp = client.get(f"/api/admin/nodes/{node['node_id']}/status/latest", headers=auth_headers)
+    assert latest_resp.status_code == 200, latest_resp.text
+    body = latest_resp.json()
+    assert body["cpu"]["usage_percent"] == 25.0, f"got cpu={body['cpu']['usage_percent']} (sample 行污染了 latest)"
+    assert body["gpus"][0]["utilization_percent"] == 25.0  # 不应该是 70+ (sample 行)
+
+    # dashboard/overview 同样过滤
+    overview_resp = client.get("/api/admin/dashboard/overview", headers=auth_headers)
+    assert overview_resp.status_code == 200, overview_resp.text
+    nodes = overview_resp.json().get("nodes", [])
+    target = next((n for n in nodes if n["node_id"] == node["node_id"]), None)
+    assert target is not None
+    assert target["latest_status"] is not None
+    assert target["latest_status"]["cpu"]["usage_percent"] == 25.0
+
+
 def test_sample_ts_collision_with_base_is_skipped(
     client: TestClient,
     auth_headers: dict[str, str],

@@ -159,3 +159,7 @@ def main() -> None:
         run_once(settings)
     else:
         run_loop(settings)
+
+
+if __name__ == "__main__":
+    main()
