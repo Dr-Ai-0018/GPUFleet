@@ -1,23 +1,11 @@
 from __future__ import annotations
 
-import platform
-from pathlib import Path
 from typing import Any
 
 from gpufleet_node_agent.api_client import post_signed_json
-from gpufleet_node_agent.collect import (
-    collect_cpu,
-    collect_disks,
-    collect_gpus,
-    collect_memory,
-    collect_nvidia,
-    collect_primary_network,
-    collect_python_env,
-    collect_task_runtime,
-    get_boot_id,
-)
+from gpufleet_node_agent.collect import collect_task_runtime
 from gpufleet_node_agent.config import AgentSettings
-from gpufleet_node_agent.modal_support import collect_modal_runtime_status
+from gpufleet_node_agent.fingerprint import get_cached as get_cached_fingerprint
 from gpufleet_node_agent.sampler import SampleRingBuffer
 
 
@@ -25,31 +13,34 @@ def build_heartbeat_payload(
     settings: AgentSettings,
     sample_buffer: SampleRingBuffer | None = None,
 ) -> dict[str, Any]:
-    """构造心跳 payload.
+    """构造心跳 payload — 从 fingerprint 缓存读 + drain sample buffer + 实时 task_runtime.
 
-    sample_buffer 传入时, drain() 全部累积 sample 装入 payload.samples; 不传则退化为单点心跳.
+    设计要点 (痛改前耻):
+    - cpu / memory / disks / gpus / nvidia / python_env / extra **直接抄 fingerprint 缓存** (内存读, 微秒级),
+      不再每次心跳调 collect_cpu / collect_gpus 等 (它们启动 4 个 PowerShell + nvidia-smi 共 ~15 秒).
+    - task_runtime 仍每次重新拿 (反映"现在哪个 task 在跑", 是真实时业务状态, 不是画像).
+    - samples 仍由 sample_buffer.drain() 提供.
+    - 这一整个 build 应在 < 50ms 完成.
     """
+    fingerprint = get_cached_fingerprint(settings)
+
     payload: dict[str, Any] = {
-        "boot_id": get_boot_id(settings),
-        "agent_version": "0.2.0",
-        "hostname": platform.node(),
-        "heartbeat_interval_sec": settings.heartbeat_interval_sec,
-        "sample_interval_sec": settings.sample_interval_sec if sample_buffer is not None else None,
-        "cpu": collect_cpu(),
-        "memory": collect_memory(),
-        "disks": collect_disks(settings),
-        "gpus": collect_gpus(),
-        "nvidia": collect_nvidia(),
-        "python_env": collect_python_env(settings),
+        # 来自指纹缓存
+        "boot_id": fingerprint["boot_id"],
+        "agent_version": fingerprint["agent_version"],
+        "hostname": fingerprint["hostname"],
+        "heartbeat_interval_sec": fingerprint["heartbeat_interval_sec"],
+        "sample_interval_sec": fingerprint["sample_interval_sec"] if sample_buffer is not None else None,
+        "cpu": fingerprint["cpu"],
+        "memory": fingerprint["memory"],
+        "disks": fingerprint["disks"],
+        "gpus": fingerprint["gpus"],
+        "nvidia": fingerprint["nvidia"],
+        "python_env": fingerprint["python_env"],
+        "extra": fingerprint["extra"],
+        # 实时业务状态
         "task_runtime": collect_task_runtime(settings),
-        "extra": {
-            "agent_root": str(Path(settings.agent_root).resolve()),
-            "platform": platform.platform(),
-            "deployment_mode": settings.deployment_mode,
-            "effective_deployment_mode": settings.effective_deployment_mode(),
-            "network": collect_primary_network(settings),
-            "modal_runtime": collect_modal_runtime_status(settings),
-        },
+        # 探针 sample
         "samples": sample_buffer.drain() if sample_buffer is not None else [],
     }
     return payload

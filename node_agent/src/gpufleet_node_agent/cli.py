@@ -112,6 +112,12 @@ def run_loop(settings: AgentSettings) -> None:
     if settings.tls_skip_verify:
         logger.warning("TLS verification is DISABLED (GPUFLEET_AGENT_TLS_SKIP_VERIFY=true). Not recommended for production.")
 
+    # 启动时一次性采集完整画像并缓存 (~10-15s, 接受这一次性投资).
+    # 此后心跳 payload 顶层 cpu/memory/gpus 等直接从缓存读 (微秒级), 不再每次启 PowerShell.
+    from gpufleet_node_agent import fingerprint
+    fingerprint.get_cached(settings)
+    fingerprint.start_refresh_worker(settings, _shutdown_event)
+
     # 启动高密采样 ring buffer + 后台线程: 每 sample_interval_sec 跑一次 collect_sample()
     sample_buffer = SampleRingBuffer(capacity=settings.sample_buffer_size)
     start_sampler(sample_buffer, _shutdown_event, settings.sample_interval_sec)
@@ -119,6 +125,10 @@ def run_loop(settings: AgentSettings) -> None:
     while not _shutdown_event.is_set():
         try:
             result = send_heartbeat(settings, sample_buffer=sample_buffer)
+            # 服务端指示刷新指纹 → 触发后台 refresh worker (异步, 不阻塞本次心跳)
+            if result.get("refresh_fingerprint"):
+                logger.info("server_requested_fingerprint_refresh")
+                fingerprint.mark_dirty()
             try:
                 recover_orphaned_task(settings)
             except Exception as exc:

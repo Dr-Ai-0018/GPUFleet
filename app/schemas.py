@@ -203,6 +203,7 @@ class HeartbeatSampleGpu(BaseModel):
     util: float | None = Field(default=None, description="GPU 利用率百分比 (0-100).")
     temp_c: float | None = Field(default=None, description="GPU 温度 (摄氏度).")
     vram_used_bytes: int | None = Field(default=None, description="GPU 已用显存 (字节).")
+    power_w: float | None = Field(default=None, description="GPU 当前功耗 (瓦特).")
 
 
 class HeartbeatSample(BaseModel):
@@ -214,6 +215,14 @@ class HeartbeatSample(BaseModel):
     gpus: list[HeartbeatSampleGpu] = Field(
         default_factory=list,
         description="该时刻所有 GPU 卡的瞬时指标 (覆盖多卡场景).",
+    )
+    upload_bps: float | None = Field(
+        default=None,
+        description="自上次采样以来的上行字节速率 (bytes/sec). 首次采样为 None.",
+    )
+    download_bps: float | None = Field(
+        default=None,
+        description="自上次采样以来的下行字节速率 (bytes/sec). 首次采样为 None.",
     )
 
 
@@ -375,6 +384,10 @@ class HeartbeatResponse(BaseModel):
     node_id: str
     tasks: list[TaskEnvelope] = Field(default_factory=list)
     task_controls: list[TaskControlCommand] = Field(default_factory=list)
+    refresh_fingerprint: bool = Field(
+        default=False,
+        description="若为 true, 节点收到后应异步重采完整指纹 (CPU 型号 / GPU 详情 / 虚拟化 / 网络 / Python 环境等), 下次心跳带新指纹.",
+    )
 
 
 class NodeStatusPreview(BaseModel):
