@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -195,11 +196,38 @@ class HeartbeatTaskRuntime(BaseModel):
     started_at: str | None = Field(default=None, description="UTC timestamp when the active task started.")
 
 
+class HeartbeatSampleGpu(BaseModel):
+    """高密 sample 内单卡的瞬时指标."""
+
+    idx: int = Field(ge=0, description="GPU device index (与节点上 CUDA device 顺序一致).")
+    util: float | None = Field(default=None, description="GPU 利用率百分比 (0-100).")
+    temp_c: float | None = Field(default=None, description="GPU 温度 (摄氏度).")
+    vram_used_bytes: int | None = Field(default=None, description="GPU 已用显存 (字节).")
+
+
+class HeartbeatSample(BaseModel):
+    """节点本地高密采样的单个时间点 (默认 1s/次)."""
+
+    ts: datetime = Field(description="采样时刻 (节点本地系统时钟, UTC ISO8601 含毫秒).")
+    cpu_percent: float | None = Field(default=None, description="该时刻 CPU 使用率 (0-100).")
+    memory_percent: float | None = Field(default=None, description="该时刻内存使用率 (0-100).")
+    gpus: list[HeartbeatSampleGpu] = Field(
+        default_factory=list,
+        description="该时刻所有 GPU 卡的瞬时指标 (覆盖多卡场景).",
+    )
+
+
 class HeartbeatRequest(BaseModel):
     boot_id: str = Field(min_length=3, max_length=200)
     agent_version: str | None = None
     hostname: str | None = None
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
+    sample_interval_sec: int | None = Field(
+        default=None,
+        ge=1,
+        le=60,
+        description="高密采样间隔 (秒). 节点支持高密采样时填写, 否则保留为 None.",
+    )
     cpu: HeartbeatCpu = Field(default_factory=HeartbeatCpu)
     memory: HeartbeatMemory = Field(default_factory=HeartbeatMemory)
     disks: list[HeartbeatDisk] = Field(default_factory=list)
@@ -208,6 +236,11 @@ class HeartbeatRequest(BaseModel):
     python_env: HeartbeatPythonEnv = Field(default_factory=HeartbeatPythonEnv)
     task_runtime: HeartbeatTaskRuntime = Field(default_factory=HeartbeatTaskRuntime)
     extra: dict[str, Any] = Field(default_factory=dict)
+    samples: list[HeartbeatSample] = Field(
+        default_factory=list,
+        description="本次心跳累积的高密采样数组, 单次心跳长度 = heartbeat_interval / sample_interval. "
+        "缺失或为空时退化为单点心跳, 兼容旧 agent.",
+    )
 
 
 class TaskEnvelope(BaseModel):

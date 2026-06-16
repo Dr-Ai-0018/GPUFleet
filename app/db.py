@@ -89,13 +89,14 @@ class Database:
                     gpu_memory_percent REAL,
                     gpu_temperature_c REAL,
                     gpu_power_draw_w REAL,
-                    cpu_json TEXT NOT NULL,
-                    memory_json TEXT NOT NULL,
-                    disk_json TEXT NOT NULL,
-                    gpu_json TEXT NOT NULL,
-                    python_env_json TEXT NOT NULL,
-                    task_runtime_json TEXT NOT NULL,
-                    raw_payload_json TEXT NOT NULL,
+                    cpu_json TEXT,
+                    memory_json TEXT,
+                    disk_json TEXT,
+                    gpu_json TEXT,
+                    python_env_json TEXT,
+                    task_runtime_json TEXT,
+                    raw_payload_json TEXT,
+                    sample_gpus_json TEXT,
                     FOREIGN KEY(node_id) REFERENCES nodes(node_id) ON DELETE CASCADE
                 );
 
@@ -328,6 +329,8 @@ class Database:
             conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN gpu_temperature_c REAL")
         if "gpu_power_draw_w" not in snapshot_columns:
             conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN gpu_power_draw_w REAL")
+        if "sample_gpus_json" not in snapshot_columns:
+            conn.execute("ALTER TABLE node_status_snapshots ADD COLUMN sample_gpus_json TEXT")
         conn.execute(
             """
             UPDATE node_status_snapshots

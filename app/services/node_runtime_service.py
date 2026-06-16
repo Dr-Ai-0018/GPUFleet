@@ -361,6 +361,97 @@ def first_gpu_metrics(payload: HeartbeatRequest) -> tuple[float | None, float | 
     )
 
 
+def _MiB_to_bytes(value: int | None) -> int | None:
+    return value * 1024 * 1024 if value is not None else None
+
+
+def _compact_base_gpus(payload: HeartbeatRequest) -> list[dict] | None:
+    """把心跳顶层 gpus 压缩为高密 sample 多卡数组格式 (供基准行 sample_gpus_json 列用)."""
+    if not payload.gpus:
+        return None
+    return [
+        {
+            "idx": g.index,
+            "util": g.utilization_percent,
+            "temp_c": g.temperature_c,
+            "vram_used_bytes": _MiB_to_bytes(g.used_vram_mb),
+        }
+        for g in payload.gpus
+    ]
+
+
+def _build_snapshot_rows(
+    *,
+    node_id: str,
+    now_iso: str,
+    payload: HeartbeatRequest,
+    gpu_utilization_percent: float | None,
+    gpu_memory_percent: float | None,
+    gpu_temperature_c: float | None,
+    gpu_power_draw_w: float | None,
+) -> list[tuple]:
+    """构造基准行 + 高密 sample 行的批插参数列表.
+
+    基准行: 列化指标 + 完整 JSON 元数据 + sample_gpus_json (该时刻多卡数组).
+    sample 行: 仅列化指标 (第一块卡的 util/temp 作为节点级代表) + sample_gpus_json (该时刻多卡数组).
+    JSON 元数据列在 sample 行全为 NULL.
+    """
+    base_row = (
+        node_id,
+        now_iso,
+        payload.cpu.usage_percent,
+        payload.memory.usage_percent,
+        gpu_utilization_percent,
+        gpu_memory_percent,
+        gpu_temperature_c,
+        gpu_power_draw_w,
+        dumps_json(payload.cpu.model_dump()),
+        dumps_json(payload.memory.model_dump()),
+        dumps_json([item.model_dump() for item in payload.disks]),
+        dumps_json(
+            {
+                "gpus": [item.model_dump() for item in payload.gpus],
+                "nvidia": payload.nvidia.model_dump(),
+            }
+        ),
+        dumps_json(payload.python_env.model_dump()),
+        dumps_json(payload.task_runtime.model_dump()),
+        dumps_json(payload.model_dump(mode="json")),  # mode="json" 让 datetime 序列化为 ISO 字符串
+        dumps_json(_compact_base_gpus(payload)) if payload.gpus else None,
+    )
+
+    rows: list[tuple] = [base_row]
+    seen_ts: set[str] = {now_iso}
+    for sample in payload.samples:
+        sample_ts = sample.ts.isoformat()
+        if sample_ts in seen_ts:
+            # 与基准行或前一个 sample 重合 → 跳过, 避免主键/逻辑冲突
+            continue
+        seen_ts.add(sample_ts)
+
+        first_sample_gpu = sample.gpus[0] if sample.gpus else None
+        sample_row = (
+            node_id,
+            sample_ts,
+            sample.cpu_percent,
+            sample.memory_percent,
+            first_sample_gpu.util if first_sample_gpu else None,
+            None,  # gpu_memory_percent: 高密 sample 不携带百分比 (仅基准行携带)
+            first_sample_gpu.temp_c if first_sample_gpu else None,
+            None,  # gpu_power_draw_w: 同上
+            None,  # cpu_json
+            None,  # memory_json
+            None,  # disk_json
+            None,  # gpu_json
+            None,  # python_env_json
+            None,  # task_runtime_json
+            None,  # raw_payload_json
+            dumps_json([g.model_dump() for g in sample.gpus]) if sample.gpus else None,
+        )
+        rows.append(sample_row)
+    return rows
+
+
 async def heartbeat(request: Request, db: Database, settings: Settings) -> HeartbeatResponse:
     body = await request.body()
     node_id, node = authenticate_node(request, db, settings, body)
@@ -400,37 +491,26 @@ async def heartbeat(request: Request, db: Database, settings: Settings) -> Heart
                 node_id,
             ),
         )
-        conn.execute(
+        snapshot_rows = _build_snapshot_rows(
+            node_id=node_id,
+            now_iso=now_iso,
+            payload=payload,
+            gpu_utilization_percent=gpu_utilization_percent,
+            gpu_memory_percent=gpu_memory_percent,
+            gpu_temperature_c=gpu_temperature_c,
+            gpu_power_draw_w=gpu_power_draw_w,
+        )
+        conn.executemany(
             """
             INSERT INTO node_status_snapshots (
                 node_id, reported_at, cpu_usage_percent, memory_usage_percent,
                 gpu_utilization_percent, gpu_memory_percent, gpu_temperature_c, gpu_power_draw_w,
                 cpu_json, memory_json, disk_json, gpu_json,
-                python_env_json, task_runtime_json, raw_payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                python_env_json, task_runtime_json, raw_payload_json,
+                sample_gpus_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (
-                node_id,
-                now_iso,
-                payload.cpu.usage_percent,
-                payload.memory.usage_percent,
-                gpu_utilization_percent,
-                gpu_memory_percent,
-                gpu_temperature_c,
-                gpu_power_draw_w,
-                dumps_json(payload.cpu.model_dump()),
-                dumps_json(payload.memory.model_dump()),
-                dumps_json([item.model_dump() for item in payload.disks]),
-                dumps_json(
-                    {
-                        "gpus": [item.model_dump() for item in payload.gpus],
-                        "nvidia": payload.nvidia.model_dump(),
-                    }
-                ),
-                dumps_json(payload.python_env.model_dump()),
-                dumps_json(payload.task_runtime.model_dump()),
-                dumps_json(payload.model_dump()),
-            ),
+            snapshot_rows,
         )
         active_task_row = db.sync_reported_active_task(
             conn,
