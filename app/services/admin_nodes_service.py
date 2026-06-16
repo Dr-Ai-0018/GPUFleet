@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 
 from app.db import Database, dumps_json, utc_now_iso
+from app.errors import ApiError
 from app.schemas import (
     NodeOnboardingPackage,
     NodeCreateRequest,
@@ -165,9 +166,11 @@ def create_node(payload: NodeCreateRequest, request: Request, admin: object, db:
             (payload.node_id,),
         ).fetchone()
         if existing:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_NODE_DUPLICATE_ID",
+                message="node_id already exists",
                 status_code=status.HTTP_409_CONFLICT,
-                detail="node_id already exists",
+                details={"node_id": payload.node_id},
             )
 
         if "node_secret_hash" in node_columns:
@@ -257,7 +260,12 @@ def get_node(node_id: str, db: Database) -> NodeResponse:
         row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
 
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+        raise ApiError(
+            code="ERR_NODE_NOT_FOUND",
+            message="Node not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+            details={"node_id": node_id},
+        )
 
     return row_to_node_response(row)
 
@@ -265,12 +273,22 @@ def get_node(node_id: str, db: Database) -> NodeResponse:
 def update_node(node_id: str, payload: NodeUpdateRequest, request: Request, admin: object, db: Database) -> NodeResponse:
     changes = payload.model_dump(exclude_none=True)
     if not changes:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No changes provided")
+        raise ApiError(
+            code="ERR_NODE_NO_CHANGES",
+            message="No changes provided",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            details={"node_id": node_id},
+        )
 
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+            raise ApiError(
+                code="ERR_NODE_NOT_FOUND",
+                message="Node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": node_id},
+            )
 
         updated = dict(row)
         if "allowed_workdirs" in changes:
@@ -333,7 +351,12 @@ def set_node_enabled(node_id: str, enabled: bool, request: Request, admin: objec
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+            raise ApiError(
+                code="ERR_NODE_NOT_FOUND",
+                message="Node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": node_id},
+            )
         conn.execute(
             "UPDATE nodes SET is_enabled = ?, updated_at = ? WHERE node_id = ?",
             (1 if enabled else 0, now_iso, node_id),
@@ -367,7 +390,12 @@ def reset_node_secret(node_id: str, request: Request, admin: object, db: Databas
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+            raise ApiError(
+                code="ERR_NODE_NOT_FOUND",
+                message="Node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": node_id},
+            )
 
         node_columns = db.get_table_columns(conn, "nodes")
         if "node_secret_hash" in node_columns:
@@ -429,7 +457,12 @@ def delete_node(node_id: str, request: Request, admin: object, db: Database) -> 
     with db.connect() as conn:
         row = conn.execute("SELECT 1 FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+            raise ApiError(
+                code="ERR_NODE_NOT_FOUND",
+                message="Node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": node_id},
+            )
         conn.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
         conn.execute(
             """
@@ -463,7 +496,12 @@ def get_latest_status(node_id: str, db: Database) -> NodeStatusPreview:
         ).fetchone()
 
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No status snapshot found")
+        raise ApiError(
+            code="ERR_NODE_STATUS_NOT_FOUND",
+            message="No status snapshot found",
+            status_code=status.HTTP_404_NOT_FOUND,
+            details={"node_id": node_id},
+        )
 
     gpus, nvidia = decode_gpu_snapshot(row["gpu_json"])
     raw_payload = json.loads(row["raw_payload_json"]) if row["raw_payload_json"] else {}
@@ -485,7 +523,12 @@ def get_status_history(node_id: str, db: Database, *, limit: int) -> NodeStatusH
     with db.connect() as conn:
         node_exists = conn.execute("SELECT 1 FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if node_exists is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+            raise ApiError(
+                code="ERR_NODE_NOT_FOUND",
+                message="Node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": node_id},
+            )
 
         rows = conn.execute(
             """

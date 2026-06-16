@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.db import Database, utc_now_iso
 from app.deps import get_current_admin, get_db
+from app.errors import ApiError
 from app.schemas import AlertMessageView
 
 router = APIRouter(prefix="/api/admin/alerts", tags=["admin-alerts"])
@@ -76,7 +77,12 @@ def mark_read(
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM alert_messages WHERE id = ?", (alert_id,)).fetchone()
         if row is None:
-            raise HTTPException(status_code=404, detail="Alert not found")
+            raise ApiError(
+                code="ERR_ALERT_NOT_FOUND",
+                message="Alert not found",
+                status_code=404,
+                details={"alert_id": alert_id},
+            )
         conn.execute(
             """
             UPDATE alert_messages

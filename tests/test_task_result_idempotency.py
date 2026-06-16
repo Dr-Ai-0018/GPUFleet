@@ -159,7 +159,8 @@ class TestTaskResultIdempotency:
         if non_success:
             assert len(non_success) == 1
             assert non_success[0][0] == 409
-            assert non_success[0][1]["detail"] == "Timestamp must be strictly increasing"
+            assert non_success[0][1]["code"] == "ERR_AUTH_TIMESTAMP_REPLAY"
+            assert non_success[0][1]["message"] == "Timestamp must be strictly increasing"
         else:
             assert any(body.get("duplicate") is True for _, body in results)
 

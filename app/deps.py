@@ -4,11 +4,12 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import Settings, get_settings
 from app.db import Database
+from app.errors import ApiError
 from app.security import decode_token
 
 bearer_scheme = HTTPBearer(auto_error=True)
@@ -39,9 +40,10 @@ def get_current_admin(
     try:
         payload = decode_token(settings, credentials.credentials, "access")
     except Exception as exc:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_INVALID_TOKEN",
+            message="Invalid access token",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid access token",
         ) from exc
 
     username = payload.get("sub")
@@ -53,15 +55,17 @@ def get_current_admin(
         ).fetchone()
 
     if admin is None:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_ADMIN_NOT_FOUND",
+            message="Admin account not found",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Admin account not found",
         )
 
     if _token_invalidated(token_iat, admin["tokens_invalidated_at"]):
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_TOKEN_REVOKED",
+            message="Access token has been invalidated",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token has been invalidated",
         )
 
     return admin

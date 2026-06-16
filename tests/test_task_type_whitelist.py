@@ -96,7 +96,8 @@ class TestTaskTypeWhitelistPhaseA:
             },
         )
         assert resp.status_code == 403
-        assert "allow_shell" in resp.json()["detail"]
+        assert resp.json()["code"] == "ERR_TASK_TYPE_FORBIDDEN_ON_NODE"
+        assert "allow_shell" in resp.json()["message"]
 
     def test_l2_shell_with_permission_without_api_key_enters_stage3_reviewing(
         self,

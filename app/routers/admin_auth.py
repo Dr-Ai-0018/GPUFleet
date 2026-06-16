@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -10,6 +10,7 @@ from app.config import Settings
 from app.db import Database, utc_now_iso
 from app.deps import _token_invalidated
 from app.deps import get_current_admin, get_db, get_settings_dep
+from app.errors import ApiError
 from app.schemas import AdminProfile, LoginRequest, RefreshRequest, TokenPair
 from app.security import (
     create_access_token,
@@ -37,9 +38,10 @@ def login(
         ).fetchone()
 
         if admin is None or not verify_password(payload.password, admin["password_hash"]):
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_AUTH_INVALID_CREDENTIALS",
+                message="Invalid username or password",
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid username or password",
             )
 
         now_iso = utc_now_iso()
@@ -63,9 +65,10 @@ def refresh(
     try:
         token_payload = decode_token(settings, payload.refresh_token, "refresh")
     except Exception as exc:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_INVALID_REFRESH_TOKEN",
+            message="Invalid refresh token",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
         ) from exc
 
     username = token_payload.get("sub")
@@ -77,15 +80,17 @@ def refresh(
         ).fetchone()
 
     if admin is None:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_ADMIN_NOT_FOUND",
+            message="Admin account not found",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Admin account not found",
         )
 
     if _token_invalidated(token_iat, admin["tokens_invalidated_at"]):
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_REFRESH_REVOKED",
+            message="Refresh token has been invalidated",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has been invalidated",
         )
 
     return TokenPair(

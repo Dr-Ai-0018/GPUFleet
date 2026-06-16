@@ -7,12 +7,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.responses import RedirectResponse
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
 from app.background import lost_task_scanner
 from app.config import get_settings
 from app.db import Database, utc_now_iso
+from app.errors import install_error_handlers
 from app.routers import admin_alerts, admin_auth, admin_dashboard, admin_nodes, admin_observability, admin_tasks, node_api
 from app.security import hash_password
 
@@ -56,7 +55,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="GPUFleet Control Plane", version="0.1.0", lifespan=lifespan)
 app.state.limiter = admin_auth.limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+install_error_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allowed_origins,

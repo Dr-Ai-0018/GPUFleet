@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from httpx import Response
 
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "node-rate") -> None:
@@ -20,6 +21,16 @@ def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str 
         },
     )
     assert resp.status_code == 201, resp.text
+
+
+def _assert_rate_limited(resp: Response) -> None:
+    assert resp.status_code == 429
+
+    body = resp.json()
+    assert body["code"] == "ERR_RATE_LIMITED"
+    assert body["message"] == "Rate limit exceeded"
+    assert "detail" not in body
+    assert isinstance(body["details"]["retry_after_sec"], int)
 
 
 class TestCorsPolicy:
@@ -55,7 +66,7 @@ class TestRateLimits:
             assert resp.status_code == 401, f"Attempt {i + 1} should be 401"
 
         resp = client.post("/api/node/heartbeat", headers=headers, json={"boot_id": "boot-1"})
-        assert resp.status_code == 429
+        _assert_rate_limited(resp)
 
     def test_create_node_rate_limit(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         for i in range(30):
@@ -87,7 +98,7 @@ class TestRateLimits:
                 "tags": [],
             },
         )
-        assert resp.status_code == 429
+        _assert_rate_limited(resp)
 
     def test_create_task_rate_limit(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         _create_node(client, auth_headers)
@@ -117,4 +128,4 @@ class TestRateLimits:
                 "workdir": "/workspace",
             },
         )
-        assert resp.status_code == 429
+        _assert_rate_limited(resp)

@@ -4,10 +4,11 @@ from datetime import UTC, datetime, timedelta
 import json
 import secrets
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 
 from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
+from app.errors import ApiError
 from app.review import LLMReviewer, ReviewContext
 from app.schemas import (
     AdminTaskArtifactView,
@@ -234,6 +235,24 @@ def mark_task_alerts_actioned(conn: object, task_id: str, now_iso: str) -> None:
     )
 
 
+def task_not_found(task_id: str) -> ApiError:
+    return ApiError(
+        code="ERR_TASK_NOT_FOUND",
+        message="Task not found",
+        status_code=status.HTTP_404_NOT_FOUND,
+        details={"task_id": task_id},
+    )
+
+
+def invalid_task_state(task_id: str, message: str) -> ApiError:
+    return ApiError(
+        code="ERR_TASK_INVALID_STATE_TRANSITION",
+        message=message,
+        status_code=status.HTTP_400_BAD_REQUEST,
+        details={"task_id": task_id},
+    )
+
+
 async def create_task(
     payload: AdminTaskCreateRequest,
     request: Request,
@@ -247,27 +266,43 @@ async def create_task(
     with db.connect() as conn:
         node = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (payload.node_id,)).fetchone()
         if node is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target node not found")
+            raise ApiError(
+                code="ERR_TASK_TARGET_NODE_NOT_FOUND",
+                message="Target node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": payload.node_id},
+            )
         if not bool(node["is_enabled"]):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target node is disabled")
+            raise ApiError(
+                code="ERR_NODE_DISABLED",
+                message="Target node is disabled",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={"node_id": payload.node_id},
+            )
 
         node_type = node["node_type"]
         if payload.type in MODAL_ONLY_TASK_TYPES and node_type != "modal_runner":
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_TASK_INVALID_TARGET_FOR_TYPE",
+                message="modal_command can only target nodes of type modal_runner",
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="modal_command can only target nodes of type modal_runner",
+                details={"node_id": payload.node_id, "task_type": payload.type, "node_type": node_type},
             )
         if node_type == "modal_runner" and payload.type not in MODAL_RUNNER_ALLOWED_TASK_TYPES:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_TASK_INVALID_TARGET_FOR_TYPE",
+                message="modal_runner nodes only accept modal_command or health_check in phase 1",
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="modal_runner nodes only accept modal_command or health_check in phase 1",
+                details={"node_id": payload.node_id, "task_type": payload.type, "node_type": node_type},
             )
 
         allowed_workdirs = json.loads(node["allowed_workdirs_json"])
         if not ensure_workdir_allowed(payload.workdir, allowed_workdirs):
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_TASK_WORKDIR_NOT_ALLOWED",
+                message="Task workdir is outside node allowed_workdirs",
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Task workdir is outside node allowed_workdirs",
+                details={"node_id": payload.node_id, "workdir": payload.workdir},
             )
 
         is_l2 = payload.type in TASK_TYPE_LEVEL_L2
@@ -280,14 +315,18 @@ async def create_task(
 
         if is_l2:
             if payload.type in SHELL_TASK_TYPES and not node["allow_shell"]:
-                raise HTTPException(
+                raise ApiError(
+                    code="ERR_TASK_TYPE_FORBIDDEN_ON_NODE",
+                    message=f"Node {payload.node_id} does not allow task type '{payload.type}'. Enable allow_shell first.",
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Node {payload.node_id} does not allow task type '{payload.type}'. Enable allow_shell first.",
+                    details={"node_id": payload.node_id, "task_type": payload.type, "required_flag": "allow_shell"},
                 )
             if payload.type in MODAL_TASK_TYPES and not node["allow_modal"]:
-                raise HTTPException(
+                raise ApiError(
+                    code="ERR_TASK_TYPE_FORBIDDEN_ON_NODE",
+                    message=f"Node {payload.node_id} does not allow modal_command. Enable allow_modal first.",
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Node {payload.node_id} does not allow modal_command. Enable allow_modal first.",
+                    details={"node_id": payload.node_id, "task_type": payload.type, "required_flag": "allow_modal"},
                 )
 
             initial_status = "reviewing"
@@ -333,7 +372,12 @@ async def create_task(
 
         existing = conn.execute("SELECT 1 FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         if existing:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="task_id already exists")
+            raise ApiError(
+                code="ERR_TASK_DUPLICATE_ID",
+                message="task_id already exists",
+                status_code=status.HTTP_409_CONFLICT,
+                details={"task_id": task_id},
+            )
 
         conn.execute(
             """
@@ -424,7 +468,7 @@ def get_task(task_id: str, db: Database) -> AdminTaskDetail:
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+            raise task_not_found(task_id)
         return task_row_to_detail(conn, row)
 
 
@@ -436,8 +480,8 @@ def cancel_task(task_id: str, request: Request, admin: object, db: Database) -> 
             saved = transition_task(conn, task_id, "cancel", now_iso=now_iso, finished_at=now_iso)
         except TaskStateError as exc:
             if str(exc) == "Task not found":
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise task_not_found(task_id) from exc
+            raise invalid_task_state(task_id, str(exc)) from exc
         current_status = row["status"]
         conn.execute(
             """
@@ -466,8 +510,8 @@ def escalate_review(task_id: str, payload: ReviewEscalateRequest, request: Reque
             saved = transition_task(conn, task_id, "review_escalate", now_iso=now_iso)
         except TaskStateError as exc:
             if str(exc) == "Task not found":
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise task_not_found(task_id) from exc
+            raise invalid_task_state(task_id, str(exc)) from exc
 
         task_payload = AdminTaskCreateRequest(
             node_id=row["node_id"],
@@ -517,9 +561,14 @@ def approve_review(task_id: str, payload: ReviewApproveRequest, request: Request
         try:
             row = get_task_row(conn, task_id)
         except TaskStateError:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+            raise task_not_found(task_id)
         if row["status"] != "reviewing" or row["review_stage"] != 3:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task is not awaiting human approval")
+            raise ApiError(
+                code="ERR_REVIEW_NOT_PENDING",
+                message="Task is not awaiting human approval",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={"task_id": task_id, "status": row["status"], "review_stage": row["review_stage"]},
+            )
 
         review_started_at = row["review_started_at"]
         if review_started_at:
@@ -527,9 +576,11 @@ def approve_review(task_id: str, payload: ReviewApproveRequest, request: Request
             if started.tzinfo is None:
                 started = started.replace(tzinfo=UTC)
             if (now - started).total_seconds() < HUMAN_REVIEW_COOLDOWN_SEC:
-                raise HTTPException(
+                raise ApiError(
+                    code="ERR_REVIEW_COOLDOWN_NOT_REACHED",
+                    message=f"Human review cooldown not reached ({HUMAN_REVIEW_COOLDOWN_SEC}s)",
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Human review cooldown not reached ({HUMAN_REVIEW_COOLDOWN_SEC}s)",
+                    details={"task_id": task_id, "retry_after_sec": HUMAN_REVIEW_COOLDOWN_SEC},
                 )
 
         try:
@@ -542,7 +593,7 @@ def approve_review(task_id: str, payload: ReviewApproveRequest, request: Request
                 danger_level="human_approved",
             )
         except TaskStateError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+            raise invalid_task_state(task_id, str(exc)) from exc
         insert_review_audit(
             conn,
             task_id=task_id,
@@ -589,8 +640,8 @@ def reject_review(task_id: str, payload: ReviewRejectRequest, request: Request, 
             )
         except TaskStateError as exc:
             if str(exc) == "Task not found":
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise task_not_found(task_id) from exc
+            raise invalid_task_state(task_id, str(exc)) from exc
         insert_review_audit(
             conn,
             task_id=task_id,
@@ -627,7 +678,7 @@ def get_task_logs(task_id: str, db: Database) -> list[AdminTaskLogView]:
     with db.connect() as conn:
         exists = conn.execute("SELECT 1 FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         if exists is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+            raise task_not_found(task_id)
         return load_log_views(conn, task_id)
 
 
@@ -635,5 +686,5 @@ def get_task_artifacts(task_id: str, db: Database) -> list[AdminTaskArtifactView
     with db.connect() as conn:
         exists = conn.execute("SELECT 1 FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         if exists is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+            raise task_not_found(task_id)
         return load_artifacts(conn, task_id)

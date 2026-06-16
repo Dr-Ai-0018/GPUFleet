@@ -61,7 +61,8 @@ class TestNonceReplayProtection:
 
         second = client.post("/api/node/heartbeat", content=body, headers=second_headers)
         assert second.status_code == 409
-        assert second.json()["detail"] == "Duplicate nonce"
+        assert second.json()["code"] == "ERR_AUTH_NONCE_DUPLICATE"
+        assert second.json()["message"] == "Duplicate nonce"
 
     def test_timestamp_must_be_strictly_increasing(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         node = _create_node(client, auth_headers, node_id="monotonic-node")
@@ -82,7 +83,8 @@ class TestNonceReplayProtection:
         second = client.post("/api/node/heartbeat", content=body, headers=headers_2)
 
         assert second.status_code == 409
-        assert second.json()["detail"] == "Timestamp must be strictly increasing"
+        assert second.json()["code"] == "ERR_AUTH_TIMESTAMP_REPLAY"
+        assert second.json()["message"] == "Timestamp must be strictly increasing"
 
     def test_concurrent_duplicate_nonce_only_one_request_succeeds(
         self,
@@ -120,7 +122,8 @@ class TestNonceReplayProtection:
         assert sum(status_code == 200 for status_code, _ in results) == 1
         duplicate_failures = [body for status_code, body in results if status_code == 409]
         assert len(duplicate_failures) == 9
-        assert all(item["detail"] == "Duplicate nonce" for item in duplicate_failures)
+        assert all(item["code"] == "ERR_AUTH_NONCE_DUPLICATE" for item in duplicate_failures)
+        assert all(item["message"] == "Duplicate nonce" for item in duplicate_failures)
 
     def test_concurrent_same_timestamp_only_one_request_succeeds(
         self,
@@ -163,7 +166,8 @@ class TestNonceReplayProtection:
         assert sum(status_code == 200 for status_code, _ in results) == 1
         timestamp_failures = [body for status_code, body in results if status_code == 409]
         assert len(timestamp_failures) == 9
-        assert all(item["detail"] == "Timestamp must be strictly increasing" for item in timestamp_failures)
+        assert all(item["code"] == "ERR_AUTH_TIMESTAMP_REPLAY" for item in timestamp_failures)
+        assert all(item["message"] == "Timestamp must be strictly increasing" for item in timestamp_failures)
 
     def test_background_nonce_prune_removes_expired_rows(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         node = _create_node(client, auth_headers, node_id="prune-node")

@@ -7,10 +7,11 @@ from base64 import b64decode
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 
 from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
+from app.errors import ApiError
 from app.schemas import (
     HeartbeatRequest,
     HeartbeatResponse,
@@ -29,9 +30,11 @@ def parse_timestamp(raw_timestamp: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(raw_timestamp.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_INVALID_TIMESTAMP",
+            message="Invalid timestamp format",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid timestamp format",
+            details={"timestamp": raw_timestamp},
         ) from exc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
@@ -50,18 +53,21 @@ def authenticate_node(
     signature = request.headers.get("X-Signature")
 
     if not all([node_id, timestamp, nonce, signature]):
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_MISSING_HEADERS",
+            message="Missing node authentication headers",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing node authentication headers",
         )
 
     request_time = parse_timestamp(timestamp)
     now = datetime.now(UTC)
     skew = abs((now - request_time).total_seconds())
     if skew > settings.node_allowed_clock_skew_sec:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_AUTH_TIMESTAMP_SKEW",
+            message="Timestamp skew too large",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Timestamp skew too large",
+            details={"skew_sec": skew, "allowed_skew_sec": settings.node_allowed_clock_skew_sec},
         )
 
     body_hash = hash_request_body(body)
@@ -73,9 +79,11 @@ def authenticate_node(
             (node_id,),
         ).fetchone()
         if node is None:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_AUTH_NODE_NOT_FOUND_OR_DISABLED",
+                message="Node not found or disabled",
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Node not found or disabled",
+                details={"node_id": node_id},
             )
 
         stored_signing_key = node["node_signing_key"] or ""
@@ -84,15 +92,19 @@ def authenticate_node(
             try:
                 stored_signing_key = decrypt_node_signing_key(settings, encrypted_signing_key)
             except ValueError as exc:
-                raise HTTPException(
+                raise ApiError(
+                    code="ERR_AUTH_SIGNING_KEY_UNAVAILABLE",
+                    message="Node signing key unavailable",
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Node signing key unavailable",
+                    details={"node_id": node_id},
                 ) from exc
 
         if not stored_signing_key:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_AUTH_SIGNING_KEY_UNAVAILABLE",
+                message="Node signing key unavailable",
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Node signing key unavailable",
+                details={"node_id": node_id},
             )
 
         if not verify_node_request_signature(
@@ -103,9 +115,11 @@ def authenticate_node(
             body_hash,
             signature,
         ):
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_AUTH_INVALID_SIGNATURE",
+                message="Invalid node signature",
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid node signature",
+                details={"node_id": node_id},
             )
 
         expires_at = (now + timedelta(seconds=settings.nonce_ttl_sec)).replace(microsecond=0).isoformat()
@@ -115,9 +129,11 @@ def authenticate_node(
                 (node_id, nonce, timestamp, expires_at),
             )
         except sqlite3.IntegrityError as exc:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_AUTH_NONCE_DUPLICATE",
+                message="Duplicate nonce",
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Duplicate nonce",
+                details={"node_id": node_id, "nonce": nonce},
             ) from exc
 
         updated = conn.execute(
@@ -131,9 +147,11 @@ def authenticate_node(
             (timestamp, now_iso, node_id, timestamp),
         )
         if updated.rowcount != 1:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_AUTH_TIMESTAMP_REPLAY",
+                message="Timestamp must be strictly increasing",
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Timestamp must be strictly increasing",
+                details={"node_id": node_id, "timestamp": timestamp},
             )
 
     return node_id, node
@@ -145,7 +163,12 @@ def load_task_for_node(conn: object, node_id: str, task_id: str) -> object:
         (task_id, node_id),
     ).fetchone()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found for node")
+        raise ApiError(
+            code="ERR_TASK_NOT_FOUND",
+            message="Task not found for node",
+            status_code=status.HTTP_404_NOT_FOUND,
+            details={"node_id": node_id, "task_id": task_id},
+        )
     return row
 
 
@@ -314,9 +337,11 @@ def sanitize_artifact_name(name: str) -> str:
     candidate = Path(name)
     sanitized = candidate.name
     if not sanitized or sanitized in {".", ".."} or sanitized != name:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_ARTIFACT_INVALID_NAME",
+            message="Invalid artifact_name",
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid artifact_name",
+            details={"artifact_name": name},
         )
     return sanitized
 
@@ -343,9 +368,10 @@ async def heartbeat(request: Request, db: Database, settings: Settings) -> Heart
     try:
         payload = HeartbeatRequest.model_validate_json(body)
     except Exception as exc:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_VALIDATION_INVALID_PAYLOAD",
+            message="Invalid heartbeat payload",
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid heartbeat payload",
         ) from exc
 
     now_iso = utc_now_iso()
@@ -465,7 +491,11 @@ async def task_events(request: Request, db: Database, settings: Settings) -> dic
     try:
         payload = NodeTaskEventRequest.model_validate_json(body)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task event payload") from exc
+        raise ApiError(
+            code="ERR_VALIDATION_INVALID_PAYLOAD",
+            message="Invalid task event payload",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ) from exc
 
     now_iso = utc_now_iso()
     with db.connect() as conn:
@@ -480,9 +510,11 @@ async def task_events(request: Request, db: Database, settings: Settings) -> dic
                 finished_at=now_iso,
             )
         except TaskStateError as exc:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_TASK_INVALID_STATE_TRANSITION",
+                message=str(exc),
                 status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
+                details={"node_id": node_id, "task_id": payload.task_id, "event": payload.event},
             ) from exc
         upsert_task_attempt(
             conn,
@@ -504,7 +536,11 @@ async def task_log_chunk(request: Request, db: Database, settings: Settings) -> 
     try:
         payload = NodeTaskLogChunkRequest.model_validate_json(body)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task log chunk payload") from exc
+        raise ApiError(
+            code="ERR_VALIDATION_INVALID_PAYLOAD",
+            message="Invalid task log chunk payload",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ) from exc
 
     now_iso = utc_now_iso()
     quota_exceeded = False
@@ -516,9 +552,11 @@ async def task_log_chunk(request: Request, db: Database, settings: Settings) -> 
         ).fetchone()
         append_text = payload.text
         if existing is None and payload.offset_start != 0:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_LOG_OFFSET_MUST_START_ZERO",
+                message=f"Initial log chunk must start at offset 0 for {payload.stream}",
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Initial log chunk must start at offset 0 for {payload.stream}",
+                details={"task_id": payload.task_id, "stream": payload.stream, "offset_start": payload.offset_start},
             )
         if existing is not None:
             last_offset = existing["last_offset"]
@@ -529,14 +567,23 @@ async def task_log_chunk(request: Request, db: Database, settings: Settings) -> 
                 else:
                     append_text = payload.text[overlap:]
             elif payload.offset_start > last_offset:
-                raise HTTPException(
+                raise ApiError(
+                    code="ERR_LOG_OFFSET_GAP",
+                    message=f"Log offset gap detected for {payload.stream}",
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Log offset gap detected for {payload.stream}",
+                    details={
+                        "task_id": payload.task_id,
+                        "stream": payload.stream,
+                        "expected_offset": last_offset,
+                        "offset_start": payload.offset_start,
+                    },
                 )
         if existing is not None and bool(existing["is_truncated"]):
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_LOG_STREAM_TRUNCATED",
+                message=f"Log stream {payload.stream} is already truncated",
                 status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
-                detail=f"Log stream {payload.stream} is already truncated",
+                details={"task_id": payload.task_id, "stream": payload.stream},
             )
         append_bytes = len(append_text.encode("utf-8"))
         if append_bytes and storage_usage_bytes(settings.storage_path) + append_bytes > settings.storage_quota_bytes:
@@ -591,9 +638,11 @@ async def task_log_chunk(request: Request, db: Database, settings: Settings) -> 
                 )
 
     if quota_exceeded:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_STORAGE_QUOTA_EXCEEDED",
+            message="Storage quota exceeded; log chunk rejected",
             status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
-            detail="Storage quota exceeded; log chunk rejected",
+            details={"task_id": payload.task_id, "stream": payload.stream},
         )
     return {
         "ok": True,
@@ -610,7 +659,11 @@ async def task_result(request: Request, db: Database, settings: Settings) -> dic
     try:
         payload = NodeTaskResultRequest.model_validate_json(body)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task result payload") from exc
+        raise ApiError(
+            code="ERR_VALIDATION_INVALID_PAYLOAD",
+            message="Invalid task result payload",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ) from exc
 
     now_iso = utc_now_iso()
     with db.connect() as conn:
@@ -627,9 +680,11 @@ async def task_result(request: Request, db: Database, settings: Settings) -> dic
                 now_iso=now_iso,
             )
         except TaskStateError as exc:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_TASK_INVALID_STATE_TRANSITION",
+                message=str(exc),
                 status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
+                details={"node_id": node_id, "task_id": payload.task_id, "final_status": payload.final_status},
             ) from exc
         if duplicate:
             return {"ok": True, "task_id": payload.task_id, "status": updated_row["status"], "duplicate": True}
@@ -655,15 +710,19 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
         try:
             request_size = int(content_length)
         except ValueError as exc:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_ARTIFACT_INVALID_CONTENT_LENGTH",
+                message="Invalid Content-Length header",
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid Content-Length header",
+                details={"content_length": content_length},
             ) from exc
         max_encoded_bytes = (settings.max_artifact_bytes * 4 // 3) + 4096
         if request_size > max_encoded_bytes:
-            raise HTTPException(
+            raise ApiError(
+                code="ERR_PAYLOAD_TOO_LARGE",
+                message=f"Artifact request exceeds size limit ({settings.max_artifact_bytes} bytes decoded)",
                 status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-                detail=f"Artifact request exceeds size limit ({settings.max_artifact_bytes} bytes decoded)",
+                details={"limit_bytes": settings.max_artifact_bytes, "request_size_bytes": request_size},
             )
 
     body = await request.body()
@@ -671,27 +730,40 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
     try:
         payload = NodeArtifactUploadRequest.model_validate_json(body)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid artifact upload payload") from exc
+        raise ApiError(
+            code="ERR_VALIDATION_INVALID_PAYLOAD",
+            message="Invalid artifact upload payload",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ) from exc
 
     with db.connect() as conn:
         load_task_for_node(conn, node_id, payload.task_id)
 
     estimated_decoded_size = len(payload.content_base64) * 3 // 4
     if estimated_decoded_size > settings.max_artifact_bytes:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_PAYLOAD_TOO_LARGE",
+            message=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
+            details={"limit_bytes": settings.max_artifact_bytes, "estimated_size_bytes": estimated_decoded_size},
         )
 
     try:
         content = b64decode(payload.content_base64.encode("utf-8"), validate=True)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 artifact content") from exc
+        raise ApiError(
+            code="ERR_ARTIFACT_INVALID_BASE64",
+            message="Invalid base64 artifact content",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            details={"task_id": payload.task_id, "artifact_name": payload.artifact_name},
+        ) from exc
 
     if len(content) > settings.max_artifact_bytes:
-        raise HTTPException(
+        raise ApiError(
+            code="ERR_PAYLOAD_TOO_LARGE",
+            message=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
+            details={"limit_bytes": settings.max_artifact_bytes, "size_bytes": len(content)},
         )
 
     now_iso = utc_now_iso()

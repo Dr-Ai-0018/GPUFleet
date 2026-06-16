@@ -96,7 +96,8 @@ class TestRefresh:
             "refresh_token": refresh_token,
         })
         assert resp.status_code == 401
-        assert resp.json()["detail"] == "Refresh token has been invalidated"
+        assert resp.json()["code"] == "ERR_AUTH_REFRESH_REVOKED"
+        assert resp.json()["message"] == "Refresh token has been invalidated"
 
 
 class TestMe:
@@ -128,7 +129,8 @@ class TestMe:
 
         resp = client.get("/api/admin/me", headers={"Authorization": f"Bearer {admin_token}"})
         assert resp.status_code == 401
-        assert resp.json()["detail"] == "Access token has been invalidated"
+        assert resp.json()["code"] == "ERR_AUTH_TOKEN_REVOKED"
+        assert resp.json()["message"] == "Access token has been invalidated"
 
 
 class TestLogout:
@@ -147,10 +149,12 @@ class TestLogout:
 
         me_resp = client.get("/api/admin/me", headers=headers)
         assert me_resp.status_code == 401
-        assert me_resp.json()["detail"] == "Access token has been invalidated"
+        assert me_resp.json()["code"] == "ERR_AUTH_TOKEN_REVOKED"
+        assert me_resp.json()["message"] == "Access token has been invalidated"
 
         refresh_resp = client.post("/api/admin/refresh", json={
             "refresh_token": tokens["refresh_token"],
         })
         assert refresh_resp.status_code == 401
-        assert refresh_resp.json()["detail"] == "Refresh token has been invalidated"
+        assert refresh_resp.json()["code"] == "ERR_AUTH_REFRESH_REVOKED"
+        assert refresh_resp.json()["message"] == "Refresh token has been invalidated"

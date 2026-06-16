@@ -172,7 +172,9 @@ class TestTaskClaimConcurrency:
         timestamp_conflicts = [
             body
             for status_code, body in results
-            if status_code == 409 and body.get("detail") == "Timestamp must be strictly increasing"
+            if status_code == 409
+            and body.get("code") == "ERR_AUTH_TIMESTAMP_REPLAY"
+            and body.get("message") == "Timestamp must be strictly increasing"
         ]
 
         assert len(claimed_responses) == 1

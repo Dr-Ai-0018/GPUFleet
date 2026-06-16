@@ -90,8 +90,8 @@ async function request<T>(
     const text = await response.text();
     let detail = text;
     try {
-      const parsed = JSON.parse(text) as { detail?: string };
-      if (parsed?.detail) detail = parsed.detail;
+      const parsed = JSON.parse(text) as { message?: string; detail?: string };
+      detail = parsed?.message ?? parsed?.detail ?? detail;
     } catch {
       /* keep raw text */
     }
