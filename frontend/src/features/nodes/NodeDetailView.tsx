@@ -166,6 +166,26 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     }
   }
 
+  async function handleRefreshFingerprint() {
+    setBusy(true);
+    try {
+      await store.callApi((token) => api.refreshNodeFingerprint(token, currentNode.node_id));
+      toast.push({
+        tone: "success",
+        title: i18n.nodeDetail.actions.refreshFingerprintQueued,
+        description: i18n.nodeDetail.actions.refreshFingerprintNote,
+      });
+    } catch (error) {
+      toast.push({
+        tone: "error",
+        title: i18n.common.failed,
+        description: error instanceof Error ? error.message : "",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setEditError(null);
@@ -224,6 +244,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         onResetSecret={() => setConfirmResetOpen(true)}
         onDelete={() => setConfirmDeleteOpen(true)}
         onToggleEnabled={() => setConfirmToggleOpen(true)}
+        onRefreshFingerprint={handleRefreshFingerprint}
       />
 
       {tab === "monitor" ? (

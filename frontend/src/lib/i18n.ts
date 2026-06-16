@@ -64,6 +64,9 @@ export const i18n = {
       resetDone: "密钥已重置",
       saveBusy: "保存中…",
       save: "保存配置",
+      refreshFingerprint: "刷新指纹",
+      refreshFingerprintQueued: "指纹刷新已派发",
+      refreshFingerprintNote: "节点下次心跳生效，约 5 秒内可见",
     },
     dialogs: {
       disableTitle: "停用节点",

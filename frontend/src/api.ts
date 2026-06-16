@@ -231,6 +231,17 @@ export const api = {
     );
   },
 
+  refreshNodeFingerprint(
+    token: string,
+    nodeId: string,
+  ): Promise<{ status: string; node_id: string; note?: string }> {
+    return request(
+      `/api/admin/nodes/${encodeURIComponent(nodeId)}/refresh-fingerprint`,
+      { method: "POST" },
+      token,
+    );
+  },
+
   listTasks(token: string, query?: ListQuery): Promise<AdminTaskListItem[]> {
     return request<AdminTaskListItem[]>(`/api/admin/tasks${buildListQuery(query)}`, {}, token);
   },

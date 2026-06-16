@@ -14,6 +14,7 @@ type Props = {
   onResetSecret: () => void;
   onDelete: () => void;
   onToggleEnabled: () => void;
+  onRefreshFingerprint: () => void;
 };
 
 const tabs: Array<{ id: NodeDetailTabKey; label: string }> = [
@@ -30,6 +31,7 @@ export function HeroSummary({
   onResetSecret,
   onDelete,
   onToggleEnabled,
+  onRefreshFingerprint,
 }: Props): JSX.Element {
   return (
     <>
@@ -59,6 +61,7 @@ export function HeroSummary({
             </div>
           </div>
           <div className="flex gap-2">
+            <button type="button" onClick={onRefreshFingerprint} disabled={busy} className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-[12px] font-medium text-cyan-400 transition-all hover:bg-cyan-500/20 disabled:opacity-40">{i18n.nodeDetail.actions.refreshFingerprint}</button>
             <button type="button" onClick={onResetSecret} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[12px] font-medium text-white transition-all hover:bg-white/10 disabled:opacity-40">{i18n.nodeDetail.actions.resetSecret}</button>
             <button type="button" onClick={onDelete} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[12px] font-medium text-white transition-all hover:bg-white/10 disabled:opacity-40">{i18n.nodeDetail.actions.deleteNode}</button>
             <button type="button" onClick={onToggleEnabled} disabled={busy} className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-[12px] font-medium text-red-400 transition-all hover:bg-red-500/20 disabled:opacity-40">{node.is_enabled ? i18n.nodeDetail.actions.disableNode : i18n.nodeDetail.actions.enableNode}</button>
