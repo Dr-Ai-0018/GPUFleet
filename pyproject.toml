@@ -12,6 +12,7 @@ dependencies = [
   "slowapi>=0.1.9,<1.0",
   "requests>=2.34.2",
   "prometheus-client>=0.20,<1.0",
+  "structlog>=24.0,<26.0",
 ]
 
 [build-system]

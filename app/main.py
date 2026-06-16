@@ -44,6 +44,10 @@ def _bootstrap_admin(db: Database) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    # 结构化日志: 必须在 init_schema / bootstrap 之前配, 这样后续 logger.* 都走 structlog renderer
+    from app.logging_config import configure_logging
+    configure_logging(settings.log_format)
+
     db = Database(settings.database_path)
     db.init_schema()
     _bootstrap_admin(db)
@@ -75,6 +79,28 @@ app.add_middleware(
         "X-Signature",
     ],
 )
+
+@app.middleware("http")
+async def _bind_request_id(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """每个请求注入 UUID4 request_id 到 structlog contextvar, 后续日志自动带这个字段.
+
+    request_id 也回写到响应头 X-Request-Id, 便于客户端排查 / 日志关联.
+    """
+    import uuid
+    from app.logging_config import bind_request_context, clear_request_context
+
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    bind_request_context(request_id=request_id)
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-Id"] = request_id
+        return response
+    finally:
+        clear_request_context()
+
 
 @app.middleware("http")
 async def _prometheus_http_metrics(

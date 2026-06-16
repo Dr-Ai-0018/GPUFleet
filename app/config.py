@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 import sys
 
 from pydantic import Field
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
     metrics_token: str = Field(
         default="",
         description="Bearer token 保护 /metrics 端点. 空则只允许 localhost (127.0.0.1 / ::1) 抓取.",
+    )
+    log_format: Literal["json", "console"] = Field(
+        default="console",
+        description="日志输出格式. 生产建议 json (一行一 JSON, 给 fluent-bit/promtail/loki 抓), 开发 console (彩色可读).",
     )
     cors_allowed_origins: list[str] = Field(
         default_factory=lambda: [

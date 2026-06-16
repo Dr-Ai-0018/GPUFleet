@@ -6,15 +6,15 @@ Uses an OpenAI-compatible streaming chat completion API to review risky tasks.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 import httpx
 from pydantic import BaseModel, Field
 
 from app.config import Settings
+from app.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RiskFactor(BaseModel):
@@ -85,14 +85,14 @@ class LLMReviewer:
             response_text = await self._stream_chat_completion(context)
             return self._parse_response(response_text)
         except httpx.TimeoutException:
-            logger.warning("LLM review timed out after %ds", self.timeout)
+            logger.warning("llm_review_timeout", timeout_sec=self.timeout)
             return ReviewDecision(
                 decision="uncertain",
                 risk_score=0.5,
                 reasoning=f"AI 审核超时（{self.timeout}s），自动升级到人工审核",
             )
         except Exception:
-            logger.exception("LLM review failed")
+            logger.exception("llm_review_failed")
             return ReviewDecision(
                 decision="uncertain",
                 risk_score=0.5,
@@ -145,7 +145,7 @@ class LLMReviewer:
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            logger.warning("LLM review returned non-JSON: %s", text[:200])
+            logger.warning("llm_review_non_json_response", preview=text[:200])
             return ReviewDecision(
                 decision="uncertain",
                 risk_score=0.5,

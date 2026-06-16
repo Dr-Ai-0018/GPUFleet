@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,10 +10,11 @@ from pathlib import Path
 from app import metrics as gm
 from app.config import get_settings
 from app.db import Database, dumps_json, utc_now_iso
+from app.logging_config import get_logger
 from app.services.task_state import transition_task
 from app.task_utils import TERMINAL_TASK_STATUSES
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SCAN_INTERVAL_SEC = 60
 CANCEL_ACK_TIMEOUT_SEC = 300  # 5 minutes
@@ -55,7 +55,7 @@ def _is_within_root(root: Path, candidate: Path) -> bool:
 
 def _cleanup_path(path: Path, expected_root: Path) -> None:
     if not _is_within_root(expected_root, path):
-        logger.warning("Skip deleting path outside storage root: %s", path)
+        logger.warning("skip_delete_outside_storage_root", path=str(path))
         return
     if path.is_file():
         path.unlink(missing_ok=True)
@@ -200,7 +200,7 @@ def _mark_lost_tasks(db: Database) -> None:
                             now_iso,
                         ),
                     )
-                    logger.info("Task %s marked timeout (server-side enforcement)", task_id)
+                    logger.info("task_marked_timeout", task_id=task_id, reason="server_side_enforcement")
                     continue
 
             # Check cancel_requested ack timeout
@@ -224,7 +224,7 @@ def _mark_lost_tasks(db: Database) -> None:
                             now_iso,
                         ),
                     )
-                    logger.info("Task %s marked lost (cancel ack timeout exceeded)", task_id)
+                    logger.info("task_marked_lost", task_id=task_id, reason="cancel_ack_timeout_exceeded")
                     continue
 
             # Check node unresponsive for claimed/running tasks
@@ -249,7 +249,7 @@ def _mark_lost_tasks(db: Database) -> None:
                                 now_iso,
                             ),
                         )
-                        logger.info("Task %s marked lost (node %s unresponsive)", task_id, task["node_id"])
+                        logger.info("task_marked_lost", task_id=task_id, node_id=task["node_id"], reason="node_unresponsive")
                 elif not last_seen_at:
                     # Node has never heartbeated — if task has been claimed, mark lost
                     claimed_at = task["claimed_at"]
@@ -268,7 +268,7 @@ def _mark_lost_tasks(db: Database) -> None:
                                     now_iso,
                                 ),
                             )
-                            logger.info("Task %s marked lost (node %s never seen)", task_id, task["node_id"])
+                            logger.info("task_marked_lost", task_id=task_id, node_id=task["node_id"], reason="node_never_seen")
 
 
 def _expire_reviewing_tasks(db: Database) -> None:
@@ -311,7 +311,7 @@ def _run_background_job(job_name: str, fn: Callable[[Database], None], db: Datab
             fn(db)
         except Exception:
             gm.BACKGROUND_JOB_ERRORS_TOTAL.labels(job=job_name).inc()
-            logger.exception("Background job %s failed", job_name)
+            logger.exception("background_job_failed", job=job_name)
 
 
 def _refresh_status_gauges(db: Database) -> None:
@@ -344,7 +344,7 @@ def _refresh_status_gauges(db: Database) -> None:
             gm.update_tasks_by_status(task_counts)
             gm.REVIEW_PENDING.set(task_counts.get("reviewing", 0))
     except Exception:
-        logger.exception("Failed to refresh status gauges")
+        logger.exception("status_gauges_refresh_failed")
 
 
 async def lost_task_scanner(db: Database) -> None:
@@ -356,5 +356,5 @@ async def lost_task_scanner(db: Database) -> None:
                 _run_background_job(job_name, fn, db)
             _refresh_status_gauges(db)
         except Exception:
-            logger.exception("Error in lost task scanner outer loop")
+            logger.exception("lost_task_scanner_outer_loop_error")
         await asyncio.sleep(SCAN_INTERVAL_SEC)
