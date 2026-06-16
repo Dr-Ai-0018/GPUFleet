@@ -551,6 +551,12 @@ def escalate_review(task_id: str, payload: ReviewEscalateRequest, request: Reque
                 now_iso,
             ),
         )
+        from app.webhook import emit_event
+        emit_event(
+            "review.escalated",
+            {"task_id": task_id, "type": row["type"], "node_id": row["node_id"], "admin": admin["username"]},
+            severity="info",
+        )
         return task_row_to_detail(conn, saved)
 
 

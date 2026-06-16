@@ -693,6 +693,17 @@ async def task_log_chunk(request: Request, db: Database, settings: Settings) -> 
                 reason="storage_quota_exceeded",
             )
             quota_exceeded = True
+            from app.webhook import emit_event
+            emit_event(
+                "storage.quota_exceeded",
+                {
+                    "task_id": payload.task_id,
+                    "stream": payload.stream,
+                    "quota_bytes": settings.storage_quota_bytes,
+                    "attempted_bytes": append_bytes,
+                },
+                severity="critical",
+            )
         if not quota_exceeded:
             log_path = append_log_chunk(
                 settings.storage_path,

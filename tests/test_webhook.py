@@ -1,0 +1,219 @@
+"""Webhook outlet 验收测试 (D3 任务 C).
+
+设计来源: docs/D3_Observability_Design.md §4
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import hmac
+import json
+
+import httpx
+import pytest
+
+from app.config import Settings
+from app.webhook import WebhookEmitter, _sign
+
+
+# -----------------------------------------------------------------------------
+# helpers
+# -----------------------------------------------------------------------------
+
+
+def _make_settings(**overrides) -> Settings:
+    """构造 Settings, 默认装在白名单里的 4 个事件全开."""
+    base = {
+        "jwt_secret": "test-secret-at-least-32-bytes-long!!",
+        "default_admin_password": "x",
+        "webhook_url": "https://hook.example.com/in",
+        "webhook_secret": "",
+        "webhook_events": ["task.failed", "task.lost", "review.escalated", "storage.quota_exceeded", "node.offline", "review.expired"],
+        "webhook_timeout_sec": 5,
+        "instance_name": "test-instance",
+    }
+    base.update(overrides)
+    return Settings(**base)
+
+
+# -----------------------------------------------------------------------------
+# emit() 静默/过滤行为
+# -----------------------------------------------------------------------------
+
+
+def test_emit_silent_when_webhook_url_empty() -> None:
+    """webhook_url 空时 emit() 无副作用 (不入队, 不抛错)."""
+    settings = _make_settings(webhook_url="")
+    emitter = WebhookEmitter(settings)
+    emitter.emit("task.failed", {"task_id": "t-1"})
+    assert emitter._queue.qsize() == 0
+
+
+def test_emit_silent_when_event_not_in_allowed_list() -> None:
+    """事件不在 webhook_events 白名单时静默."""
+    settings = _make_settings(webhook_events=["task.failed"])  # 只开 task.failed
+    emitter = WebhookEmitter(settings)
+    emitter.emit("review.escalated", {"task_id": "t-1"})
+    assert emitter._queue.qsize() == 0
+    emitter.emit("task.failed", {"task_id": "t-2"})
+    assert emitter._queue.qsize() == 1
+
+
+# -----------------------------------------------------------------------------
+# 队列容量满时丢最旧
+# -----------------------------------------------------------------------------
+
+
+def test_queue_overflow_drops_oldest() -> None:
+    """队列满 (容量 1000) 时新事件 push 进队列, 最旧的被丢."""
+    settings = _make_settings()
+    emitter = WebhookEmitter(settings)
+    # 填满
+    for i in range(1000):
+        emitter.emit("task.failed", {"task_id": f"t-{i}"})
+    assert emitter._queue.qsize() == 1000
+    # 第 1001 个 — 应丢最旧 (t-0), 仍保持 1000
+    emitter.emit("task.failed", {"task_id": "t-overflow"})
+    assert emitter._queue.qsize() == 1000
+
+
+# -----------------------------------------------------------------------------
+# HMAC 签名正确
+# -----------------------------------------------------------------------------
+
+
+def test_sign_produces_correct_sha256_format() -> None:
+    body = b'{"event":"task.failed"}'
+    secret = "my-secret"
+    expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    assert _sign(secret, body) == expected
+
+
+# -----------------------------------------------------------------------------
+# 投递成功路径 + payload 结构
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deliver_success_includes_envelope_fields_and_signature() -> None:
+    """200 响应时单次投递成功; payload 含 §4.2 全部字段; signed."""
+    received = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received["body"] = request.content
+        received["headers"] = dict(request.headers)
+        received["url"] = str(request.url)
+        return httpx.Response(200, text="ok")
+
+    transport = httpx.MockTransport(handler)
+    settings = _make_settings(webhook_secret="topsecret")
+    async with httpx.AsyncClient(transport=transport) as client:
+        emitter = WebhookEmitter(settings, client=client)
+        emitter.start()
+        try:
+            emitter.emit("task.failed", {"task_id": "t-abc", "node_id": "n-xyz"}, severity="warning")
+            await asyncio.sleep(0.05)  # 让 worker tick 一次
+            await emitter.drain(max_wait_sec=2)
+        finally:
+            await emitter.aclose()
+
+    assert received, "handler never invoked"
+    envelope = json.loads(received["body"])
+    assert envelope["event"] == "task.failed"
+    assert envelope["severity"] == "warning"
+    assert envelope["control_plane"] == "test-instance"
+    assert envelope["payload"] == {"task_id": "t-abc", "node_id": "n-xyz"}
+    assert "timestamp" in envelope
+    # HMAC 签名正确
+    expected_sig = _sign("topsecret", received["body"])
+    assert received["headers"]["x-signature"] == expected_sig
+
+
+# -----------------------------------------------------------------------------
+# 失败重试 3 次后丢弃, 主流程不阻塞
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deliver_retries_then_drops_on_persistent_5xx(monkeypatch) -> None:
+    """连续 500 -> 4 次尝试 (首次 + 3 次退避重试) 后丢弃, 不抛异常."""
+    attempts = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        return httpx.Response(500, text="boom")
+
+    transport = httpx.MockTransport(handler)
+    # 加速测试: monkeypatch 退避数组成几乎为 0
+    monkeypatch.setattr("app.webhook._RETRY_DELAYS_SEC", (0.01, 0.01, 0.01))
+    settings = _make_settings()
+    async with httpx.AsyncClient(transport=transport) as client:
+        emitter = WebhookEmitter(settings, client=client)
+        emitter.start()
+        try:
+            emitter.emit("task.failed", {"task_id": "t-fail"})
+            await asyncio.sleep(0.3)  # 等 4 次重试完成 (4 × 0.01 + 一些 worker tick 时间)
+            await emitter.drain(max_wait_sec=2)
+        finally:
+            await emitter.aclose()
+
+    # 首次 + 3 次重试 = 4 次尝试
+    assert attempts["count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_deliver_recovers_on_eventual_success(monkeypatch) -> None:
+    """第 1/2 次 500, 第 3 次 200 -> 投递成功后不再重试."""
+    attempts = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            return httpx.Response(500)
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr("app.webhook._RETRY_DELAYS_SEC", (0.01, 0.01, 0.01))
+    settings = _make_settings()
+    async with httpx.AsyncClient(transport=transport) as client:
+        emitter = WebhookEmitter(settings, client=client)
+        emitter.start()
+        try:
+            emitter.emit("task.failed", {"task_id": "t-flaky"})
+            await asyncio.sleep(0.2)
+            await emitter.drain(max_wait_sec=2)
+        finally:
+            await emitter.aclose()
+
+    # 重试到第 3 次成功就停
+    assert attempts["count"] == 3
+
+
+# -----------------------------------------------------------------------------
+# control_plane 字段反映 instance_name 配置
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_control_plane_field_reflects_instance_name() -> None:
+    received = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received["body"] = request.content
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    settings = _make_settings(instance_name="gpufleet-prod-shanghai")
+    async with httpx.AsyncClient(transport=transport) as client:
+        emitter = WebhookEmitter(settings, client=client)
+        emitter.start()
+        try:
+            emitter.emit("task.failed", {"task_id": "x"})
+            await asyncio.sleep(0.05)
+            await emitter.drain(max_wait_sec=2)
+        finally:
+            await emitter.aclose()
+
+    envelope = json.loads(received["body"])
+    assert envelope["control_plane"] == "gpufleet-prod-shanghai"

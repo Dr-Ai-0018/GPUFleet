@@ -51,15 +51,28 @@ async def lifespan(app: FastAPI):
     db = Database(settings.database_path)
     db.init_schema()
     _bootstrap_admin(db)
+
+    # Webhook 投递: 异步后台 worker, webhook_url 空时静默 (start 内自己判断)
+    from app.webhook import WebhookEmitter, set_global_emitter
+    webhook_emitter = WebhookEmitter(settings)
+    webhook_emitter.start()
+    set_global_emitter(webhook_emitter)  # 让 service / background 通过 emit_event() 调用
+
     app.state.settings = settings
     app.state.db = db
+    app.state.webhook_emitter = webhook_emitter
+
     scanner_task = asyncio.create_task(lost_task_scanner(db))
-    yield
-    scanner_task.cancel()
     try:
-        await scanner_task
-    except asyncio.CancelledError:
-        pass
+        yield
+    finally:
+        scanner_task.cancel()
+        try:
+            await scanner_task
+        except asyncio.CancelledError:
+            pass
+        set_global_emitter(None)
+        await webhook_emitter.aclose()
 
 
 app = FastAPI(title="GPUFleet Control Plane", version="0.1.0", lifespan=lifespan)

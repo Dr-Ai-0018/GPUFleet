@@ -51,6 +51,28 @@ class Settings(BaseSettings):
         default="console",
         description="日志输出格式. 生产建议 json (一行一 JSON, 给 fluent-bit/promtail/loki 抓), 开发 console (彩色可读).",
     )
+    instance_name: str = Field(
+        default="gpufleet-dev",
+        description="本控制面实例的人类可读名称. 写入 webhook payload.control_plane, 接收方区分多实例时用.",
+    )
+    webhook_url: str = Field(
+        default="",
+        description="Webhook 接收方 URL. 空则全局禁用 webhook (默认). 强烈建议 https://, http:// 启动时 warning.",
+    )
+    webhook_secret: str = Field(
+        default="",
+        description="HMAC-SHA256 签名密钥. 非空时请求带 X-Signature: sha256=<hex> header.",
+    )
+    webhook_events: list[str] = Field(
+        default_factory=lambda: ["task.failed", "task.lost", "storage.quota_exceeded"],
+        description="启用的 webhook 事件白名单. 不在此列的事件不发送. 默认仅 critical 信号, 其余按需开.",
+    )
+    webhook_timeout_sec: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description="单次 HTTP POST 超时. 失败后指数退避 3 次 (1s/2s/4s) 仍失败则丢弃.",
+    )
     cors_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://127.0.0.1:5173",

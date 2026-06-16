@@ -13,11 +13,16 @@ from app.db import Database, dumps_json, utc_now_iso
 from app.logging_config import get_logger
 from app.services.task_state import transition_task
 from app.task_utils import TERMINAL_TASK_STATUSES
+from app.webhook import emit_event as _emit
 
 logger = get_logger(__name__)
 
 SCAN_INTERVAL_SEC = 60
 CANCEL_ACK_TIMEOUT_SEC = 300  # 5 minutes
+
+# 节点 offline 状态 (用于 _refresh_status_gauges 内 detect "新失联节点" 发 webhook), 进程内即时缓存
+_offline_node_cache: set[str] = set()
+_scanner_first_tick: bool = True
 
 
 def _parse_utc_or_none(raw: str | None) -> datetime | None:
@@ -201,6 +206,11 @@ def _mark_lost_tasks(db: Database) -> None:
                         ),
                     )
                     logger.info("task_marked_timeout", task_id=task_id, reason="server_side_enforcement")
+                    _emit(
+                        "task.failed",
+                        {"task_id": task_id, "node_id": task["node_id"], "failure_reason": "timeout", "timeout_sec": task["timeout_sec"]},
+                        severity="warning",
+                    )
                     continue
 
             # Check cancel_requested ack timeout
@@ -225,6 +235,11 @@ def _mark_lost_tasks(db: Database) -> None:
                         ),
                     )
                     logger.info("task_marked_lost", task_id=task_id, reason="cancel_ack_timeout_exceeded")
+                    _emit(
+                        "task.lost",
+                        {"task_id": task_id, "node_id": task["node_id"], "reason": "cancel_ack_timeout"},
+                        severity="warning",
+                    )
                     continue
 
             # Check node unresponsive for claimed/running tasks
@@ -250,6 +265,11 @@ def _mark_lost_tasks(db: Database) -> None:
                             ),
                         )
                         logger.info("task_marked_lost", task_id=task_id, node_id=task["node_id"], reason="node_unresponsive")
+                        _emit(
+                            "task.lost",
+                            {"task_id": task_id, "node_id": task["node_id"], "reason": "node_unresponsive", "last_seen_at": last_seen_at},
+                            severity="warning",
+                        )
                 elif not last_seen_at:
                     # Node has never heartbeated — if task has been claimed, mark lost
                     claimed_at = task["claimed_at"]
@@ -269,6 +289,11 @@ def _mark_lost_tasks(db: Database) -> None:
                                 ),
                             )
                             logger.info("task_marked_lost", task_id=task_id, node_id=task["node_id"], reason="node_never_seen")
+                            _emit(
+                                "task.lost",
+                                {"task_id": task_id, "node_id": task["node_id"], "reason": "node_never_seen"},
+                                severity="warning",
+                            )
 
 
 def _expire_reviewing_tasks(db: Database) -> None:
@@ -293,6 +318,11 @@ def _expire_reviewing_tasks(db: Database) -> None:
                 """,
                 (row["task_id"],),
             )
+            _emit(
+                "review.expired",
+                {"task_id": row["task_id"], "timeout_minutes": 30},
+                severity="warning",
+            )
 
 
 _JOB_REGISTRY: tuple[tuple[str, Callable[[Database], None]], ...] = (
@@ -315,24 +345,29 @@ def _run_background_job(job_name: str, fn: Callable[[Database], None], db: Datab
 
 
 def _refresh_status_gauges(db: Database) -> None:
-    """刷新节点/任务/审核 gauge. 每轮 scanner tick 调一次."""
+    """刷新节点/任务/审核 gauge + detect 新失联节点发 webhook. 每轮 scanner tick 调一次."""
+    global _scanner_first_tick
     try:
         with db.connect() as conn:
-            node_counts = {
-                row["status"]: row["c"]
-                for row in conn.execute(
-                    """
-                    SELECT status, COUNT(*) AS c FROM (
-                        SELECT CASE
-                            WHEN is_enabled = 0 THEN 'disabled'
-                            WHEN last_seen_at IS NULL THEN 'never_seen'
-                            WHEN datetime(last_seen_at) < datetime('now', '-30 seconds') THEN 'offline'
-                            ELSE 'online'
-                        END AS status FROM nodes
-                    ) GROUP BY status
-                    """
-                ).fetchall()
-            }
+            # 拉每个节点 + 状态, 用于 gauge 聚合 + offline 单点 detect
+            rows = conn.execute(
+                """
+                SELECT node_id,
+                       CASE
+                           WHEN is_enabled = 0 THEN 'disabled'
+                           WHEN last_seen_at IS NULL THEN 'never_seen'
+                           WHEN datetime(last_seen_at) < datetime('now', '-30 seconds') THEN 'offline'
+                           ELSE 'online'
+                       END AS status
+                FROM nodes
+                """
+            ).fetchall()
+            node_counts: dict[str, int] = {}
+            current_offline: set[str] = set()
+            for row in rows:
+                node_counts[row["status"]] = node_counts.get(row["status"], 0) + 1
+                if row["status"] == "offline":
+                    current_offline.add(row["node_id"])
             gm.update_nodes_by_status(node_counts)
 
             task_counts = {
@@ -343,12 +378,26 @@ def _refresh_status_gauges(db: Database) -> None:
             }
             gm.update_tasks_by_status(task_counts)
             gm.REVIEW_PENDING.set(task_counts.get("reviewing", 0))
+
+        # 首次 tick 只填缓存, 不发 webhook (避免冷启动时把存量 offline 节点全发一遍噪音风暴)
+        if not _scanner_first_tick:
+            newly_offline = current_offline - _offline_node_cache
+            for node_id in newly_offline:
+                _emit("node.offline", {"node_id": node_id}, severity="warning")
+        _scanner_first_tick = False
+        _offline_node_cache.clear()
+        _offline_node_cache.update(current_offline)
     except Exception:
         logger.exception("status_gauges_refresh_failed")
 
 
 async def lost_task_scanner(db: Database) -> None:
-    """Periodically scan for lost/timed-out tasks + refresh Prometheus gauges."""
+    """Periodically scan for lost/timed-out tasks + refresh Prometheus gauges + 发 webhook 事件.
+
+    Webhook 事件通过 app.webhook.emit_event() 全局入口发出, lifespan 启动时已 set_global_emitter().
+    """
+    global _scanner_first_tick
+    _scanner_first_tick = True
     while True:
         try:
             db.prune_expired_nonces(utc_now_iso())
