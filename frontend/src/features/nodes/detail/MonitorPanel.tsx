@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { LineChart } from "echarts/charts";
@@ -9,9 +9,12 @@ import { bytesToReadable, formatRelative, prettyJson } from "../../../lib/format
 import { CodeBlock } from "../../../ui/CodeBlock";
 import { MiniSparkline } from "../../../ui/MiniSparkline";
 import { TempColorBand } from "../../../ui/TempColorBand";
+import { TimeRangePicker } from "../../../ui/TimeRangePicker";
 import { useConsoleStore } from "../../../state/ConsoleStore";
+import { getRangeSpec, formatTick, type RangeKey } from "../../../lib/timeRange";
+import { useSmoothFeeder } from "../../../lib/useSmoothFeeder";
 import type { NodeStatusHistoryItem } from "../../../types";
-import { beijingTimeFormatter, bytesPerSecondToReadable, availabilityText, cardCls, zhLabel, enLabel, zhBody } from "./shared";
+import { bytesPerSecondToReadable, availabilityText, cardCls, zhLabel, enLabel, zhBody } from "./shared";
 import type { GpuSnapshot, MonitorPanelProps, NetworkSnapshot, NvidiaSnapshot } from "./types";
 
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
@@ -31,51 +34,79 @@ export function MonitorPanel({
   setShowJson,
 }: MonitorPanelProps): JSX.Element {
   const { callApi } = useConsoleStore();
-  const [historyItems, setHistoryItems] = useState<NodeStatusHistoryItem[]>([]);
+  const [range, setRange] = useState<RangeKey>("30s");
+  const rangeSpec = useMemo(() => getRangeSpec(range), [range]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // 用户选择的窗口 + 节点 id 决定的 fetcher: 拉 [now - window, now] 区间
+  const fetcher = useCallback(async () => {
+    const sinceIso = new Date(Date.now() - rangeSpec.windowMs).toISOString();
+    const res = await callApi((token) =>
+      api.getNodeStatusHistory(token, nodeId, { since: sinceIso, limit: rangeSpec.limit }),
+    );
+    return res.items;
+  }, [callApi, nodeId, rangeSpec.windowMs, rangeSpec.limit]);
 
-    async function fetchHistory() {
-      try {
-        const res = await callApi((token) => api.getNodeStatusHistory(token, nodeId, 60));
-        if (!cancelled) {
-          setHistoryItems(res.items);
-        }
-      } catch {
-        // history is best-effort
-      }
-    }
+  // LTTB 降密"代表性"指标 — CPU% 是大多数节点画面的中心
+  const getX = useCallback((r: NodeStatusHistoryItem) => new Date(r.reported_at).getTime(), []);
+  const getYRep = useCallback((r: NodeStatusHistoryItem) => r.cpu_usage_percent ?? null, []);
 
-    void fetchHistory();
-    const id = window.setInterval(() => {
-      void fetchHistory();
-    }, 5000);
+  const maxPoints = 200; // ~800px 宽图, 每 4px 一点
 
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [callApi, nodeId]);
+  const feeder = useSmoothFeeder<NodeStatusHistoryItem>({
+    fetcher,
+    getX,
+    getY: getYRep,
+    fetchIntervalMs: rangeSpec.fetchIntervalMs,
+    tickMs: rangeSpec.tickMs,
+    maxPoints,
+  });
 
-  const historyLabels = useMemo(
-    () => historyItems.map((item) => beijingTimeFormatter.format(new Date(item.reported_at))),
-    [historyItems],
+  const historyItems = feeder.records;
+
+  const xAxisFormatter = useCallback(
+    (val: number) => formatTick(val, rangeSpec.xAxisFormat),
+    [rangeSpec.xAxisFormat],
   );
 
+  // 共用的 xAxis (type='time' 让 ECharts 按真实时间戳自动布局, LTTB 出来的不连续 ts 也能正确放)
+  const sharedXAxis = useMemo(() => ({
+    type: "time" as const,
+    axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } },
+    axisLabel: {
+      color: "#4a5568",
+      fontSize: 9,
+      formatter: xAxisFormatter,
+      hideOverlap: true,
+    },
+  }), [xAxisFormatter]);
+
   const cpuHistoryOption = useMemo(() => ({
-    tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 }, formatter: (params: Array<{ value?: number }>) => `CPU ${params[0]?.value ?? 0}%` },
-    grid: { left: 36, right: 8, top: 8, bottom: 20 },
-    xAxis: { type: "category" as const, data: historyLabels, axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } }, axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) } },
+    tooltip: {
+      trigger: "axis" as const,
+      backgroundColor: "#0d1117",
+      borderColor: "rgba(255,255,255,0.05)",
+      textStyle: { color: "#c9d1d9", fontSize: 11 },
+      formatter: (params: Array<{ value?: [number, number | null] }>) => `CPU ${params[0]?.value?.[1] ?? 0}%`,
+    },
+    grid: { left: 36, right: 8, top: 8, bottom: 22 },
+    xAxis: sharedXAxis,
     yAxis: { type: "value" as const, min: 0, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" } },
-    series: [{ type: "line" as const, smooth: true, symbol: "none", connectNulls: false, lineStyle: { color: "#06b6d4", width: 1.5 }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.15)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: historyItems.map((item) => item.cpu_usage_percent) }],
-  }), [historyItems, historyLabels]);
+    series: [{
+      type: "line" as const,
+      smooth: true,
+      symbol: "none",
+      connectNulls: true, // 数据断点穿透连线
+      lineStyle: { color: "#06b6d4", width: 1.5 },
+      areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.15)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } },
+      data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.cpu_usage_percent ?? null]),
+    }],
+  }), [historyItems, sharedXAxis]);
 
   const gpuLoadHistoryOption = useMemo(() => ({
     tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 } },
     legend: { top: 0, right: 0, textStyle: { color: "#6b7280", fontSize: 10 }, itemWidth: 10, itemHeight: 4 },
-    grid: { left: 34, right: 12, top: 28, bottom: 20 },
-    xAxis: { type: "category" as const, data: historyLabels, axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } }, axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) } },
+    grid: { left: 34, right: 12, top: 28, bottom: 22 },
+    xAxis: sharedXAxis,
     yAxis: { type: "value" as const, min: 0, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" } },
     series: [
       {
@@ -83,36 +114,38 @@ export function MonitorPanel({
         type: "line" as const,
         smooth: true,
         symbol: "none",
+        connectNulls: true,
         lineStyle: { color: "#06b6d4", width: 1.8 },
         areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.16)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } },
-        data: historyItems.map((item) => item.gpu_utilization_percent),
+        data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_utilization_percent ?? null]),
       },
       {
         name: "VRAM",
         type: "line" as const,
         smooth: true,
         symbol: "none",
+        connectNulls: true,
         lineStyle: { color: "#22c55e", width: 1.5 },
-        data: historyItems.map((item) => item.gpu_memory_percent),
+        data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_memory_percent ?? null]),
       },
     ],
-  }), [historyItems, historyLabels]);
+  }), [historyItems, sharedXAxis]);
 
   const gpuThermalHistoryOption = useMemo(() => ({
     tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 } },
     legend: { top: 0, right: 0, textStyle: { color: "#6b7280", fontSize: 10 }, itemWidth: 10, itemHeight: 4 },
-    grid: { left: 34, right: 38, top: 28, bottom: 20 },
-    xAxis: { type: "category" as const, data: historyLabels, axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } }, axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) } },
+    grid: { left: 34, right: 38, top: 28, bottom: 22 },
+    xAxis: sharedXAxis,
     yAxis: [
       { type: "value" as const, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 9 } },
       { type: "value" as const, splitLine: { show: false }, axisLabel: { color: "#4a5568", fontSize: 9 } },
     ],
     series: [
-      { name: "Temp", type: "line" as const, smooth: true, symbol: "none", lineStyle: { color: "#f97316", width: 1.5 }, data: historyItems.map((item) => item.gpu_temperature_c) },
-      { name: "Power", type: "line" as const, smooth: true, symbol: "none", yAxisIndex: 1, lineStyle: { color: "#f59e0b", width: 1.5 }, data: historyItems.map((item) => item.gpu_power_draw_w) },
-      { name: "Clock", type: "line" as const, smooth: true, symbol: "none", yAxisIndex: 1, lineStyle: { color: "#a78bfa", width: 1.3 }, data: historyItems.map((item) => item.gpu_clock_graphics_mhz) },
+      { name: "Temp", type: "line" as const, smooth: true, symbol: "none", connectNulls: true, lineStyle: { color: "#f97316", width: 1.5 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_temperature_c ?? null]) },
+      { name: "Power", type: "line" as const, smooth: true, symbol: "none", connectNulls: true, yAxisIndex: 1, lineStyle: { color: "#f59e0b", width: 1.5 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_power_draw_w ?? null]) },
+      { name: "Clock", type: "line" as const, smooth: true, symbol: "none", connectNulls: true, yAxisIndex: 1, lineStyle: { color: "#a78bfa", width: 1.3 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_clock_graphics_mhz ?? null]) },
     ],
-  }), [historyItems, historyLabels]);
+  }), [historyItems, sharedXAxis]);
 
   if (!latestStatus) {
     return <div className="py-20 text-center text-[13px] text-gray-500">等待节点首次心跳上报</div>;
@@ -150,7 +183,7 @@ export function MonitorPanel({
       <section className="overflow-hidden rounded-[14px] border border-[var(--card-border)] bg-[var(--surface-card)]">
         <div className="flex items-center justify-between border-b border-white/[0.04] px-6 py-4">
           <div><div className={zhLabel}>运行概览</div></div>
-          <div className="rounded-md border border-cyan-400/15 bg-cyan-400/[0.06] px-2.5 py-1 text-[11px] font-medium tracking-[0.06em] text-cyan-300">实时</div>
+          <TimeRangePicker value={range} onChange={setRange} />
         </div>
         <div className="grid gap-0 xl:grid-cols-[minmax(0,1.5fr)_340px]">
           <div className="border-b border-white/[0.04] px-7 py-6 xl:border-b-0 xl:border-r">

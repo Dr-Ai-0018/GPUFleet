@@ -301,10 +301,15 @@ export const api = {
   getNodeStatusHistory(
     token: string,
     nodeId: string,
-    limit = 60,
+    options: { limit?: number; since?: string; until?: string } = {},
   ): Promise<NodeStatusHistoryResponse> {
+    const params = new URLSearchParams();
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.since) params.set("since", options.since);
+    if (options.until) params.set("until", options.until);
+    const qs = params.toString();
     return request<NodeStatusHistoryResponse>(
-      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/status/history?limit=${limit}`,
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/status/history${qs ? `?${qs}` : ""}`,
       {},
       token,
     );
