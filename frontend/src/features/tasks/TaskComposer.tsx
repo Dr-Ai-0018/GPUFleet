@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { ApiError, api } from "../../api";
+import { api } from "../../api";
 import { navigate } from "../../lib/routing";
+import { labelForError } from "../../lib/labels";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { useToast } from "../../ui/Toast";
 import { Button } from "../../ui/Button";
@@ -35,7 +36,9 @@ export function TaskComposer({ node }: Props): JSX.Element {
   const [executionBackend, setExecutionBackend] = useState("default");
   const [executionTarget, setExecutionTarget] = useState("");
   const [executionPython, setExecutionPython] = useState("");
-  const [payloadText, setPayloadText] = useState<string>(() => defaultPayloadText(types[0] ?? "shell"));
+  const [payloadText, setPayloadText] = useState<string>(() =>
+    defaultPayloadText(types[0] ?? "shell"),
+  );
   const [envText, setEnvText] = useState<string>("{}");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,20 +98,22 @@ export function TaskComposer({ node }: Props): JSX.Element {
         setFieldErrors({ requestedGpuIds: "requested_gpu_ids 必须是逗号分隔的非负整数列表" });
         return;
       }
-      const created = await store.callApi((token) => api.createTask(token, {
-        node_id: node.node_id,
-        type: taskType,
-        payload,
-        task_id: taskId.trim() || null,
-        revision: Number(revision) || 1,
-        idempotency_key: idempotencyKey.trim() || null,
-        workdir: workdir || null,
-        env,
-        requested_gpu_ids: gpuIds,
-        timeout_sec: Number(timeoutSec) || null,
-        kill_grace_sec: Number(killGraceSec) || 15,
-        danger_level: dangerLevel,
-      }));
+      const created = await store.callApi((token) =>
+        api.createTask(token, {
+          node_id: node.node_id,
+          type: taskType,
+          payload,
+          task_id: taskId.trim() || null,
+          revision: Number(revision) || 1,
+          idempotency_key: idempotencyKey.trim() || null,
+          workdir: workdir || null,
+          env,
+          requested_gpu_ids: gpuIds,
+          timeout_sec: Number(timeoutSec) || null,
+          kill_grace_sec: Number(killGraceSec) || 15,
+          danger_level: dangerLevel,
+        }),
+      );
       toast.push({
         tone: "success",
         title: "任务已创建",
@@ -125,13 +130,7 @@ export function TaskComposer({ node }: Props): JSX.Element {
       setExecutionTarget("");
       setExecutionPython("");
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.body || err.message
-          : err instanceof Error
-            ? err.message
-            : "任务创建失败";
-      setError(message);
+      setError(labelForError(err, "任务创建失败"));
     } finally {
       setSubmitting(false);
     }
@@ -236,7 +235,9 @@ export function TaskComposer({ node }: Props): JSX.Element {
             placeholder="如 0,1"
           />
           <span className={forms.hint}>为空表示不限制 GPU。多 GPU 机器可显式选择。</span>
-          {fieldErrors.requestedGpuIds ? <span className={forms.errorText}>{fieldErrors.requestedGpuIds}</span> : null}
+          {fieldErrors.requestedGpuIds ? (
+            <span className={forms.errorText}>{fieldErrors.requestedGpuIds}</span>
+          ) : null}
         </label>
         <label className={forms.field}>
           <span className={forms.label}>kill_grace_sec</span>
@@ -305,7 +306,8 @@ export function TaskComposer({ node }: Props): JSX.Element {
               placeholder="默认 python"
             />
             <span className={forms.hint}>
-              仅在 `system_python / uv_project / conda / micromamba` 下有意义，可改成 `python3.12` 等。
+              仅在 `system_python / uv_project / conda / micromamba` 下有意义，可改成 `python3.12`
+              等。
             </span>
           </label>
         </div>

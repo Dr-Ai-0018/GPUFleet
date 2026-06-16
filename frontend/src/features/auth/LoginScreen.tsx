@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useRef, useState } from "react";
 import { ApiError, api } from "../../api";
 import { motion } from "motion/react";
+import { labelForError } from "../../lib/labels";
 import { ParticleField } from "../../ui/ParticleField";
 import type { TokenPair } from "../../types";
 import styles from "./LoginScreen.module.css";
@@ -33,9 +34,9 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
       onAuthenticated(pair);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError("账号或密码不正确");
+        setError(labelForError(err));
       } else {
-        setError(err instanceof Error ? err.message : "登录失败");
+        setError(labelForError(err, "登录失败"));
       }
     } finally {
       setSubmitting(false);
@@ -147,9 +148,7 @@ export function LoginScreen({ onAuthenticated }: Props): JSX.Element {
                 whileTap={{ scale: 0.98 }}
               >
                 <span className={styles.btnGlow} aria-hidden />
-                <span className={styles.btnText}>
-                  {submitting ? "验证中…" : "进入控制台"}
-                </span>
+                <span className={styles.btnText}>{submitting ? "验证中…" : "进入控制台"}</span>
               </motion.button>
             </form>
 

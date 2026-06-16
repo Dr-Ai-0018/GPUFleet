@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../../api";
 import { navigate } from "../../lib/routing";
+import { labelForError } from "../../lib/labels";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
@@ -11,7 +12,13 @@ import { ConfigPanel } from "./detail/ConfigPanel";
 import { MonitorPanel } from "./detail/MonitorPanel";
 import { TasksPanel } from "./detail/TasksPanel";
 import { HeroSummary } from "./detail/hero/HeroSummary";
-import type { CpuSnapshot, MemorySnapshot, NodeDetailTabKey, NodeEditForm, PythonEnvSnapshot } from "./detail/types";
+import type {
+  CpuSnapshot,
+  MemorySnapshot,
+  NodeDetailTabKey,
+  NodeEditForm,
+  PythonEnvSnapshot,
+} from "./detail/types";
 import { i18n } from "../../lib/i18n";
 import type { NodeResetSecretResponse, NodeResponse, NodeStatusPreview, OsType } from "../../types";
 
@@ -24,7 +31,9 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const storeNode = store.nodes.find((item) => item.node_id === nodeId) ?? null;
   const overviewNode = store.overview?.nodes.find((item) => item.node_id === nodeId) ?? null;
   const [node, setNode] = useState<NodeResponse | null>(storeNode);
-  const [latestStatus, setLatestStatus] = useState<NodeStatusPreview | null>(overviewNode?.latest_status ?? null);
+  const [latestStatus, setLatestStatus] = useState<NodeStatusPreview | null>(
+    overviewNode?.latest_status ?? null,
+  );
   const [tab, setTab] = useState<NodeDetailTabKey>("monitor");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,7 +125,14 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   if (!node) {
     return (
       <div className="py-20 text-center text-gray-500">
-        <EmptyState title={i18n.nodeDetail.notFound} action={<Button variant="accent" onClick={() => navigate({ name: "fleet" })}>{i18n.common.back}</Button>} />
+        <EmptyState
+          title={i18n.nodeDetail.notFound}
+          action={
+            <Button variant="accent" onClick={() => navigate({ name: "fleet" })}>
+              {i18n.common.back}
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -130,10 +146,19 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
         ? await store.callApi((token) => api.disableNode(token, currentNode.node_id))
         : await store.callApi((token) => api.enableNode(token, currentNode.node_id));
       setNode(updated);
-      toast.push({ tone: currentNode.is_enabled ? "warning" : "success", title: currentNode.is_enabled ? i18n.nodeDetail.actions.disabled : i18n.nodeDetail.actions.enabled });
+      toast.push({
+        tone: currentNode.is_enabled ? "warning" : "success",
+        title: currentNode.is_enabled
+          ? i18n.nodeDetail.actions.disabled
+          : i18n.nodeDetail.actions.enabled,
+      });
       await store.refresh({ silent: true });
     } catch (error) {
-      toast.push({ tone: "error", title: i18n.common.failed, description: error instanceof Error ? error.message : "" });
+      toast.push({
+        tone: "error",
+        title: i18n.common.failed,
+        description: labelForError(error, ""),
+      });
     } finally {
       setBusy(false);
     }
@@ -156,7 +181,9 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   async function handleReset() {
     setBusy(true);
     try {
-      const result = await store.callApi((token) => api.resetNodeSecret(token, currentNode.node_id));
+      const result = await store.callApi((token) =>
+        api.resetNodeSecret(token, currentNode.node_id),
+      );
       setResetResult(result);
       toast.push({ tone: "success", title: i18n.nodeDetail.actions.resetDone });
     } catch {
@@ -179,7 +206,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
       toast.push({
         tone: "error",
         title: i18n.common.failed,
-        description: error instanceof Error ? error.message : "",
+        description: labelForError(error, ""),
       });
     } finally {
       setBusy(false);
@@ -190,45 +217,111 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     setSaving(true);
     setEditError(null);
     try {
-      const updated = await store.callApi((token) => api.updateNode(token, currentNode.node_id, {
-        display_name: editForm.display_name.trim(),
-        hostname: editForm.hostname.trim() || null,
-        os_type: editForm.os_type,
-        heartbeat_interval_sec: Number(editForm.heartbeat_interval_sec),
-        allowed_workdirs: editForm.allowed_workdirs.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
-        tags: editForm.tags.split(/[,，]/).map((item) => item.trim()).filter(Boolean),
-      }));
+      const updated = await store.callApi((token) =>
+        api.updateNode(token, currentNode.node_id, {
+          display_name: editForm.display_name.trim(),
+          hostname: editForm.hostname.trim() || null,
+          os_type: editForm.os_type,
+          heartbeat_interval_sec: Number(editForm.heartbeat_interval_sec),
+          allowed_workdirs: editForm.allowed_workdirs
+            .split(/\r?\n/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+          tags: editForm.tags
+            .split(/[,，]/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }),
+      );
       setNode(updated);
       setIsEditDirty(false);
       setEditHydratedNodeId(updated.node_id);
       toast.push({ tone: "success", title: i18n.common.saveSuccess });
       await store.refresh({ silent: true });
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : i18n.common.failed);
+      setEditError(labelForError(error, i18n.common.failed));
     } finally {
       setSaving(false);
     }
   }
 
-  const canDispatch = currentNode.is_enabled && currentNode.connection_status === "online" && currentNode.onboarding_status === "connected";
+  const canDispatch =
+    currentNode.is_enabled &&
+    currentNode.connection_status === "online" &&
+    currentNode.onboarding_status === "connected";
   const cpu = latestStatus?.cpu as CpuSnapshot | undefined;
   const memory = latestStatus?.memory as MemorySnapshot | undefined;
   const pythonEnv = latestStatus?.python_env as PythonEnvSnapshot | undefined;
   const gpus = latestStatus?.gpus ?? [];
   const cpuUse = Number(cpu?.usage_percent ?? 0);
-  const memUse = Number(memory?.usage_percent ?? (memory?.total_bytes ? ((memory?.used_bytes ?? 0) / memory.total_bytes) * 100 : 0));
+  const memUse = Number(
+    memory?.usage_percent ??
+      (memory?.total_bytes ? ((memory?.used_bytes ?? 0) / memory.total_bytes) * 100 : 0),
+  );
 
   return (
     <div className="mx-auto max-w-[1300px] space-y-6">
-      <ConfirmDialog open={confirmToggleOpen} title={currentNode.is_enabled ? i18n.nodeDetail.dialogs.disableTitle : i18n.nodeDetail.dialogs.enableTitle} message={currentNode.is_enabled ? i18n.nodeDetail.dialogs.disableMessage : i18n.nodeDetail.dialogs.enableMessage} confirmLabel={i18n.common.confirm} cancelLabel={i18n.common.cancel} variant={currentNode.is_enabled ? "danger" : "accent"} onConfirm={() => { setConfirmToggleOpen(false); void handleToggle(); }} onCancel={() => setConfirmToggleOpen(false)} />
-      <ConfirmDialog open={confirmDeleteOpen} title={i18n.nodeDetail.dialogs.deleteTitle} message={i18n.nodeDetail.dialogs.deleteMessage} confirmLabel={i18n.nodeDetail.actions.deleteNode} cancelLabel={i18n.common.cancel} variant="danger" onConfirm={() => { setConfirmDeleteOpen(false); void handleDelete(); }} onCancel={() => setConfirmDeleteOpen(false)} />
-      <ConfirmDialog open={confirmResetOpen} title={i18n.nodeDetail.dialogs.resetTitle} message={i18n.nodeDetail.dialogs.resetMessage} confirmLabel={i18n.nodeDetail.actions.resetSecret} cancelLabel={i18n.common.cancel} variant="danger" onConfirm={() => { setConfirmResetOpen(false); void handleReset(); }} onCancel={() => setConfirmResetOpen(false)} />
+      <ConfirmDialog
+        open={confirmToggleOpen}
+        title={
+          currentNode.is_enabled
+            ? i18n.nodeDetail.dialogs.disableTitle
+            : i18n.nodeDetail.dialogs.enableTitle
+        }
+        message={
+          currentNode.is_enabled
+            ? i18n.nodeDetail.dialogs.disableMessage
+            : i18n.nodeDetail.dialogs.enableMessage
+        }
+        confirmLabel={i18n.common.confirm}
+        cancelLabel={i18n.common.cancel}
+        variant={currentNode.is_enabled ? "danger" : "accent"}
+        onConfirm={() => {
+          setConfirmToggleOpen(false);
+          void handleToggle();
+        }}
+        onCancel={() => setConfirmToggleOpen(false)}
+      />
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title={i18n.nodeDetail.dialogs.deleteTitle}
+        message={i18n.nodeDetail.dialogs.deleteMessage}
+        confirmLabel={i18n.nodeDetail.actions.deleteNode}
+        cancelLabel={i18n.common.cancel}
+        variant="danger"
+        onConfirm={() => {
+          setConfirmDeleteOpen(false);
+          void handleDelete();
+        }}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
+      <ConfirmDialog
+        open={confirmResetOpen}
+        title={i18n.nodeDetail.dialogs.resetTitle}
+        message={i18n.nodeDetail.dialogs.resetMessage}
+        confirmLabel={i18n.nodeDetail.actions.resetSecret}
+        cancelLabel={i18n.common.cancel}
+        variant="danger"
+        onConfirm={() => {
+          setConfirmResetOpen(false);
+          void handleReset();
+        }}
+        onCancel={() => setConfirmResetOpen(false)}
+      />
 
       {resetResult ? (
         <div className="overflow-hidden rounded-xl border border-red-500/20 bg-red-500/5">
           <div className="flex items-center justify-between border-b border-red-500/20 px-5 py-3">
-            <span className="text-xs font-bold text-red-400">{i18n.nodeDetail.resetSecretTitle} - {i18n.nodeDetail.resetSecretNote}</span>
-            <button type="button" onClick={() => setResetResult(null)} className="text-red-400 hover:text-white">✕</button>
+            <span className="text-xs font-bold text-red-400">
+              {i18n.nodeDetail.resetSecretTitle} - {i18n.nodeDetail.resetSecretNote}
+            </span>
+            <button
+              type="button"
+              onClick={() => setResetResult(null)}
+              className="text-red-400 hover:text-white"
+            >
+              ✕
+            </button>
           </div>
           <div className="p-4">
             <CodeBlock label=".env" value={resetResult.onboarding.env_template} maxHeight={200} />
@@ -271,7 +364,9 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
           handleSave={handleSave}
         />
       ) : null}
-      {tab === "tasks" ? <TasksPanel node={currentNode} canDispatch={canDispatch} recentTasks={recentTasks} /> : null}
+      {tab === "tasks" ? (
+        <TasksPanel node={currentNode} canDispatch={canDispatch} recentTasks={recentTasks} />
+      ) : null}
     </div>
   );
 }

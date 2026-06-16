@@ -23,13 +23,20 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 200;
 
+type ApiErrorDetails = Record<string, unknown>;
+
 class ApiError extends Error {
   status: number;
+  code: string;
+  details?: ApiErrorDetails;
   body: string;
-  constructor(status: number, body: string) {
-    super(body || `HTTP ${status}`);
+
+  constructor(status: number, code: string, message: string, details?: ApiErrorDetails) {
+    super(message || `HTTP ${status}`);
     this.status = status;
-    this.body = body;
+    this.code = code;
+    this.details = details;
+    this.body = this.message;
   }
 }
 
@@ -56,7 +63,7 @@ async function fetchWithPolicy(input: string, init: RequestInit): Promise<Respon
         return response;
       }
 
-      await sleep(RETRY_BASE_DELAY_MS * (2 ** attempt));
+      await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
       continue;
     } catch (error) {
       window.clearTimeout(timeoutId);
@@ -64,7 +71,7 @@ async function fetchWithPolicy(input: string, init: RequestInit): Promise<Respon
       if (attempt === MAX_RETRY_ATTEMPTS) {
         break;
       }
-      await sleep(RETRY_BASE_DELAY_MS * (2 ** attempt));
+      await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
     }
   }
 
@@ -74,11 +81,7 @@ async function fetchWithPolicy(input: string, init: RequestInit): Promise<Respon
   throw lastError instanceof Error ? lastError : new Error("请求失败");
 }
 
-async function request<T>(
-  path: string,
-  init: RequestInit = {},
-  token?: string,
-): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   const headers = new Headers(init.headers ?? {});
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
@@ -89,14 +92,22 @@ async function request<T>(
   const response = await fetchWithPolicy(`${API_ROOT}${path}`, { ...init, headers });
   if (!response.ok) {
     const text = await response.text();
-    let detail = text;
+    let code = `ERR_HTTP_${response.status}`;
+    let message = text || `HTTP ${response.status}`;
+    let details: ApiErrorDetails | undefined;
     try {
-      const parsed = JSON.parse(text) as { message?: string; detail?: string };
-      detail = parsed?.message ?? parsed?.detail ?? detail;
+      const parsed = JSON.parse(text) as {
+        code?: string;
+        message?: string;
+        details?: ApiErrorDetails;
+      };
+      code = parsed.code ?? code;
+      message = parsed.message ?? `HTTP ${response.status}`;
+      details = parsed.details;
     } catch {
       /* keep raw text */
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, code, message, details);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -124,11 +135,7 @@ async function requestAllPages<T>(
   let offset = 0;
 
   while (true) {
-    const page = await request<T[]>(
-      `${path}${buildListQuery({ limit, offset })}`,
-      {},
-      token,
-    );
+    const page = await request<T[]>(`${path}${buildListQuery({ limit, offset })}`, {}, token);
     items.push(...page);
     if (page.length < limit) {
       return items;
@@ -244,7 +251,11 @@ export const api = {
   },
 
   listTasks(token: string, query?: ListQuery): Promise<AdminTaskListItem[]> {
-    return request<AdminTaskListItem[]>(`${API_BASE}/admin/tasks${buildListQuery(query)}`, {}, token);
+    return request<AdminTaskListItem[]>(
+      `${API_BASE}/admin/tasks${buildListQuery(query)}`,
+      {},
+      token,
+    );
   },
 
   listAllTasks(token: string): Promise<AdminTaskListItem[]> {
@@ -276,11 +287,7 @@ export const api = {
   },
 
   getAuditEvents(token: string, limit = 50): Promise<AuditEventView[]> {
-    return request<AuditEventView[]>(
-      `${API_BASE}/admin/audit-events?limit=${limit}`,
-      {},
-      token,
-    );
+    return request<AuditEventView[]>(`${API_BASE}/admin/audit-events?limit=${limit}`, {}, token);
   },
 
   getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {
@@ -291,7 +298,11 @@ export const api = {
     );
   },
 
-  getNodeStatusHistory(token: string, nodeId: string, limit = 60): Promise<NodeStatusHistoryResponse> {
+  getNodeStatusHistory(
+    token: string,
+    nodeId: string,
+    limit = 60,
+  ): Promise<NodeStatusHistoryResponse> {
     return request<NodeStatusHistoryResponse>(
       `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/status/history?limit=${limit}`,
       {},

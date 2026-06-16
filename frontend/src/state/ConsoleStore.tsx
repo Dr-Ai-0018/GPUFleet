@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ApiError, api } from "../api";
 import { formatSectionError, i18n } from "../lib/i18n";
+import { labelForError } from "../lib/labels";
 import type {
   AdminProfile,
   AdminTaskListItem,
@@ -35,7 +36,7 @@ export type ConsoleState = {
   tasksLoading: LoadState;
   tasksError: string | null;
   overview: DashboardOverview | null;
-  prevOverview: DashboardOverview | null;  // cached previous overview for delta calculation
+  prevOverview: DashboardOverview | null; // cached previous overview for delta calculation
   nodes: NodeResponse[];
   tasks: AdminTaskListItem[];
   audits: AuditEventView[];
@@ -83,21 +84,43 @@ function nextLoadState(current: LoadState): LoadState {
   return current === "ready" ? "ready" : "loading";
 }
 
-function deriveAggregateLoadState(state: Pick<ConsoleState, "overviewLoading" | "nodesLoading" | "tasksLoading" | "overviewError" | "nodesError" | "tasksError">): LoadState {
-  if (state.overviewLoading === "loading" || state.nodesLoading === "loading" || state.tasksLoading === "loading") {
+function deriveAggregateLoadState(
+  state: Pick<
+    ConsoleState,
+    | "overviewLoading"
+    | "nodesLoading"
+    | "tasksLoading"
+    | "overviewError"
+    | "nodesError"
+    | "tasksError"
+  >,
+): LoadState {
+  if (
+    state.overviewLoading === "loading" ||
+    state.nodesLoading === "loading" ||
+    state.tasksLoading === "loading"
+  ) {
     return "loading";
   }
   if (state.overviewError || state.nodesError || state.tasksError) {
     return "error";
   }
-  if (state.overviewLoading === "ready" || state.nodesLoading === "ready" || state.tasksLoading === "ready") {
+  if (
+    state.overviewLoading === "ready" ||
+    state.nodesLoading === "ready" ||
+    state.tasksLoading === "ready"
+  ) {
     return "ready";
   }
   return "idle";
 }
 
-function deriveAggregateError(state: Pick<ConsoleState, "overviewError" | "nodesError" | "tasksError">): string | null {
-  return [state.overviewError, state.nodesError, state.tasksError].filter(Boolean).join(" · ") || null;
+function deriveAggregateError(
+  state: Pick<ConsoleState, "overviewError" | "nodesError" | "tasksError">,
+): string | null {
+  return (
+    [state.overviewError, state.nodesError, state.tasksError].filter(Boolean).join(" · ") || null
+  );
 }
 
 type ProviderProps = {
@@ -170,12 +193,14 @@ export function ConsoleStoreProvider({
         });
       }
       try {
-        const [me, overview, audits, warnings] = await callApi((token) => Promise.all([
-          api.getMe(token),
-          api.getOverview(token),
-          api.getAuditEvents(token, 50),
-          api.getSecurityWarnings(token, 50),
-        ]));
+        const [me, overview, audits, warnings] = await callApi((token) =>
+          Promise.all([
+            api.getMe(token),
+            api.getOverview(token),
+            api.getAuditEvents(token, 50),
+            api.getSecurityWarnings(token, 50),
+          ]),
+        );
         if (!aliveRef.current) return;
         setState((prev) => {
           const next = {
@@ -197,7 +222,7 @@ export function ConsoleStoreProvider({
         });
       } catch (error) {
         if (!aliveRef.current) return;
-        const message = error instanceof Error ? error.message : i18n.console.loadFailed;
+        const message = labelForError(error, i18n.console.loadFailed);
         setState((prev) => {
           const next = {
             ...prev,
@@ -246,7 +271,7 @@ export function ConsoleStoreProvider({
         });
       } catch (error) {
         if (!aliveRef.current) return;
-        const message = error instanceof Error ? error.message : i18n.console.loadFailed;
+        const message = labelForError(error, i18n.console.loadFailed);
         setState((prev) => {
           const next = {
             ...prev,
@@ -295,7 +320,7 @@ export function ConsoleStoreProvider({
         });
       } catch (error) {
         if (!aliveRef.current) return;
-        const message = error instanceof Error ? error.message : i18n.console.loadFailed;
+        const message = labelForError(error, i18n.console.loadFailed);
         setState((prev) => {
           const next = {
             ...prev,
@@ -352,7 +377,16 @@ export function ConsoleStoreProvider({
       signalAuthFailure,
       callApi,
     }),
-    [state, refresh, refreshOverview, refreshNodes, refreshTasks, setRecentOnboarding, signalAuthFailure, callApi],
+    [
+      state,
+      refresh,
+      refreshOverview,
+      refreshNodes,
+      refreshTasks,
+      setRecentOnboarding,
+      signalAuthFailure,
+      callApi,
+    ],
   );
 
   return <ConsoleCtx.Provider value={value}>{children}</ConsoleCtx.Provider>;
