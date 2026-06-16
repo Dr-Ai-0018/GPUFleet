@@ -453,6 +453,23 @@ def _build_snapshot_rows(
 
 
 async def heartbeat(request: Request, db: Database, settings: Settings) -> HeartbeatResponse:
+    """对外暴露的心跳入口, 包一层 Prometheus 指标 wrapper, 业务在 _heartbeat_impl 里."""
+    from app import metrics as gm
+    import time as _time
+
+    started = _time.perf_counter()
+    try:
+        response = await _heartbeat_impl(request, db, settings)
+        gm.NODE_HEARTBEAT_TOTAL.labels(result="ok").inc()
+        return response
+    except Exception:
+        gm.NODE_HEARTBEAT_TOTAL.labels(result="reject").inc()
+        raise
+    finally:
+        gm.NODE_HEARTBEAT_DURATION_SECONDS.observe(_time.perf_counter() - started)
+
+
+async def _heartbeat_impl(request: Request, db: Database, settings: Settings) -> HeartbeatResponse:
     body = await request.body()
     node_id, node = authenticate_node(request, db, settings, body)
 

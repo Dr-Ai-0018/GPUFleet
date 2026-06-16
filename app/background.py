@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from app import metrics as gm
 from app.config import get_settings
 from app.db import Database, dumps_json, utc_now_iso
 from app.services.task_state import transition_task
@@ -293,16 +295,66 @@ def _expire_reviewing_tasks(db: Database) -> None:
             )
 
 
+_JOB_REGISTRY: tuple[tuple[str, Callable[[Database], None]], ...] = (
+    ("mark_lost", _mark_lost_tasks),
+    ("expire_reviewing", _expire_reviewing_tasks),
+    ("prune_snapshots", _prune_old_status_snapshots),
+    ("prune_logs", _prune_old_task_logs),
+    ("prune_artifacts", _prune_old_artifacts),
+)
+
+
+def _run_background_job(job_name: str, fn: Callable[[Database], None], db: Database) -> None:
+    """跑单个后台清理任务, 自动埋时长直方图 + 错误 counter."""
+    with gm.BACKGROUND_JOB_DURATION_SECONDS.labels(job=job_name).time():
+        try:
+            fn(db)
+        except Exception:
+            gm.BACKGROUND_JOB_ERRORS_TOTAL.labels(job=job_name).inc()
+            logger.exception("Background job %s failed", job_name)
+
+
+def _refresh_status_gauges(db: Database) -> None:
+    """刷新节点/任务/审核 gauge. 每轮 scanner tick 调一次."""
+    try:
+        with db.connect() as conn:
+            node_counts = {
+                row["status"]: row["c"]
+                for row in conn.execute(
+                    """
+                    SELECT status, COUNT(*) AS c FROM (
+                        SELECT CASE
+                            WHEN is_enabled = 0 THEN 'disabled'
+                            WHEN last_seen_at IS NULL THEN 'never_seen'
+                            WHEN datetime(last_seen_at) < datetime('now', '-30 seconds') THEN 'offline'
+                            ELSE 'online'
+                        END AS status FROM nodes
+                    ) GROUP BY status
+                    """
+                ).fetchall()
+            }
+            gm.update_nodes_by_status(node_counts)
+
+            task_counts = {
+                row["status"]: row["c"]
+                for row in conn.execute(
+                    "SELECT status, COUNT(*) AS c FROM tasks GROUP BY status"
+                ).fetchall()
+            }
+            gm.update_tasks_by_status(task_counts)
+            gm.REVIEW_PENDING.set(task_counts.get("reviewing", 0))
+    except Exception:
+        logger.exception("Failed to refresh status gauges")
+
+
 async def lost_task_scanner(db: Database) -> None:
-    """Periodically scan for lost/timed-out tasks."""
+    """Periodically scan for lost/timed-out tasks + refresh Prometheus gauges."""
     while True:
         try:
             db.prune_expired_nonces(utc_now_iso())
-            _mark_lost_tasks(db)
-            _expire_reviewing_tasks(db)
-            _prune_old_status_snapshots(db)
-            _prune_old_task_logs(db)
-            _prune_old_artifacts(db)
+            for job_name, fn in _JOB_REGISTRY:
+                _run_background_job(job_name, fn, db)
+            _refresh_status_gauges(db)
         except Exception:
-            logger.exception("Error in lost task scanner")
+            logger.exception("Error in lost task scanner outer loop")
         await asyncio.sleep(SCAN_INTERVAL_SEC)

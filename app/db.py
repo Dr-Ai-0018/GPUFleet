@@ -35,6 +35,16 @@ class Database:
         try:
             yield conn
             conn.commit()
+        except sqlite3.OperationalError as exc:
+            # busy_timeout 耗尽 / 锁竞争失败 -> 累计指标后向上抛
+            if "locked" in str(exc).lower() or "busy" in str(exc).lower():
+                try:
+                    from app import metrics as gm
+                    gm.DB_BUSY_TOTAL.inc()
+                except Exception:
+                    pass  # metrics 失败不能阻挡业务异常传播
+            conn.rollback()
+            raise
         except Exception:
             conn.rollback()
             raise

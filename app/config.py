@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     review_llm_timeout_sec: int = 30
     review_llm_max_tokens: int = 1024
     review_llm_temperature: float = 0.1
+    metrics_token: str = Field(
+        default="",
+        description="Bearer token 保护 /metrics 端点. 空则只允许 localhost (127.0.0.1 / ::1) 抓取.",
+    )
     cors_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://127.0.0.1:5173",
