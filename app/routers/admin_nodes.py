@@ -141,6 +141,8 @@ def get_status_history(
     node_id: str,
     _: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
-    limit: Annotated[int, Query(ge=1, le=500)] = 60,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 60,
+    since: Annotated[str | None, Query(description="ISO8601: 取 reported_at >= since")] = None,
+    until: Annotated[str | None, Query(description="ISO8601: 取 reported_at <= until")] = None,
 ) -> NodeStatusHistoryResponse:
-    return admin_nodes_service.get_status_history(node_id, db, limit=limit)
+    return admin_nodes_service.get_status_history(node_id, db, limit=limit, since=since, until=until)

@@ -47,6 +47,10 @@ class Settings(BaseSettings):
         default="",
         description="Bearer token 保护 /metrics 端点. 空则只允许 localhost (127.0.0.1 / ::1) 抓取.",
     )
+    public_base_url: str = Field(
+        default="",
+        description="对外可见的控制面 URL (节点 agent 用来连服务端). onboarding 模板里的 GPUFLEET_AGENT_CONTROL_PLANE_URL 优先用这个值; 空时回退到 request.base_url (但通过 vite 代理 / 反代时 base_url 会算成前端地址, 节点端连不通). 生产 / 跨主机 dev 必须显式配置.",
+    )
     log_format: Literal["json", "console"] = Field(
         default="console",
         description="日志输出格式. 生产建议 json (一行一 JSON, 给 fluent-bit/promtail/loki 抓), 开发 console (彩色可读).",

@@ -69,7 +69,11 @@ def compute_onboarding_status(*, is_enabled: bool, first_seen_at: str | None) ->
 
 
 def build_onboarding_package(request: Request, payload: NodeCreateRequest, node_secret: str) -> NodeOnboardingPackage:
-    control_plane_url = str(request.base_url).rstrip("/")
+    # 优先用配置里显式声明的 control plane URL (节点 agent 视角).
+    # 没配时回退到 request.base_url — 但请求来自 vite 代理 / 反代时 base_url 是前端地址, 节点端连不通.
+    settings = request.app.state.settings
+    public_base_url = (settings.public_base_url or "").rstrip("/") if settings else ""
+    control_plane_url = public_base_url or str(request.base_url).rstrip("/")
     mode = "cloud_gpu_runner" if payload.node_type == "modal_runner" else (f"{payload.os_type}_server" if payload.os_type else "auto")
     workdir_lines = "\n".join(payload.allowed_workdirs) if payload.allowed_workdirs else ""
     env_lines = [
@@ -567,7 +571,21 @@ def get_latest_status(node_id: str, db: Database) -> NodeStatusPreview:
     )
 
 
-def get_status_history(node_id: str, db: Database, *, limit: int) -> NodeStatusHistoryResponse:
+def get_status_history(
+    node_id: str,
+    db: Database,
+    *,
+    limit: int,
+    since: str | None = None,
+    until: str | None = None,
+) -> NodeStatusHistoryResponse:
+    """获取节点状态时序. 支持时间窗过滤 (since/until ISO8601).
+
+    - since: 取 reported_at >= since 的行
+    - until: 取 reported_at <= until 的行
+    - 都为空时取最近 limit 行 (向后兼容)
+    - 同时传 since + limit: 取该 since 窗口内最近 limit 行
+    """
     with db.connect() as conn:
         node_exists = conn.execute("SELECT 1 FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if node_exists is None:
@@ -578,23 +596,23 @@ def get_status_history(node_id: str, db: Database, *, limit: int) -> NodeStatusH
                 details={"node_id": node_id},
             )
 
-        rows = conn.execute(
-            """
-            SELECT reported_at,
-                   cpu_usage_percent,
-                   memory_usage_percent,
-                   gpu_utilization_percent,
-                   gpu_memory_percent,
-                   gpu_temperature_c,
-                   gpu_power_draw_w,
-                   gpu_json
-            FROM node_status_snapshots
-            WHERE node_id = ?
-            ORDER BY reported_at DESC, id DESC
-            LIMIT ?
-            """,
-            (node_id, limit),
-        ).fetchall()
+        sql_parts = [
+            "SELECT reported_at, cpu_usage_percent, memory_usage_percent,",
+            "       gpu_utilization_percent, gpu_memory_percent, gpu_temperature_c, gpu_power_draw_w, gpu_json",
+            "FROM node_status_snapshots",
+            "WHERE node_id = ?",
+        ]
+        params: list[object] = [node_id]
+        if since:
+            sql_parts.append("AND reported_at >= ?")
+            params.append(since)
+        if until:
+            sql_parts.append("AND reported_at <= ?")
+            params.append(until)
+        sql_parts.append("ORDER BY reported_at DESC, id DESC")
+        sql_parts.append("LIMIT ?")
+        params.append(limit)
+        rows = conn.execute("\n".join(sql_parts), params).fetchall()
 
     items: list[NodeStatusHistoryItem] = []
     for row in reversed(rows):
