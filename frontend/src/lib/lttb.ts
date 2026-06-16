@@ -87,3 +87,23 @@ export function lttb(data: DataPoint[], threshold: number): DataPoint[] {
   sampled.push(data[n - 1]); // 末点
   return sampled;
 }
+
+/**
+ * Wrapper: 输入原始 record 数组 + (x, y) 抽取器, 输出降密后的原始 record 子集.
+ * useSmoothFeeder 用这个版本, 因为图表需要从同一份 record 取多个 y 字段 (CPU% / GPU util / temp / power).
+ */
+export function lttbRecords<T>(
+  records: T[],
+  getX: (r: T) => number,
+  getY: (r: T) => number | null,
+  threshold: number,
+): T[] {
+  if (records.length <= threshold || threshold <= 2) return records;
+  const dps: Array<DataPoint & { _idx: number }> = records.map((r, idx) => ({
+    x: getX(r),
+    y: getY(r),
+    _idx: idx,
+  }));
+  const out = lttb(dps as DataPoint[], threshold) as Array<DataPoint & { _idx: number }>;
+  return out.map((d) => records[d._idx]);
+}
