@@ -41,8 +41,10 @@ export const RANGE_PRESETS: RangeSpec[] = [
   { key: "1m",   label: "最近 1 分钟", windowMs: 60_000,        fetchIntervalMs: 5_000,   tickMs: 1_000,    limit: 80,   xAxisFormat: "HH:mm:ss" },
   { key: "3m",   label: "最近 3 分钟", windowMs: 180_000,       fetchIntervalMs: 5_000,   tickMs: 2_000,    limit: 200,  xAxisFormat: "HH:mm:ss" },
   { key: "5m",   label: "最近 5 分钟", windowMs: 300_000,       fetchIntervalMs: 5_000,   tickMs: 3_000,    limit: 350,  xAxisFormat: "HH:mm:ss" },
-  { key: "10m",  label: "最近 10 分钟", windowMs: 600_000,      fetchIntervalMs: 10_000,  tickMs: 5_000,    limit: 700,  xAxisFormat: "HH:mm" },
-  { key: "30m",  label: "最近 30 分钟", windowMs: 1_800_000,    fetchIntervalMs: 15_000,  tickMs: 10_000,   limit: 2000, xAxisFormat: "HH:mm" },
+  // 短窗口 (≤ 30m) limit 都 ≤ 500, 确保 maxPoints=500 时不触发 LTTB 降密 — 1Hz 真实点全展示, 没有平稳段被抹平的问题
+  { key: "10m",  label: "最近 10 分钟", windowMs: 600_000,      fetchIntervalMs: 10_000,  tickMs: 5_000,    limit: 500,  xAxisFormat: "HH:mm" },
+  { key: "30m",  label: "最近 30 分钟", windowMs: 1_800_000,    fetchIntervalMs: 15_000,  tickMs: 10_000,   limit: 500,  xAxisFormat: "HH:mm" },
+  // 1h+ 长窗口仍走 LTTB (真实点上千, 必须降密), 保留视觉特征
   { key: "1h",   label: "最近 1 小时", windowMs: 3_600_000,     fetchIntervalMs: 30_000,  tickMs: 20_000,   limit: 3600, xAxisFormat: "HH:mm" },
   { key: "3h",   label: "最近 3 小时", windowMs: 10_800_000,    fetchIntervalMs: 60_000,  tickMs: 60_000,   limit: 5000, xAxisFormat: "HH:mm" },
   { key: "6h",   label: "最近 6 小时", windowMs: 21_600_000,    fetchIntervalMs: 60_000,  tickMs: 120_000,  limit: 5000, xAxisFormat: "HH:mm" },

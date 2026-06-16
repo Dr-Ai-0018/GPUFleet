@@ -56,8 +56,13 @@ def _init_nvml() -> None:
         logger.info("nvml_init_skipped (no NVIDIA driver / non-GPU node)")
 
 
+# 每卡上次成功读到的指标, NVML 偶发失败时延续上次值, 避免 sample 行的 GPU 字段成 NULL
+# 否则前端 ECharts 跨 NULL 用 spline 连线会画出夸张拖尾曲线 ("鬼畜"现象)
+_GPU_LAST_GOOD: dict[int, dict[str, Any]] = {}
+
+
 def _collect_gpus_lite() -> list[dict[str, Any]]:
-    """毫秒级 GPU 探针. NVML 不可用时返空数组."""
+    """毫秒级 GPU 探针. NVML 不可用时返空数组; 单卡读取失败时延续上次值."""
     if not _NVML_INITIALIZED:
         return []
     result: list[dict[str, Any]] = []
@@ -71,15 +76,21 @@ def _collect_gpus_lite() -> list[dict[str, Any]]:
                 power_w: float | None = round(power_mw / 1000.0, 2)
             except Exception:  # noqa: BLE001 - 某些显卡不支持 power readback
                 power_w = None
-            result.append({
+            sample = {
                 "idx": idx,
                 "util": float(util.gpu),
                 "temp_c": float(temp),
                 "vram_used_bytes": int(mem.used),
                 "power_w": power_w,
-            })
+            }
+            _GPU_LAST_GOOD[idx] = sample
+            result.append(sample)
         except Exception:  # noqa: BLE001
-            # 某次读取失败就跳过这张卡, 别拖垮整轮采样
+            # 某次读取失败 — 用上次成功值续上, 避免 sample 行 GPU 字段 NULL 导致前端 spline 拖尾
+            cached = _GPU_LAST_GOOD.get(idx)
+            if cached is not None:
+                result.append(cached)
+            # 没缓存就跳过 (启动首次读取就失败的情况, 此时 NULL 也无法避免)
             continue
     return result
 

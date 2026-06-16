@@ -50,7 +50,9 @@ export function MonitorPanel({
   const getX = useCallback((r: NodeStatusHistoryItem) => new Date(r.reported_at).getTime(), []);
   const getYRep = useCallback((r: NodeStatusHistoryItem) => r.cpu_usage_percent ?? null, []);
 
-  const maxPoints = 200; // ~800px 宽图, 每 4px 一点
+  // ~800-1000px 宽图, 每 2px 一点 ≈ 400-500. 配合 RANGE_PRESETS 短窗口 limit ≤ 500 → 不触发 LTTB,
+  // 真实 1Hz 点全展示, 没有"平稳段被抹平"的问题. 长窗口 (1h+) 仍降密.
+  const maxPoints = 500;
 
   const feeder = useSmoothFeeder<NodeStatusHistoryItem>({
     fetcher,
@@ -93,7 +95,7 @@ export function MonitorPanel({
     yAxis: { type: "value" as const, min: 0, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" } },
     series: [{
       type: "line" as const,
-      smooth: true,
+      smooth: 0.3,
       symbol: "none",
       connectNulls: true, // 数据断点穿透连线
       lineStyle: { color: "#06b6d4", width: 1.5 },
@@ -112,7 +114,7 @@ export function MonitorPanel({
       {
         name: "GPU Util",
         type: "line" as const,
-        smooth: true,
+        smooth: 0.3,
         symbol: "none",
         connectNulls: true,
         lineStyle: { color: "#06b6d4", width: 1.8 },
@@ -122,7 +124,7 @@ export function MonitorPanel({
       {
         name: "VRAM",
         type: "line" as const,
-        smooth: true,
+        smooth: 0.3,
         symbol: "none",
         connectNulls: true,
         lineStyle: { color: "#22c55e", width: 1.5 },
@@ -141,9 +143,9 @@ export function MonitorPanel({
       { type: "value" as const, splitLine: { show: false }, axisLabel: { color: "#4a5568", fontSize: 9 } },
     ],
     series: [
-      { name: "Temp", type: "line" as const, smooth: true, symbol: "none", connectNulls: true, lineStyle: { color: "#f97316", width: 1.5 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_temperature_c ?? null]) },
-      { name: "Power", type: "line" as const, smooth: true, symbol: "none", connectNulls: true, yAxisIndex: 1, lineStyle: { color: "#f59e0b", width: 1.5 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_power_draw_w ?? null]) },
-      { name: "Clock", type: "line" as const, smooth: true, symbol: "none", connectNulls: true, yAxisIndex: 1, lineStyle: { color: "#a78bfa", width: 1.3 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_clock_graphics_mhz ?? null]) },
+      { name: "Temp", type: "line" as const, smooth: 0.3, symbol: "none", connectNulls: true, lineStyle: { color: "#f97316", width: 1.5 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_temperature_c ?? null]) },
+      { name: "Power", type: "line" as const, smooth: 0.3, symbol: "none", connectNulls: true, yAxisIndex: 1, lineStyle: { color: "#f59e0b", width: 1.5 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_power_draw_w ?? null]) },
+      { name: "Clock", type: "line" as const, smooth: 0.3, symbol: "none", connectNulls: true, yAxisIndex: 1, lineStyle: { color: "#a78bfa", width: 1.3 }, data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_clock_graphics_mhz ?? null]) },
     ],
   }), [historyItems, sharedXAxis]);
 

@@ -174,8 +174,14 @@ def test_collect_sample_handles_no_nvidia_gpu(monkeypatch: pytest.MonkeyPatch) -
     assert sample["gpus"] == []
 
 
-def test_collect_sample_handles_nvml_per_card_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """某张卡 NVML 调用挂掉时, 跳过该卡, 其他卡继续."""
+def test_collect_sample_handles_nvml_per_card_failure_returns_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    """某张卡 NVML 调用挂掉时, 用上次成功值续上. 没缓存才跳过.
+
+    设计意图: 避免 sample 行的 GPU 字段成 NULL, 前端 ECharts spline 跨 NULL 连线会画出
+    夸张拖尾曲线 ("鬼畜"现象).
+    """
+    from gpufleet_node_agent import sampler
+
     monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None: 50.0)
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.virtual_memory",
@@ -184,10 +190,57 @@ def test_collect_sample_handles_nvml_per_card_failure(monkeypatch: pytest.Monkey
     fake_handles = ["h0", "h1"]
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", fake_handles)
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", True)
+    # 重置缓存以隔离测试
+    monkeypatch.setattr("gpufleet_node_agent.sampler._GPU_LAST_GOOD", {})
+
+    # 场景: 第一次两卡都成功, 第二次 h0 挂掉
+    call_log = {"h0_count": 0}
 
     def flaky_util(h):
         if h == "h0":
-            raise RuntimeError("simulated NVML hiccup on h0")
+            call_log["h0_count"] += 1
+            if call_log["h0_count"] >= 2:
+                raise RuntimeError("simulated NVML hiccup on h0 (2nd call)")
+            return SimpleNamespace(gpu=42)
+        return SimpleNamespace(gpu=80)
+
+    monkeypatch.setattr("gpufleet_node_agent.sampler.pynvml.nvmlDeviceGetUtilizationRates", flaky_util)
+    monkeypatch.setattr(
+        "gpufleet_node_agent.sampler.pynvml.nvmlDeviceGetMemoryInfo",
+        lambda h: SimpleNamespace(used=1_000_000_000),
+    )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.pynvml.nvmlDeviceGetTemperature", lambda h, _k: 70)
+    monkeypatch.setattr("gpufleet_node_agent.sampler.pynvml.nvmlDeviceGetPowerUsage", lambda h: 100_000)
+
+    # 第一次采样: 两张卡都拿到值, 缓存被填充
+    sample1 = sampler.collect_sample()
+    assert len(sample1["gpus"]) == 2
+    g0_first = {g["idx"]: g for g in sample1["gpus"]}[0]
+    assert g0_first["util"] == 42.0
+
+    # 第二次采样: h0 挂掉, 应该用上次缓存值续上, 不是跳过
+    sample2 = sampler.collect_sample()
+    assert len(sample2["gpus"]) == 2  # 仍然两张卡 (不是 1)
+    g0_second = {g["idx"]: g for g in sample2["gpus"]}[0]
+    assert g0_second["util"] == 42.0  # 续用上次值
+    g1_second = {g["idx"]: g for g in sample2["gpus"]}[1]
+    assert g1_second["util"] == 80.0  # h1 正常
+
+
+def test_collect_sample_skips_card_when_no_cache_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """启动后第一次读取就失败 (没有缓存可续) 时跳过该卡."""
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None: 50.0)
+    monkeypatch.setattr(
+        "gpufleet_node_agent.sampler.psutil.virtual_memory",
+        lambda: SimpleNamespace(percent=50.0),
+    )
+    monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", ["h0", "h1"])
+    monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", True)
+    monkeypatch.setattr("gpufleet_node_agent.sampler._GPU_LAST_GOOD", {})  # 空缓存
+
+    def flaky_util(h):
+        if h == "h0":
+            raise RuntimeError("first call on h0 fails, no cache")
         return SimpleNamespace(gpu=80)
 
     monkeypatch.setattr("gpufleet_node_agent.sampler.pynvml.nvmlDeviceGetUtilizationRates", flaky_util)
@@ -199,7 +252,7 @@ def test_collect_sample_handles_nvml_per_card_failure(monkeypatch: pytest.Monkey
     monkeypatch.setattr("gpufleet_node_agent.sampler.pynvml.nvmlDeviceGetPowerUsage", lambda h: 100_000)
 
     sample = collect_sample()
-    # h0 跳过, 只剩 h1
+    # 没缓存就只能跳过 h0
     assert len(sample["gpus"]) == 1
     assert sample["gpus"][0]["util"] == 80.0
 
