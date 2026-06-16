@@ -16,9 +16,11 @@ const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[var(--surface-ca
 const ACTIVE_STATUSES = new Set(["pending", "claimed", "running", "cancel_requested"]);
 
 type Props = { taskId: string };
+type TaskResultSummary = { execution?: { backend?: unknown } };
 
 export function TaskDetailView({ taskId }: Props): JSX.Element {
   const store = useConsoleStore();
+  const { callApi } = store;
   const toast = useToast();
   const [detail, setDetail] = useState<AdminTaskDetail | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "missing" | "error">("loading");
@@ -31,7 +33,7 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
       if (!store.token) return;
       if (!silent) setLoadState("loading");
       try {
-        const next = await store.callApi((t) => api.getTaskDetail(t, taskId));
+        const next = await callApi((t) => api.getTaskDetail(t, taskId));
         if (!cancelled) { setDetail(next); setLoadState("ready"); }
       } catch (err) {
         if (cancelled) return;
@@ -42,7 +44,7 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
     void load();
     const id = window.setInterval(() => void load(true), 4000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [store.token, taskId, store.callApi]);
+  }, [store.token, taskId, callApi]);
 
   async function handleCancel() {
     if (!detail) return;
@@ -62,6 +64,8 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
   if (!detail) return <div />;
 
   const isActive = ACTIVE_STATUSES.has(detail.status);
+  const resultSummary = detail.result?.summary as TaskResultSummary | undefined;
+  const resultBackend = typeof resultSummary?.execution?.backend === "string" ? resultSummary.execution.backend : "default";
 
   return (
     <div className="max-w-[1300px] mx-auto space-y-6">
@@ -111,7 +115,7 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div><span className="text-[10px] text-gray-500 font-mono block">退出码</span><span className="text-sm font-bold text-white font-mono">{String(detail.result.exit_code ?? "—")}</span></div>
               <div><span className="text-[10px] text-gray-500 font-mono block">完成时间</span><span className="text-xs text-white font-mono">{detail.result.finished_at ? formatTime(detail.result.finished_at) : "—"}</span></div>
-              <div><span className="text-[10px] text-gray-500 font-mono block">后端</span><span className="text-xs text-white font-mono">{typeof (detail.result.summary as any)?.execution?.backend === "string" ? (detail.result.summary as any).execution.backend : "default"}</span></div>
+              <div><span className="text-[10px] text-gray-500 font-mono block">后端</span><span className="text-xs text-white font-mono">{resultBackend}</span></div>
             </div>
             <CodeBlock label="result.summary" value={prettyJson(detail.result.summary)} maxHeight={240} />
           </>

@@ -45,7 +45,6 @@ app = modal.App("gpufleet-modal-base-ml", image=image)
 
 @app.function(gpu="L4", cpu=8.0, volumes={"/data": volume}, timeout=60 * 60 * 4)
 def health_check():
-    import json
     import os
     import platform
 

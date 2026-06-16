@@ -37,7 +37,7 @@ export function OverviewView(): JSX.Element {
   const overview = store.overview;
   const prevOverview = store.prevOverview;
   const nodeCounts = overview?.node_counts ?? { total: 0, online: 0, offline: 0, disabled: 0, never_seen: 0 };
-  const taskCounts = overview?.task_counts ?? {} as Record<string, number>;
+  const taskCounts = useMemo<Record<string, number>>(() => overview?.task_counts ?? {}, [overview?.task_counts]);
   const recentTasks = overview?.recent_tasks ?? [];
 
   // Previous snapshot for delta calculation

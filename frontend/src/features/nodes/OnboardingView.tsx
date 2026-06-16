@@ -5,7 +5,6 @@ import type { NodeCreateResponse } from "../../types";
 import { NodeCreatePanel } from "./NodeCreatePanel";
 import { OnboardingPackagePanel } from "./OnboardingPackagePanel";
 import { StatusPill } from "../../ui/StatusPill";
-import { Button } from "../../ui/Button";
 import { connectionLabel, connectionTone, onboardingLabel, onboardingTone } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
 

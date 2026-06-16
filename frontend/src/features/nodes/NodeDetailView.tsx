@@ -19,6 +19,7 @@ type Props = { nodeId: string };
 
 export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const store = useConsoleStore();
+  const { callApi } = store;
   const toast = useToast();
   const storeNode = store.nodes.find((item) => item.node_id === nodeId) ?? null;
   const overviewNode = store.overview?.nodes.find((item) => item.node_id === nodeId) ?? null;
@@ -58,8 +59,8 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     (async () => {
       try {
         const [nodeResult, statusResult] = await Promise.allSettled([
-          store.callApi((token) => api.getNode(token, nodeId)),
-          store.callApi((token) => api.getLatestNodeStatus(token, nodeId)),
+          callApi((token) => api.getNode(token, nodeId)),
+          callApi((token) => api.getLatestNodeStatus(token, nodeId)),
         ]);
         if (cancelled) {
           return;
@@ -80,7 +81,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [nodeId, store.callApi]);
+  }, [nodeId, callApi]);
 
   useEffect(() => {
     if (!node) {
