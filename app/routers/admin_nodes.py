@@ -95,6 +95,27 @@ def reset_node_secret(
     return admin_nodes_service.reset_node_secret(node_id, request, admin, db)
 
 
+@router.post("/{node_id}/refresh-fingerprint", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("30/minute")
+def refresh_fingerprint(
+    node_id: str,
+    request: Request,
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> dict[str, object]:
+    """触发节点重采完整指纹 (CPU 型号 / GPU 详情 / 虚拟化 / 网络 / Python 环境等).
+
+    机制:
+    - 把 node_id 加进 app.state.pending_fingerprint_refresh in-memory set;
+    - 下次该节点心跳到达时, response.refresh_fingerprint=True;
+    - 节点收到后异步重采, 下一次心跳带新指纹进库.
+
+    服务端重启时 pending 丢失, 但操作幂等 (set 性质 + 节点重采也幂等), 重试即可.
+    单实例 DB 零改动. 多实例时换 redis/db.
+    """
+    return admin_nodes_service.queue_fingerprint_refresh(node_id, request, admin, db)
+
+
 @router.delete("/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("30/minute")
 def delete_node(

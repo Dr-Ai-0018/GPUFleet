@@ -139,9 +139,20 @@ def verify_node_request_signature(
     return hmac.compare_digest(expected, signature)
 
 
-def build_signed_headers_for_test(node_id: str, node_secret: str, body: bytes) -> dict[str, str]:
-    """Build signed request headers for testing. Mirrors node_agent's build_headers."""
-    timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
+def build_signed_headers_for_test(
+    node_id: str,
+    node_secret: str,
+    body: bytes,
+    *,
+    timestamp: str | None = None,
+) -> dict[str, str]:
+    """Build signed request headers for testing. Mirrors node_agent's build_headers.
+
+    timestamp 可选 — 默认用 now (秒级精度). 同一秒内多次心跳测试需要显式传不同 timestamp,
+    否则触发 last_request_ts 单调递增校验返 409.
+    """
+    if timestamp is None:
+        timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
     nonce = secrets.token_hex(12)
     signing_key = derive_node_signing_key(node_secret)
     body_hash = hash_request_body(body)

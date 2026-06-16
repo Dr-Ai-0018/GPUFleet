@@ -574,11 +574,20 @@ async def _heartbeat_impl(request: Request, db: Database, settings: Settings) ->
 
     db.trim_node_status_history(node_id, settings.max_status_history_per_node)
 
+    # 检查是否有管理员触发的指纹刷新请求 (in-memory pending set, lifespan 初始化).
+    # 命中即下发 refresh_fingerprint=True 并从 set 移除 — 一次性触发, 不重复发.
+    refresh_fingerprint = False
+    pending: set[str] | None = getattr(request.app.state, "pending_fingerprint_refresh", None)
+    if pending is not None and node_id in pending:
+        pending.discard(node_id)
+        refresh_fingerprint = True
+
     return HeartbeatResponse(
         server_time=now_iso,
         node_id=node_id,
         tasks=tasks,
         task_controls=task_controls,
+        refresh_fingerprint=refresh_fingerprint,
     )
 
 

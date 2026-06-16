@@ -61,6 +61,10 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.db = db
     app.state.webhook_emitter = webhook_emitter
+    # 节点指纹手动刷新通道: in-memory pending set. 管理员 POST /refresh-fingerprint -> 加入 set;
+    # 下次该节点心跳时 response.refresh_fingerprint=True 并从 set 移除. 服务端重启时丢失 pending,
+    # 操作幂等可重试, 单实例够用 (多实例时换 redis/db).
+    app.state.pending_fingerprint_refresh = set()
 
     scanner_task = asyncio.create_task(lost_task_scanner(db))
     try:

@@ -381,6 +381,54 @@ def set_node_enabled(node_id: str, enabled: bool, request: Request, admin: objec
     return row_to_node_response(saved)
 
 
+def queue_fingerprint_refresh(node_id: str, request: Request, admin: object, db: Database) -> dict[str, object]:
+    """触发节点重采指纹: 把 node_id 加进 app.state.pending_fingerprint_refresh set + 写 audit.
+
+    DB schema 零改动 (设计文档 docs/Probe_Rewrite_Plan.md §2).
+    """
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        node_row = conn.execute(
+            "SELECT node_id FROM nodes WHERE node_id = ?", (node_id,)
+        ).fetchone()
+        if node_row is None:
+            raise ApiError(
+                code="ERR_NODE_NOT_FOUND",
+                message="Node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": node_id},
+            )
+        conn.execute(
+            """
+            INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                str(admin["id"]),
+                "refresh_node_fingerprint",
+                "node",
+                node_id,
+                request.client.host if request.client else None,
+                dumps_json({"note": "queued in-memory; will be delivered on next heartbeat"}),
+                now_iso,
+            ),
+        )
+
+    pending: set[str] | None = getattr(request.app.state, "pending_fingerprint_refresh", None)
+    if pending is None:
+        # 防御: lifespan 没初始化 (按理不会, 但兜底)
+        pending = set()
+        request.app.state.pending_fingerprint_refresh = pending
+    pending.add(node_id)
+
+    return {
+        "status": "refresh_queued",
+        "node_id": node_id,
+        "note": "Will be delivered on next heartbeat (≤ heartbeat_interval_sec).",
+    }
+
+
 def reset_node_secret(node_id: str, request: Request, admin: object, db: Database) -> NodeCreateResponse:
     now_iso = utc_now_iso()
     node_secret = generate_node_secret()
