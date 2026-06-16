@@ -10,6 +10,7 @@ from threading import Event
 
 from gpufleet_node_agent.config import AgentSettings
 from gpufleet_node_agent.heartbeat import send_heartbeat
+from gpufleet_node_agent.sampler import SampleRingBuffer, start_sampler
 from gpufleet_node_agent.state import load_json, save_json
 from gpufleet_node_agent.task_runner import (
     ACTIVE_PROCESSES,
@@ -111,9 +112,13 @@ def run_loop(settings: AgentSettings) -> None:
     if settings.tls_skip_verify:
         logger.warning("TLS verification is DISABLED (GPUFLEET_AGENT_TLS_SKIP_VERIFY=true). Not recommended for production.")
 
+    # 启动高密采样 ring buffer + 后台线程: 每 sample_interval_sec 跑一次 collect_sample()
+    sample_buffer = SampleRingBuffer(capacity=settings.sample_buffer_size)
+    start_sampler(sample_buffer, _shutdown_event, settings.sample_interval_sec)
+
     while not _shutdown_event.is_set():
         try:
-            result = send_heartbeat(settings)
+            result = send_heartbeat(settings, sample_buffer=sample_buffer)
             try:
                 recover_orphaned_task(settings)
             except Exception as exc:
@@ -129,7 +134,7 @@ def run_loop(settings: AgentSettings) -> None:
         # Use event wait instead of time.sleep for responsive shutdown
         _shutdown_event.wait(timeout=settings.heartbeat_interval_sec)
 
-    # Graceful shutdown
+    # Graceful shutdown: sampler thread 是 daemon, _shutdown_event 已 set 后自己退出.
     logger.info("Shutting down agent...")
     _terminate_active_processes(grace_sec=30)
     _finalize_shutdown_task(settings)

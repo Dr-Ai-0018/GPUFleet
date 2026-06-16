@@ -15,6 +15,18 @@ class AgentSettings(BaseSettings):
     node_secret_encrypted_path: Path | None = None
     node_secret_passphrase: str = ""
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
+    sample_interval_sec: int = Field(
+        default=1,
+        ge=1,
+        le=60,
+        description="高密采样间隔 (秒). 默认 1s/次, 心跳时批量上传.",
+    )
+    sample_buffer_size: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description="ring buffer 容量. 推荐 = heartbeat_interval_sec / sample_interval_sec.",
+    )
     tls_skip_verify: bool = False
     deployment_mode: Literal["auto", "windows_server", "linux_server", "cloud_gpu_runner"] = "auto"
     circuit_breaker_failure_threshold: int = Field(default=3, ge=1, le=20)
