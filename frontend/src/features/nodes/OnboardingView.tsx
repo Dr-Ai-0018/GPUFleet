@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { api, ApiError } from "../../api";
 import { useConsoleStore } from "../../state/ConsoleStore";
-import { navigate } from "../../lib/routing";
-import type { NodeCreateResponse } from "../../types";
+import type { NodeCreateResponse, NodeOnboardingLifecycleResponse } from "../../types";
 import { NodeCreatePanel } from "./NodeCreatePanel";
 import { OnboardingPackagePanel } from "./OnboardingPackagePanel";
-import { formatRelative } from "../../lib/format";
-import { nodeTypeLabel, osLabel } from "../../lib/labels";
+import { CodeBlock } from "../../ui/CodeBlock";
+import { useToast } from "../../ui/Toast";
+import { formatRelative, formatTime } from "../../lib/format";
+import { labelForError, nodeTypeLabel, osLabel } from "../../lib/labels";
 
 type StageId = 1 | 2 | 3;
 
@@ -17,7 +19,14 @@ const STAGES: Array<{ id: StageId; label: string; sub: string }> = [
 
 export function OnboardingView(): JSX.Element {
   const store = useConsoleStore();
+  const toast = useToast();
   const [pkg, setPkg] = useState<NodeCreateResponse | null>(store.recentOnboarding);
+  // 待接入行展开 + lifecycle 缓存
+  const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
+  const [lifecycleByNode, setLifecycleByNode] = useState<Record<string, NodeOnboardingLifecycleResponse>>({});
+  const [lifecycleLoadingByNode, setLifecycleLoadingByNode] = useState<Record<string, boolean>>({});
+  const [lifecycleErrorByNode, setLifecycleErrorByNode] = useState<Record<string, string>>({});
+  const [regeneratingByNode, setRegeneratingByNode] = useState<Record<string, boolean>>({});
 
   const awaiting = useMemo(
     () => store.nodes.filter((node) => node.onboarding_status === "awaiting_first_heartbeat"),
@@ -34,6 +43,61 @@ export function OnboardingView(): JSX.Element {
     : awaiting.some((n) => n.node_id === pkg.node_id)
       ? 2
       : 3;
+
+  // 懒加载单个节点的 lifecycle 包 (展开行时触发, 已缓存就不重拉)
+  const ensureLifecycle = useCallback(
+    async (nodeId: string, force = false) => {
+      if (!store.token) return;
+      if (!force && lifecycleByNode[nodeId]) return;
+      setLifecycleLoadingByNode((s) => ({ ...s, [nodeId]: true }));
+      setLifecycleErrorByNode((s) => ({ ...s, [nodeId]: "" }));
+      try {
+        const data = await api.getNodeOnboarding(store.token, nodeId);
+        setLifecycleByNode((s) => ({ ...s, [nodeId]: data }));
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : "加载失败";
+        setLifecycleErrorByNode((s) => ({ ...s, [nodeId]: msg }));
+      } finally {
+        setLifecycleLoadingByNode((s) => ({ ...s, [nodeId]: false }));
+      }
+    },
+    [store.token, lifecycleByNode],
+  );
+
+  // 重发安装包 — 轮换签名 key + token, 返回新 snippet
+  const handleRegenerate = useCallback(
+    async (nodeId: string) => {
+      if (!store.token) return;
+      setRegeneratingByNode((s) => ({ ...s, [nodeId]: true }));
+      try {
+        const data = await api.regenerateNodeOnboarding(store.token, nodeId);
+        setLifecycleByNode((s) => ({ ...s, [nodeId]: data }));
+        toast.push({
+          tone: "success",
+          title: "已重发安装包",
+          description: "token 与签名 key 已轮换,旧 token 即刻失效",
+        });
+      } catch (err) {
+        toast.push({
+          tone: "error",
+          title: "重发失败",
+          description: labelForError(err, ""),
+        });
+      } finally {
+        setRegeneratingByNode((s) => ({ ...s, [nodeId]: false }));
+      }
+    },
+    [store.token, toast],
+  );
+
+  const handleToggleExpand = useCallback(
+    (nodeId: string) => {
+      const willOpen = expandedNodeId !== nodeId;
+      setExpandedNodeId(willOpen ? nodeId : null);
+      if (willOpen) void ensureLifecycle(nodeId);
+    },
+    [expandedNodeId, ensureLifecycle],
+  );
 
   return (
     <div className="py-2">
@@ -199,62 +263,87 @@ export function OnboardingView(): JSX.Element {
                 {awaiting.map((node) => {
                   const waitedMs = Date.now() - new Date(node.created_at).getTime();
                   const isStale = waitedMs > 24 * 3600 * 1000; // > 24h 视为长期未上线
+                  const isOpen = expandedNodeId === node.node_id;
+                  const lifecycle = lifecycleByNode[node.node_id] ?? null;
+                  const lifecycleLoading = lifecycleLoadingByNode[node.node_id] ?? false;
+                  const lifecycleError = lifecycleErrorByNode[node.node_id] ?? "";
+                  const regenerating = regeneratingByNode[node.node_id] ?? false;
                   return (
-                    <tr
-                      key={node.node_id}
-                      onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
-                      className="group cursor-pointer border-b border-white/[0.03] transition-colors last:border-0 hover:bg-white/[0.02]"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="relative h-2 w-2 shrink-0">
-                            <span className="absolute inset-0 animate-ping rounded-full bg-amber-400/60" />
-                            <span className="absolute inset-0 rounded-full bg-amber-400" />
+                    <FragmentRows key={node.node_id}>
+                      <tr
+                        onClick={() => handleToggleExpand(node.node_id)}
+                        className="group cursor-pointer border-b border-white/[0.03] transition-colors last:border-0 hover:bg-white/[0.02]"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="relative h-2 w-2 shrink-0">
+                              <span className="absolute inset-0 animate-ping rounded-full bg-amber-400/60" />
+                              <span className="absolute inset-0 rounded-full bg-amber-400" />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="truncate text-[13px] font-medium text-gray-200 transition-colors group-hover:text-white">
+                                {node.display_name}
+                              </div>
+                              <div className="mt-0.5 truncate font-mono text-[10.5px] text-gray-600">
+                                {node.node_id}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-[12.5px] text-gray-300">
+                            {nodeTypeLabel[node.node_type] ?? node.node_type}
+                          </div>
+                          {node.os_type ? (
+                            <div className="mt-0.5 text-[11px] text-gray-600">
+                              {osLabel[node.os_type] ?? node.os_type}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[11.5px] text-gray-500">
+                          ↻ {node.heartbeat_interval_sec}s
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[11px] ${
+                              isStale
+                                ? "border-red-400/25 bg-red-400/[0.06] text-red-300"
+                                : "border-amber-400/25 bg-amber-400/[0.06] text-amber-300"
+                            }`}
+                            title={`登记时间 ${formatRelative(node.created_at)}`}
+                          >
+                            ⏱ {formatRelative(node.created_at)}
                           </span>
-                          <div className="min-w-0">
-                            <div className="truncate text-[13px] font-medium text-gray-200 transition-colors group-hover:text-white">
-                              {node.display_name}
-                            </div>
-                            <div className="mt-0.5 truncate font-mono text-[10.5px] text-gray-600">
-                              {node.node_id}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-[12.5px] text-gray-300">
-                          {nodeTypeLabel[node.node_type] ?? node.node_type}
-                        </div>
-                        {node.os_type ? (
-                          <div className="mt-0.5 text-[11px] text-gray-600">
-                            {osLabel[node.os_type] ?? node.os_type}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-[11.5px] text-gray-500">
-                        ↻ {node.heartbeat_interval_sec}s
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[11px] ${
-                            isStale
-                              ? "border-red-400/25 bg-red-400/[0.06] text-red-300"
-                              : "border-amber-400/25 bg-amber-400/[0.06] text-amber-300"
-                          }`}
-                          title={`登记时间 ${formatRelative(node.created_at)}`}
-                        >
-                          ⏱ {formatRelative(node.created_at)}
-                        </span>
-                        {isStale ? (
-                          <div className="mt-1 text-[10.5px] text-red-400/80">超 24h 未上线</div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-[11.5px] text-cyan-300 transition-colors group-hover:text-cyan-200">
-                          查看详情 →
-                        </span>
-                      </td>
-                    </tr>
+                          {isStale ? (
+                            <div className="mt-1 text-[10.5px] text-red-400/80">超 24h 未上线</div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <svg
+                            width="14" height="14" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" strokeWidth="2"
+                            className={`inline-block text-gray-600 transition-all group-hover:text-gray-300 ${isOpen ? "rotate-90 text-cyan-300" : ""}`}
+                          >
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
+                        </td>
+                      </tr>
+                      {isOpen ? (
+                        <tr className="border-b border-white/[0.03] bg-white/[0.012]">
+                          <td colSpan={5} className="px-4 py-4">
+                            <OnboardingDetail
+                              nodeId={node.node_id}
+                              lifecycle={lifecycle}
+                              loading={lifecycleLoading}
+                              error={lifecycleError}
+                              regenerating={regenerating}
+                              onRegenerate={() => void handleRegenerate(node.node_id)}
+                              onRetry={() => void ensureLifecycle(node.node_id, true)}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </FragmentRows>
                   );
                 })}
               </tbody>
@@ -262,9 +351,6 @@ export function OnboardingView(): JSX.Element {
           </div>
         )}
 
-        {/* TODO[🅲]: 等天云的 GET /admin/nodes/{id}/onboarding + POST .../regenerate
-              合上来后, 把这里改成可展开行: 展开看 install snippet + env_template + token 状态,
-              加 "重发安装包" 按钮 (对 isStale 节点尤其有用) */}
       </section>
     </div>
   );
@@ -334,5 +420,99 @@ function StageBadge({
     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] font-mono text-[10px] font-semibold text-gray-600">
       {id}
     </span>
+  );
+}
+
+// React 不允许 tbody 内裸 fragment 在某些版本有警告; 包一层壳子
+function FragmentRows({ children }: { children: React.ReactNode }): JSX.Element {
+  return <>{children}</>;
+}
+
+/** 待接入节点行的展开内容: token 状态徽章 + env_template + install_snippet + 重发按钮 */
+function OnboardingDetail({
+  nodeId,
+  lifecycle,
+  loading,
+  error,
+  regenerating,
+  onRegenerate,
+  onRetry,
+}: {
+  nodeId: string;
+  lifecycle: NodeOnboardingLifecycleResponse | null;
+  loading: boolean;
+  error: string;
+  regenerating: boolean;
+  onRegenerate: () => void;
+  onRetry: () => void;
+}): JSX.Element {
+  if (loading && !lifecycle) {
+    return (
+      <div className="py-6 text-center text-[12px] text-gray-500">
+        加载 onboarding 包…
+      </div>
+    );
+  }
+  if (error && !lifecycle) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-md border border-red-400/25 bg-red-400/[0.05] px-3 py-2.5">
+        <span className="text-[12px] text-red-300">{error}</span>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 py-1 text-[11.5px] text-gray-300 hover:bg-white/[0.08]"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
+  if (!lifecycle) return <div />;
+
+  const status = lifecycle.token_status;
+  const statusTone =
+    status === "active"
+      ? { dot: "bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.55)]", text: "text-emerald-300", border: "border-emerald-400/30 bg-emerald-400/[0.06]", label: "token 有效" }
+      : status === "expired"
+        ? { dot: "bg-red-400", text: "text-red-300", border: "border-red-400/30 bg-red-400/[0.06]", label: "token 已过期" }
+        : { dot: "bg-gray-500", text: "text-gray-400", border: "border-gray-500/30 bg-white/[0.025]", label: "token 已使用 (节点已上线)" };
+
+  return (
+    <div className="space-y-3">
+      {/* 状态行 + 重发按钮 */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-[11.5px] ${statusTone.border} ${statusTone.text}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${statusTone.dot}`} />
+          {statusTone.label}
+        </span>
+        {lifecycle.token_expires_at ? (
+          <span className="text-[11px] text-gray-500" title={formatTime(lifecycle.token_expires_at)}>
+            过期于 {formatRelative(lifecycle.token_expires_at)}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={regenerating}
+          className="ml-auto rounded-md border border-cyan-400/40 bg-cyan-500/[0.10] px-3 py-1.5 text-[11.5px] font-medium text-cyan-200 transition-all hover:border-cyan-400/60 hover:bg-cyan-500/[0.18] hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
+          title="轮换 token + 签名 key, 旧 token 即刻失效"
+        >
+          {regenerating ? "重发中…" : status === "consumed" ? "重发安装包 (重置)" : "重发安装包"}
+        </button>
+      </div>
+
+      {/* consumed 节点提示 */}
+      {status === "consumed" ? (
+        <div className="rounded-md border border-amber-400/20 bg-amber-400/[0.04] px-3 py-2 text-[11.5px] text-amber-200/90">
+          ⚠ 节点已上线 — 重发会轮换签名 key, 旧 agent 失效, 你需要重新部署接入包.
+        </div>
+      ) : null}
+
+      {/* env_template + install_snippet */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <CodeBlock label=".env 模板" value={lifecycle.env_template} maxHeight={240} />
+        <CodeBlock label={`安装命令 · ${nodeId}`} value={lifecycle.install_snippet} maxHeight={240} />
+      </div>
+    </div>
   );
 }
