@@ -10,7 +10,7 @@ export function bytesPerSecondToReadable(value: number | null | undefined): stri
   return `${value.toFixed(0)} B/s`;
 }
 
-export const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[var(--surface-card)] border border-[var(--card-border)] shadow-[var(--shadow-card-lite)] hover:border-[var(--card-border-hover)]";
+export const cardCls = "rounded-lg p-5 transition-colors duration-200 bg-[var(--surface-card)] border border-[var(--card-border)] shadow-[var(--shadow-card-lite)] hover:border-[var(--card-border-hover)]";
 export const inputCls = "w-full bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-2 text-xs text-white outline-none focus:bg-[rgba(10,11,14,0.95)] focus:border-cyan-500/50 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.1)] transition-all font-mono";
 export const labelCls = "text-[11px] font-mono text-gray-400";
 export const badgeCls = "px-2.5 py-0.5 text-xs font-mono font-medium border rounded-md flex items-center gap-1.5";

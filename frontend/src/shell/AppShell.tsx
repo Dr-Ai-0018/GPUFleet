@@ -37,15 +37,12 @@ export function AppShell({ onLogout }: Props): JSX.Element {
   ];
 
   return (
-    <div className="min-h-screen bg-[#07080A] text-gray-300 font-sans flex overflow-hidden relative">
+    <div className="min-h-screen bg-[#07090c] text-gray-300 font-sans flex overflow-hidden relative">
       {/* Command Palette */}
       <CommandPalette />
 
-      {/* Ambient glow — single subtle layer, no expensive multi-blur */}
-      <div className="fixed top-[-20%] left-[10%] w-[40%] h-[40%] bg-cyan-950/[0.04] blur-[120px] rounded-full pointer-events-none" />
-
       {/* Sidebar */}
-      <aside className="w-[250px] border-r border-white/5 bg-[#08090C] flex flex-col z-20 shrink-0">
+      <aside className="w-[244px] border-r border-white/[0.045] bg-[#090b0f] flex flex-col z-20 shrink-0">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -125,7 +122,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
       {/* Main */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative z-10">
         {/* Header */}
-        <header className="h-14 flex items-center justify-between px-7 border-b border-white/5 bg-[#08090C] shrink-0">
+        <header className="h-14 flex items-center justify-between px-7 border-b border-white/[0.045] bg-[#07090c] shrink-0">
           <Breadcrumb route={route} />
           <div className="flex items-center gap-3">
             <button

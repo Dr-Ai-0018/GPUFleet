@@ -51,7 +51,8 @@ export function TimeRangePicker({ value, onChange, disabled }: Props): JSX.Eleme
       {open ? (
         <div
           role="listbox"
-          className="absolute right-0 z-20 mt-1 w-32 overflow-hidden rounded-md border border-white/10 bg-[#0d1117] shadow-xl"
+          className="absolute right-0 z-30 mt-1.5 w-36 max-h-[260px] overflow-y-auto rounded-md border border-white/10 bg-[#0c0f14] shadow-[0_8px_24px_-6px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.02)]"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.12) transparent" }}
         >
           {RANGE_PRESETS.map((r) => (
             <button
@@ -63,10 +64,10 @@ export function TimeRangePicker({ value, onChange, disabled }: Props): JSX.Eleme
                 onChange(r.key);
                 setOpen(false);
               }}
-              className={`block w-full px-3 py-1.5 text-left text-[11px] transition-colors ${
+              className={`block w-full px-3 py-1.5 text-left text-[12px] transition-colors ${
                 r.key === value
-                  ? "bg-cyan-500/20 text-cyan-300"
-                  : "text-gray-400 hover:bg-white/5 hover:text-white"
+                  ? "bg-cyan-500/15 text-cyan-300"
+                  : "text-gray-400 hover:bg-white/[0.04] hover:text-white"
               }`}
             >
               {r.label}

@@ -57,10 +57,11 @@
   --glow-red: 0 0 16px rgba(248, 81, 73, 0.20);
 
   /* ---------- Card / surface enhancements ---------- */
-  --card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --card-highlight-strong: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --card-border: rgba(255, 255, 255, 0.055);
-  --card-border-hover: rgba(255, 255, 255, 0.10);
+  /* Apple Pro / Linear / Stripe enterprise: 极轻边框, 不靠装饰高光 */
+  --card-highlight: none;
+  --card-highlight-strong: none;
+  --card-border: rgba(255, 255, 255, 0.045);
+  --card-border-hover: rgba(255, 255, 255, 0.075);
 
   /* ---------- Status ---------- */
   --c-online: #0ff0b3;
@@ -106,10 +107,11 @@
   --shadow-card-hover: 0 8px 32px -4px rgba(0, 0, 0, 0.6), var(--card-highlight-strong);
   --shadow-card-glow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(15, 240, 179, 0.08), var(--card-highlight);
 
-  /* §4.3 Surface-level tokens (Grafana/Datadog flat-panel style) */
-  --surface-card: #0f1218;
-  --surface-card-hover: #131820;
-  --shadow-card-lite: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* Apple Pro / Linear / Stripe enterprise — flat panel, 几乎不可见的阴影, 全靠 1px 边框分区 */
+  --surface-card: #0c0f14;
+  --surface-card-hover: #0f131a;
+  /* 只留一点点深度暗示, 不画"凸起" */
+  --shadow-card-lite: 0 1px 1px rgba(0, 0, 0, 0.25);
 
   /* Compat aliases */
   --glass-bg: var(--bg-surface);
