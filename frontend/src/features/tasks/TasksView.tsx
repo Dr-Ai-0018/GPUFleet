@@ -40,6 +40,19 @@ function windowSince(w: TimeWindow): string | undefined {
 
 const PAGE_SIZE = 50;
 
+/** 把后台轮询拉到的"最新首页"按 task_id 合并进现有列表:
+ *  - 已存在的任务: 用新版本替换 (反映 status 变化, e.g. running → succeeded)
+ *  - 不存在的任务: 是新冒出来的, 插到列表最前面
+ *  - 用户已经翻到的后续页保留原位置 (除非在新首页里就用新版本覆盖)
+ */
+function mergeFirstPage<T extends { task_id: string }>(prev: T[], fresh: T[]): T[] {
+  const freshById = new Map(fresh.map((t) => [t.task_id, t]));
+  const prevIds = new Set(prev.map((t) => t.task_id));
+  const newcomers = fresh.filter((t) => !prevIds.has(t.task_id));
+  const refreshed = prev.map((t) => freshById.get(t.task_id) ?? t);
+  return [...newcomers, ...refreshed];
+}
+
 export function TasksView(): JSX.Element {
   const store = useConsoleStore();
   const taskCounts = (store.overview?.task_counts ?? {}) as Record<string, number>;
@@ -67,12 +80,20 @@ export function TasksView(): JSX.Element {
 
   // 用于 race-condition 防护(快速切筛选条件时丢弃过期响应)
   const requestSeqRef = useRef(0);
+  // 跟 loading 镜像的 ref, 给后台轮询用 (避免 polling effect deps 里塞 loading 造成 interval 重建)
+  const loadingRef = useRef(false);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  type FetchMode = "reset" | "append" | "refresh";
 
   const fetchPage = useCallback(
-    async (cursorArg: string | null, reset: boolean) => {
+    async (cursorArg: string | null, mode: FetchMode) => {
       if (!store.token) return;
       const seq = ++requestSeqRef.current;
-      setLoading(true);
+      // refresh 是后台静默, 不显示加载态; reset/append 是用户交互, 显示
+      if (mode !== "refresh") setLoading(true);
       setError(null);
       try {
         const page = await api.listTasks(store.token, {
@@ -84,14 +105,23 @@ export function TasksView(): JSX.Element {
           since: windowSince(timeWindow),
         });
         if (seq !== requestSeqRef.current) return; // 过期响应,丢弃
-        setItems((prev) => (reset ? page.items : [...prev, ...page.items]));
-        setCursor(page.next_cursor ?? null);
+        setItems((prev) => {
+          if (mode === "reset") return page.items;
+          if (mode === "append") return [...prev, ...page.items];
+          // refresh: 把首页"最新"按 task_id 合并进现有列表, 新出现的插到最前, 已存在的就地更新状态
+          return mergeFirstPage(prev, page.items);
+        });
+        // refresh 不动 cursor (用户已经翻到的页面要保留), 只 reset/append 才更新
+        if (mode !== "refresh") setCursor(page.next_cursor ?? null);
         setTotalEstimate(page.total_estimate ?? null);
       } catch (err) {
         if (seq !== requestSeqRef.current) return;
-        setError(err instanceof ApiError ? err.message : "加载失败");
+        // 后台轮询失败静默处理, 别打扰用户; 用户交互失败才显示
+        if (mode !== "refresh") {
+          setError(err instanceof ApiError ? err.message : "加载失败");
+        }
       } finally {
-        if (seq === requestSeqRef.current) setLoading(false);
+        if (seq === requestSeqRef.current && mode !== "refresh") setLoading(false);
       }
     },
     [store.token, nodeFilter, statusFilter, typeFilter, timeWindow],
@@ -102,8 +132,32 @@ export function TasksView(): JSX.Element {
     setItems([]);
     setCursor(null);
     setTotalEstimate(null);
-    void fetchPage(null, true);
+    void fetchPage(null, "reset");
   }, [fetchPage]);
+
+  // 5s 后台轮询: 拉首页 merge 进现有列表, 让新任务自动冒上来 + 已有任务状态原地更新
+  // visibility-aware: tab 隐藏时暂停, 切回前台立刻拉一次
+  useEffect(() => {
+    if (!store.token) return;
+
+    const tick = () => {
+      if (document.hidden) return;
+      if (loadingRef.current) return; // 用户交互 fetch 在飞, 让一让
+      void fetchPage(null, "refresh");
+    };
+
+    const timer = window.setInterval(tick, 5000);
+
+    function onVisibilityChange() {
+      if (!document.hidden) tick();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [store.token, fetchPage]);
 
   // ─── 客户端二次过滤(只对 query 串做本地包含匹配,不发请求) ───
   const visibleItems = useMemo(() => {
@@ -122,7 +176,7 @@ export function TasksView(): JSX.Element {
     if (!el) return;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) void fetchPage(cursor, false);
+        if (entries[0]?.isIntersecting) void fetchPage(cursor, "append");
       },
       { rootMargin: "200px" },
     );
@@ -280,7 +334,7 @@ export function TasksView(): JSX.Element {
             {cursor && !loading ? (
               <button
                 type="button"
-                onClick={() => void fetchPage(cursor, false)}
+                onClick={() => void fetchPage(cursor, "append")}
                 className="text-[11.5px] text-cyan-300 transition-colors hover:text-cyan-200"
               >
                 加载下一页 →

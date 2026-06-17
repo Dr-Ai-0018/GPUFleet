@@ -58,10 +58,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
     setNode(storeNode);
   }, [storeNode]);
 
-  useEffect(() => {
-    setLatestStatus(overviewNode?.latest_status ?? null);
-  }, [overviewNode]);
-
+  // Mount 拉一次 node 详情 + latest status (instant hydrate)
   useEffect(() => {
     let cancelled = false;
 
@@ -91,6 +88,46 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
       cancelled = true;
     };
   }, [nodeId, callApi]);
+
+  // Monitor tab 专属: 2s 轮询 latest status 让 KPI tile / GPU 仪表 / VRAM bar / 每核占用
+  // 都跟时序图同节奏地活起来. 切到 config/tasks tab 自动暂停, 后台 (document.hidden) 也暂停.
+  // 注意: 不再用 store.overview.nodes[].latest_status 的 5s 数据兜底, 因为它会覆盖更新鲜的轮询数据.
+  useEffect(() => {
+    if (!store.token) return;
+    if (tab !== "monitor") return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    async function poll() {
+      if (cancelled || inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        const next = await callApi((token) => api.getLatestNodeStatus(token, nodeId));
+        if (!cancelled) setLatestStatus(next);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404 && !cancelled) {
+          setLatestStatus(null);
+        }
+        // 其它错误静默, 下次再试
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const timer = window.setInterval(() => void poll(), 2000);
+
+    function onVisibilityChange() {
+      if (!document.hidden) void poll();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [store.token, nodeId, tab, callApi]);
 
   useEffect(() => {
     if (!node) {
