@@ -7,6 +7,7 @@ import { formatRelative, formatTime } from "../../lib/format";
 import { mergeFirstPage } from "../../lib/listMerge";
 import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
 import { MiniSparkline } from "../../ui/MiniSparkline";
+import { KpiTile } from "../../ui/KpiTile";
 import type { AdminTaskListItem } from "../../types";
 
 // ─── 单状态查询(后端 status 是单值字符串) ───
@@ -186,38 +187,42 @@ export function TasksView(): JSX.Element {
         </div>
       </header>
 
-      {/* ───── KPI strip = 状态筛选器 ───── */}
-      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <KpiFilterTile
+      {/* ───── KPI strip = 状态筛选器 (KpiTile v3) ───── */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiTile
           label="全部"
-          count={totalTasks}
+          value={totalTasks}
+          sublabel="task 总数"
+          tone="neutral"
+          icon={<IconList />}
           active={statusFilter === ""}
-          dotCls="bg-gray-500"
-          textCls="text-white"
           onClick={() => setStatusFilter("")}
         />
-        <KpiFilterTile
+        <KpiTile
           label="进行中"
-          count={runningCount}
+          value={runningCount}
+          sublabel="running + claimed"
+          tone="running"
+          icon={<IconLoader />}
           active={statusFilter === "running"}
-          dotCls="bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.55)]"
-          textCls="text-cyan-300"
           onClick={() => setStatusFilter(statusFilter === "running" ? "" : "running")}
         />
-        <KpiFilterTile
+        <KpiTile
           label="成功"
-          count={succeededCount}
+          value={succeededCount}
+          sublabel={totalTasks > 0 ? `${Math.round((succeededCount / totalTasks) * 100)}% 成功率` : "—"}
+          tone="online"
+          icon={<IconCheckCircle />}
           active={statusFilter === "succeeded"}
-          dotCls="bg-emerald-400"
-          textCls="text-emerald-300"
           onClick={() => setStatusFilter(statusFilter === "succeeded" ? "" : "succeeded")}
         />
-        <KpiFilterTile
+        <KpiTile
           label="失败"
-          count={failedCount}
+          value={failedCount}
+          sublabel="failed + timeout"
+          tone="danger"
+          icon={<IconAlert />}
           active={statusFilter === "failed"}
-          dotCls="bg-red-400"
-          textCls="text-red-300"
           onClick={() => setStatusFilter(statusFilter === "failed" ? "" : "failed")}
         />
       </div>
@@ -517,46 +522,52 @@ export function TasksView(): JSX.Element {
 
 // ─────────────────────── 内部子组件 ───────────────────────
 
-function KpiFilterTile({
-  label,
-  count,
-  active,
-  dotCls,
-  textCls,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  dotCls: string;
-  textCls: string;
-  onClick: () => void;
-}): JSX.Element {
+// ─── KPI icon — 16px mono SVG, 颜色继承父级 ───
+
+function IconList(): JSX.Element {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`group relative overflow-hidden rounded-md border px-3.5 py-3 text-left transition-all ${
-        active
-          ? "border-cyan-400/40 bg-white/[0.04]"
-          : "border-white/[0.05] bg-[#0b0e13] hover:border-white/[0.12] hover:bg-[#0d1119]"
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`h-1.5 w-1.5 rounded-full ${dotCls}`} />
-          <span className={`text-[11.5px] font-medium ${active ? "text-white" : "text-gray-400"}`}>
-            {label}
-          </span>
-        </div>
-        {active ? (
-          <span className="font-mono text-[9.5px] uppercase tracking-wider text-gray-600">active</span>
-        ) : null}
-      </div>
-      <div className={`mt-2 text-[24px] font-semibold tracking-tight tabular-nums ${active ? textCls : "text-gray-200"}`}>
-        {count}
-      </div>
-    </button>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="20" y2="6" />
+      <line x1="8" y1="12" x2="20" y2="12" />
+      <line x1="8" y1="18" x2="20" y2="18" />
+      <circle cx="4" cy="6" r="1" fill="currentColor" />
+      <circle cx="4" cy="12" r="1" fill="currentColor" />
+      <circle cx="4" cy="18" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconLoader(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v4" />
+      <path d="M12 18v4" />
+      <path d="M4.93 4.93l2.83 2.83" />
+      <path d="M16.24 16.24l2.83 2.83" />
+      <path d="M2 12h4" />
+      <path d="M18 12h4" />
+      <path d="M4.93 19.07l2.83-2.83" />
+      <path d="M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
+function IconCheckCircle(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="9 12 11.5 14.5 16 10" />
+    </svg>
+  );
+}
+
+function IconAlert(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3 L22 19 H 2 Z" />
+      <line x1="12" y1="10" x2="12" y2="14" />
+      <circle cx="12" cy="17" r="0.5" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -571,21 +582,18 @@ function FilterSelect({
   placeholder: string;
   options: Array<{ value: string; label: string }>;
 }): JSX.Element {
-  const hasValue = !!value;
+  // 注入 placeholder 作为可选"清空"项 (空 value)
+  const allOptions = placeholder
+    ? [{ value: "", label: placeholder }, ...options]
+    : options;
   return (
-    <select
+    <Dropdown
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`rounded-md border bg-[#0a0d12] py-1.5 pl-2.5 pr-7 text-[12px] outline-none transition-colors appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>')] bg-[length:12px] bg-[right_8px_center] bg-no-repeat ${
-        hasValue
-          ? "border-cyan-400/40 text-cyan-200"
-          : "border-white/[0.07] text-gray-300 hover:border-white/[0.12]"
-      }`}
-    >
-      {placeholder ? <option value="">{placeholder}</option> : null}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>{o.label}</option>
-      ))}
-    </select>
+      onChange={onChange}
+      options={allOptions}
+      placeholder={placeholder}
+      size="sm"
+      className="min-w-[140px]"
+    />
   );
 }

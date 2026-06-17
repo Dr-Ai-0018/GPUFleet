@@ -6,6 +6,7 @@ import { useToast } from "../../ui/Toast";
 import { labelForError } from "../../lib/labels";
 import { Card } from "../../ui/Card";
 import { Button } from "../../ui/Button";
+import { Dropdown } from "../../ui/Dropdown";
 import forms from "../../ui/forms.module.css";
 import {
   buildInitialForm,
@@ -132,30 +133,32 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
         </div>
 
         <div className={forms.row}>
-          <label className={forms.field}>
+          <div className={forms.field}>
             <span className={forms.label}>角色</span>
-            <select
-              className={forms.select}
+            <Dropdown
               value={form.node_type}
-              onChange={(event) => update("node_type", event.target.value as NodeType)}
-            >
-              <option value="physical">physical</option>
-              <option value="modal_runner">modal_runner</option>
-              <option value="control_plane">control_plane</option>
-            </select>
-          </label>
-          <label className={forms.field}>
+              onChange={(v) => update("node_type", v as NodeType)}
+              options={[
+                { value: "physical", label: "physical" },
+                { value: "modal_runner", label: "modal_runner" },
+                { value: "control_plane", label: "control_plane" },
+              ]}
+              mono
+            />
+          </div>
+          <div className={forms.field}>
             <span className={forms.label}>OS</span>
-            <select
-              className={forms.select}
+            <Dropdown
               value={form.os_type}
-              onChange={(event) => update("os_type", event.target.value as OsType)}
+              onChange={(v) => update("os_type", v as OsType)}
+              options={[
+                { value: "windows", label: "windows" },
+                { value: "linux", label: "linux" },
+              ]}
               disabled={form.node_type === "modal_runner"}
-            >
-              <option value="windows">windows</option>
-              <option value="linux">linux</option>
-            </select>
-          </label>
+              mono
+            />
+          </div>
         </div>
 
         <div className={forms.row}>

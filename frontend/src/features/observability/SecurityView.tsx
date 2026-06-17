@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../../api";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
+import { Dropdown } from "../../ui/Dropdown";
 import { formatRelative, formatTime, prettyJson } from "../../lib/format";
 import { mergeFirstPage } from "../../lib/listMerge";
 import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
@@ -497,22 +498,15 @@ function FilterBar({
   canClear: boolean;
   onClear: () => void;
 }): JSX.Element {
-  const hasTime = !!timeWindow;
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-white/[0.045] pb-3">
-      <select
+      <Dropdown
         value={timeWindow}
-        onChange={(e) => onTimeWindow(e.target.value as TimeWindow)}
-        className={`rounded-md border bg-[#0a0d12] py-1.5 pl-2.5 pr-7 text-[12px] outline-none transition-colors appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>')] bg-[length:12px] bg-[right_8px_center] bg-no-repeat ${
-          hasTime
-            ? "border-cyan-400/40 text-cyan-200"
-            : "border-white/[0.07] text-gray-300 hover:border-white/[0.12]"
-        }`}
-      >
-        {TIME_WINDOWS.map((w) => (
-          <option key={w.value} value={w.value}>{w.label}</option>
-        ))}
-      </select>
+        onChange={(v) => onTimeWindow(v as TimeWindow)}
+        options={TIME_WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
+        size="sm"
+        className="min-w-[120px]"
+      />
       <div className="relative ml-2 flex-1 max-w-md">
         <svg
           className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600"

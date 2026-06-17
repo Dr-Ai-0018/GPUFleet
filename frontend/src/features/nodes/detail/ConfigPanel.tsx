@@ -1,4 +1,5 @@
 import { i18n } from "../../../lib/i18n";
+import { Dropdown } from "../../../ui/Dropdown";
 import type { NodeResponse } from "../../../types";
 import type { NodeEditForm } from "./types";
 
@@ -77,14 +78,14 @@ export function ConfigPanel({
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className={FIELD_LABEL}>操作系统 <span className="text-gray-600">OS</span></label>
-              <select
+              <Dropdown
                 value={editForm.os_type}
-                onChange={(e) => updateEdit((prev) => ({ ...prev, os_type: e.target.value as NodeEditForm["os_type"] }))}
-                className={`${INPUT_BASE} appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>')] bg-[length:14px] bg-[right_12px_center] bg-no-repeat pr-9`}
-              >
-                <option value="windows">Windows</option>
-                <option value="linux">Linux</option>
-              </select>
+                onChange={(v) => updateEdit((prev) => ({ ...prev, os_type: v as NodeEditForm["os_type"] }))}
+                options={[
+                  { value: "windows", label: "Windows" },
+                  { value: "linux", label: "Linux" },
+                ]}
+              />
             </div>
             <div>
               <label className={FIELD_LABEL}>心跳间隔 <span className="text-gray-600">Heartbeat (s)</span></label>

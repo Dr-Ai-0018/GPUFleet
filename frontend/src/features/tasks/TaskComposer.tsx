@@ -5,6 +5,7 @@ import { labelForError } from "../../lib/labels";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { useToast } from "../../ui/Toast";
 import { Button } from "../../ui/Button";
+import { Dropdown } from "../../ui/Dropdown";
 import forms from "../../ui/forms.module.css";
 import type { NodeResponse } from "../../types";
 import {
@@ -151,36 +152,29 @@ export function TaskComposer({ node }: Props): JSX.Element {
   return (
     <form className={forms.stack} onSubmit={onSubmit}>
       <div className={forms.row}>
-        <label className={forms.field}>
+        <div className={forms.field}>
           <span className={forms.label}>任务类型</span>
-          <select
-            className={forms.select}
+          <Dropdown
             value={taskType}
-            onChange={(event) => onTaskTypeChange(event.target.value)}
-          >
-            {types.map((kind) => (
-              <option key={kind} value={kind}>
-                {taskTypeMeta(kind).label}
-              </option>
-            ))}
-          </select>
+            onChange={onTaskTypeChange}
+            options={types.map((kind) => ({ value: kind, label: taskTypeMeta(kind).label }))}
+          />
           <span className={forms.hint}>{meta.description}</span>
-        </label>
-        <label className={forms.field}>
+        </div>
+        <div className={forms.field}>
           <span className={forms.label}>工作目录</span>
-          <select
-            className={`${forms.select} ${forms.mono}`}
+          <Dropdown
             value={workdir}
-            onChange={(event) => setWorkdir(event.target.value)}
-          >
-            {node.allowed_workdirs.length === 0 ? <option value="">未配置</option> : null}
-            {node.allowed_workdirs.map((dir) => (
-              <option key={dir} value={dir}>
-                {dir}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={setWorkdir}
+            options={
+              node.allowed_workdirs.length === 0
+                ? [{ value: "", label: "未配置", disabled: true }]
+                : node.allowed_workdirs.map((dir) => ({ value: dir, label: dir }))
+            }
+            mono
+            placeholder="未配置"
+          />
+        </div>
         <label className={forms.field}>
           <span className={forms.label}>超时（秒）</span>
           <input
@@ -250,41 +244,43 @@ export function TaskComposer({ node }: Props): JSX.Element {
             onChange={(event) => setKillGraceSec(Number(event.target.value || 15))}
           />
         </label>
-        <label className={forms.field}>
+        <div className={forms.field}>
           <span className={forms.label}>danger_level</span>
-          <select
-            className={forms.select}
+          <Dropdown
             value={dangerLevel}
-            onChange={(event) => setDangerLevel(event.target.value)}
-          >
-            <option value="normal">normal</option>
-            <option value="warning">warning</option>
-            <option value="dangerous">dangerous</option>
-          </select>
-        </label>
+            onChange={setDangerLevel}
+            options={[
+              { value: "normal", label: "normal" },
+              { value: "warning", label: "warning" },
+              { value: "dangerous", label: "dangerous" },
+            ]}
+            mono
+          />
+        </div>
       </div>
 
       {showExecutionOverrides ? (
         <div className={forms.row}>
-          <label className={forms.field}>
+          <div className={forms.field}>
             <span className={forms.label}>执行环境</span>
-            <select
-              className={forms.select}
+            <Dropdown
               value={executionBackend}
-              onChange={(event) => setExecutionBackend(event.target.value)}
-            >
-              <option value="default">default</option>
-              <option value="system_python">system_python</option>
-              <option value="venv_path">venv_path</option>
-              <option value="uv_project">uv_project</option>
-              <option value="conda_name">conda_name</option>
-              <option value="conda_prefix">conda_prefix</option>
-              <option value="micromamba_prefix">micromamba_prefix</option>
-            </select>
+              onChange={setExecutionBackend}
+              options={[
+                { value: "default", label: "default" },
+                { value: "system_python", label: "system_python" },
+                { value: "venv_path", label: "venv_path" },
+                { value: "uv_project", label: "uv_project" },
+                { value: "conda_name", label: "conda_name" },
+                { value: "conda_prefix", label: "conda_prefix" },
+                { value: "micromamba_prefix", label: "micromamba_prefix" },
+              ]}
+              mono
+            />
             <span className={forms.hint}>
               `shell / python_script / pip_install` 可直接切换到指定 venv、uv、conda、micromamba。
             </span>
-          </label>
+          </div>
           <label className={forms.field}>
             <span className={forms.label}>环境目标</span>
             <input
