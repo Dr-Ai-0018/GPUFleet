@@ -31,6 +31,31 @@ def decode_gpu_snapshot(raw_gpu_json: str) -> tuple[list[dict[str, object]], dic
     return [], {}
 
 
+def _first_sample_gpu(raw_sample_gpus_json: str | None) -> dict[str, object] | None:
+    if not raw_sample_gpus_json:
+        return None
+    try:
+        parsed = json.loads(raw_sample_gpus_json)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(parsed, list) or not parsed:
+        return None
+    first = parsed[0]
+    return first if isinstance(first, dict) else None
+
+
+def _sample_gpu_memory_percent(sample_gpu: dict[str, object] | None, total_vram_mb: float | None) -> float | None:
+    if sample_gpu is None or not total_vram_mb or total_vram_mb <= 0:
+        return None
+    raw_used = sample_gpu.get("vram_used_bytes")
+    if raw_used is None:
+        return None
+    try:
+        return (float(raw_used) / float(total_vram_mb * 1024 * 1024)) * 100.0
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_iso_or_none(raw: str | None) -> datetime | None:
     if not raw:
         return None
@@ -598,7 +623,8 @@ def get_status_history(
 
         sql_parts = [
             "SELECT reported_at, cpu_usage_percent, memory_usage_percent,",
-            "       gpu_utilization_percent, gpu_memory_percent, gpu_temperature_c, gpu_power_draw_w, gpu_json",
+            "       gpu_utilization_percent, gpu_memory_percent, gpu_temperature_c, gpu_power_draw_w,",
+            "       gpu_json, sample_gpus_json",
             "FROM node_status_snapshots",
             "WHERE node_id = ?",
         ]
@@ -615,19 +641,24 @@ def get_status_history(
         rows = conn.execute("\n".join(sql_parts), params).fetchall()
 
     items: list[NodeStatusHistoryItem] = []
+    current_total_vram_mb: float | None = None
     for row in reversed(rows):
         gpu_data = json.loads(row["gpu_json"]) if row["gpu_json"] else {}
         gpus_list = gpu_data.get("gpus", []) if isinstance(gpu_data, dict) else (gpu_data if isinstance(gpu_data, list) else [])
         first_gpu = gpus_list[0] if gpus_list else None
+        if first_gpu and first_gpu.get("total_vram_mb"):
+            current_total_vram_mb = float(first_gpu["total_vram_mb"])
+        sample_gpu = _first_sample_gpu(row["sample_gpus_json"])
+        sample_memory_percent = _sample_gpu_memory_percent(sample_gpu, current_total_vram_mb)
         items.append(
             NodeStatusHistoryItem(
                 reported_at=row["reported_at"],
                 cpu_usage_percent=row["cpu_usage_percent"],
                 memory_usage_percent=row["memory_usage_percent"],
-                gpu_utilization_percent=row["gpu_utilization_percent"],
-                gpu_memory_percent=row["gpu_memory_percent"],
-                gpu_temperature_c=row["gpu_temperature_c"],
-                gpu_power_draw_w=row["gpu_power_draw_w"],
+                gpu_utilization_percent=row["gpu_utilization_percent"] if row["gpu_utilization_percent"] is not None else (sample_gpu.get("util") if sample_gpu else None),
+                gpu_memory_percent=row["gpu_memory_percent"] if row["gpu_memory_percent"] is not None else sample_memory_percent,
+                gpu_temperature_c=row["gpu_temperature_c"] if row["gpu_temperature_c"] is not None else (sample_gpu.get("temp_c") if sample_gpu else None),
+                gpu_power_draw_w=row["gpu_power_draw_w"] if row["gpu_power_draw_w"] is not None else (sample_gpu.get("power_w") if sample_gpu else None),
                 gpu_clock_graphics_mhz=first_gpu.get("clock_graphics_mhz") if first_gpu else None,
             )
         )

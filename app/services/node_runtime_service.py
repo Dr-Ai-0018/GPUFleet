@@ -365,6 +365,12 @@ def _MiB_to_bytes(value: int | None) -> int | None:
     return value * 1024 * 1024 if value is not None else None
 
 
+def _sample_vram_percent(vram_used_bytes: int | None, total_vram_mb: int | None) -> float | None:
+    if vram_used_bytes is None or not total_vram_mb or total_vram_mb <= 0:
+        return None
+    return (float(vram_used_bytes) / float(total_vram_mb * 1024 * 1024)) * 100.0
+
+
 def _compact_base_gpus(payload: HeartbeatRequest) -> list[dict] | None:
     """把心跳顶层 gpus 压缩为高密 sample 多卡数组格式 (供基准行 sample_gpus_json 列用)."""
     if not payload.gpus:
@@ -430,15 +436,19 @@ def _build_snapshot_rows(
         seen_ts.add(sample_ts)
 
         first_sample_gpu = sample.gpus[0] if sample.gpus else None
+        first_payload_gpu = payload.gpus[0] if payload.gpus else None
         sample_row = (
             node_id,
             sample_ts,
             sample.cpu_percent,
             sample.memory_percent,
             first_sample_gpu.util if first_sample_gpu else None,
-            None,  # gpu_memory_percent: 高密 sample 不携带百分比 (仅基准行携带)
+            _sample_vram_percent(
+                first_sample_gpu.vram_used_bytes if first_sample_gpu else None,
+                first_payload_gpu.total_vram_mb if first_payload_gpu else None,
+            ),
             first_sample_gpu.temp_c if first_sample_gpu else None,
-            None,  # gpu_power_draw_w: 同上
+            first_sample_gpu.power_w if first_sample_gpu else None,
             None,  # cpu_json
             None,  # memory_json
             None,  # disk_json

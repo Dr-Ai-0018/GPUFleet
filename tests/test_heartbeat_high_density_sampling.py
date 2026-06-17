@@ -50,7 +50,7 @@ def _snapshot_rows(node_id: str) -> list[sqlite3.Row]:
         rows = conn.execute(
             """
             SELECT reported_at, cpu_usage_percent, memory_usage_percent,
-                   gpu_utilization_percent, gpu_temperature_c,
+                   gpu_utilization_percent, gpu_memory_percent, gpu_temperature_c, gpu_power_draw_w,
                    cpu_json, memory_json, gpu_json, raw_payload_json, sample_gpus_json
             FROM node_status_snapshots
             WHERE node_id = ?
@@ -122,7 +122,13 @@ def test_five_samples_writes_six_rows_with_null_json_metadata(
             "cpu_percent": 60.0 + sec,
             "memory_percent": 47.0 + sec * 0.1,
             "gpus": [
-                {"idx": 0, "util": 80.0 + sec, "temp_c": 70.0 + sec * 0.1, "vram_used_bytes": 12_000_000_000 + sec * 1000},
+                {
+                    "idx": 0,
+                    "util": 80.0 + sec,
+                    "temp_c": 70.0 + sec * 0.1,
+                    "vram_used_bytes": 12_000_000_000 + sec * 1000,
+                    "power_w": 180.0 + sec,
+                },
             ],
         }
         for sec in range(5)
@@ -176,9 +182,20 @@ def test_five_samples_writes_six_rows_with_null_json_metadata(
         assert row["raw_payload_json"] is None
         assert row["cpu_usage_percent"] == 60.0 + i
         assert row["gpu_utilization_percent"] == 80.0 + i
+        assert row["gpu_memory_percent"] == ((12_000_000_000 + i * 1000) / (24576 * 1024 * 1024)) * 100.0
+        assert row["gpu_power_draw_w"] == 180.0 + i
         sample_compact = json.loads(row["sample_gpus_json"])
         assert sample_compact[0]["util"] == 80.0 + i
         assert sample_compact[0]["vram_used_bytes"] == 12_000_000_000 + i * 1000
+        assert sample_compact[0]["power_w"] == 180.0 + i
+
+    history_resp = client.get(f"/api/v1/admin/nodes/{node['node_id']}/status/history?limit=10", headers=auth_headers)
+    assert history_resp.status_code == 200, history_resp.text
+    history_items = history_resp.json()["items"]
+    sample_items = [item for item in history_items if item["reported_at"].endswith(".123000+00:00")]
+    assert len(sample_items) == 5
+    assert sample_items[0]["gpu_memory_percent"] == (12_000_000_000 / (24576 * 1024 * 1024)) * 100.0
+    assert sample_items[0]["gpu_power_draw_w"] == 180.0
 
 
 def test_multi_gpu_samples_preserved_per_card(

@@ -293,8 +293,16 @@ def collect_primary_network(settings: AgentSettings, *, track_rate: bool = True)
         return {}
 
     network_output = _run_powershell(
-        "$route = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | "
-        "Sort-Object RouteMetric,InterfaceMetric | Select-Object -First 1; "
+        "$routes = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | "
+        "Sort-Object RouteMetric,InterfaceMetric; "
+        "$route = $null; "
+        "foreach ($candidate in $routes) { "
+        "  $candidateAdapter = Get-NetAdapter -InterfaceIndex $candidate.InterfaceIndex -ErrorAction SilentlyContinue; "
+        "  if (-not $candidateAdapter) { continue } "
+        "  $adapterText = (($candidateAdapter.Name + ' ' + $candidateAdapter.InterfaceDescription) -as [string]); "
+        "  if ($adapterText -notmatch '(?i)tunnel|virtual|loopback|pseudo|wintun|tap|vpn|meta') { $route = $candidate; break } "
+        "} "
+        "if (-not $route) { $route = $routes | Select-Object -First 1 }; "
         "if (-not $route) { return }; "
         "$adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue; "
         "$ip = Get-NetIPConfiguration -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue; "
