@@ -13,6 +13,7 @@ dependencies = [
   "requests>=2.34.2",
   "prometheus-client>=0.20,<1.0",
   "structlog>=24.0,<26.0",
+  "alembic>=1.18.4",
 ]
 
 [build-system]
@@ -24,7 +25,6 @@ packages = ["app", "app.routers"]
 
 [dependency-groups]
 dev = [
-    "alembic>=1.18.4",
     "psutil>=5.9,<7.0",
     "pynvml>=11.5,<13.0",
     "pyright>=1.1.409",
