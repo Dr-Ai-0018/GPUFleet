@@ -4,6 +4,8 @@ import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { taskStatusLabel } from "../../lib/labels";
 import { formatRelative, formatTime } from "../../lib/format";
+import { mergeFirstPage } from "../../lib/listMerge";
+import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
 import { MiniSparkline } from "../../ui/MiniSparkline";
 import type { AdminTaskListItem } from "../../types";
 
@@ -22,36 +24,7 @@ const STATUS_TONE: Record<string, { dot: string; text: string }> = {
   lost: { dot: "bg-red-400", text: "text-red-300" },
 };
 
-// ─── 时间窗(任务过滤用,比时序图粗一些) ───
-type TimeWindow = "" | "1h" | "24h" | "7d" | "30d";
-const TIME_WINDOWS: Array<{ value: TimeWindow; label: string }> = [
-  { value: "", label: "全部时间" },
-  { value: "1h", label: "最近 1 小时" },
-  { value: "24h", label: "最近 24 小时" },
-  { value: "7d", label: "最近 7 天" },
-  { value: "30d", label: "最近 30 天" },
-];
-
-function windowSince(w: TimeWindow): string | undefined {
-  if (!w) return undefined;
-  const ms = w === "1h" ? 3600000 : w === "24h" ? 86400000 : w === "7d" ? 7 * 86400000 : 30 * 86400000;
-  return new Date(Date.now() - ms).toISOString();
-}
-
 const PAGE_SIZE = 50;
-
-/** 把后台轮询拉到的"最新首页"按 task_id 合并进现有列表:
- *  - 已存在的任务: 用新版本替换 (反映 status 变化, e.g. running → succeeded)
- *  - 不存在的任务: 是新冒出来的, 插到列表最前面
- *  - 用户已经翻到的后续页保留原位置 (除非在新首页里就用新版本覆盖)
- */
-function mergeFirstPage<T extends { task_id: string }>(prev: T[], fresh: T[]): T[] {
-  const freshById = new Map(fresh.map((t) => [t.task_id, t]));
-  const prevIds = new Set(prev.map((t) => t.task_id));
-  const newcomers = fresh.filter((t) => !prevIds.has(t.task_id));
-  const refreshed = prev.map((t) => freshById.get(t.task_id) ?? t);
-  return [...newcomers, ...refreshed];
-}
 
 export function TasksView(): JSX.Element {
   const store = useConsoleStore();
@@ -109,7 +82,7 @@ export function TasksView(): JSX.Element {
           if (mode === "reset") return page.items;
           if (mode === "append") return [...prev, ...page.items];
           // refresh: 把首页"最新"按 task_id 合并进现有列表, 新出现的插到最前, 已存在的就地更新状态
-          return mergeFirstPage(prev, page.items);
+          return mergeFirstPage(prev, page.items, (t) => t.task_id);
         });
         // refresh 不动 cursor (用户已经翻到的页面要保留), 只 reset/append 才更新
         if (mode !== "refresh") setCursor(page.next_cursor ?? null);

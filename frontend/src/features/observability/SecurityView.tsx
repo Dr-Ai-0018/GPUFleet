@@ -3,36 +3,14 @@ import { api, ApiError } from "../../api";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { formatRelative, formatTime, prettyJson } from "../../lib/format";
+import { mergeFirstPage } from "../../lib/listMerge";
+import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
 import type { AuditEventView, SecurityWarningView } from "../../types";
 
 type TabKey = "warnings" | "audits";
 
-type TimeWindow = "" | "1h" | "24h" | "7d" | "30d";
-const TIME_WINDOWS: Array<{ value: TimeWindow; label: string }> = [
-  { value: "", label: "全部时间" },
-  { value: "1h", label: "最近 1 小时" },
-  { value: "24h", label: "最近 24 小时" },
-  { value: "7d", label: "最近 7 天" },
-  { value: "30d", label: "最近 30 天" },
-];
-
-function windowSince(w: TimeWindow): string | undefined {
-  if (!w) return undefined;
-  const ms = w === "1h" ? 3600000 : w === "24h" ? 86400000 : w === "7d" ? 7 * 86400000 : 30 * 86400000;
-  return new Date(Date.now() - ms).toISOString();
-}
-
 const PAGE_SIZE = 50;
 const POLL_INTERVAL_MS = 10_000;
-
-/** 按 id 合并:新出现的插到最前,已存在的替换,后续页保留 */
-function mergeFirstPage<T extends { id: number }>(prev: T[], fresh: T[]): T[] {
-  const freshById = new Map(fresh.map((x) => [x.id, x]));
-  const prevIds = new Set(prev.map((x) => x.id));
-  const newcomers = fresh.filter((x) => !prevIds.has(x.id));
-  const refreshed = prev.map((x) => freshById.get(x.id) ?? x);
-  return [...newcomers, ...refreshed];
-}
 
 export function SecurityView(): JSX.Element {
   const store = useConsoleStore();
@@ -164,7 +142,7 @@ function WarningsList(): JSX.Element {
         setItems((prev) => {
           if (mode === "reset") return page.items;
           if (mode === "append") return [...prev, ...page.items];
-          return mergeFirstPage(prev, page.items);
+          return mergeFirstPage(prev, page.items, (x) => x.id);
         });
         if (mode !== "refresh") setCursor(page.next_cursor ?? null);
         setTotal(page.total_estimate ?? null);
@@ -349,7 +327,7 @@ function AuditsList(): JSX.Element {
         setItems((prev) => {
           if (mode === "reset") return page.items;
           if (mode === "append") return [...prev, ...page.items];
-          return mergeFirstPage(prev, page.items);
+          return mergeFirstPage(prev, page.items, (x) => x.id);
         });
         if (mode !== "refresh") setCursor(page.next_cursor ?? null);
         setTotal(page.total_estimate ?? null);

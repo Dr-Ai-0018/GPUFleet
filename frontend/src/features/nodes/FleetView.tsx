@@ -5,6 +5,7 @@ import type { OnlineStatus } from "../../types";
 import { nodeTypeLabel, osLabel } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
 import { GpuHeatCells } from "../../ui/GpuHeatCells";
+import { MetricTile } from "../../ui/MetricTile";
 import type { components } from "../../types.generated";
 
 type GpuSnapshot = components["schemas"]["HeartbeatGpu"];
@@ -224,14 +225,15 @@ export function FleetView(): JSX.Element {
                     {/* 实时负载 = 3 个统一 metric tile (与 Overview 同款) */}
                     <td className="min-w-[300px] px-4 py-3">
                       <div className="grid grid-cols-3 gap-1.5" style={{ width: 300 }}>
-                        <MetricTile label="CPU" pct={cpuPct} muted={!hasMetrics} />
-                        <MetricTile label="MEM" pct={memPct} muted={!hasMetrics} />
+                        <MetricTile label="CPU" pct={cpuPct} muted={!hasMetrics} size="sm" />
+                        <MetricTile label="MEM" pct={memPct} muted={!hasMetrics} size="sm" />
                         <MetricTile
                           label="GPU"
                           pct={gpuAvg}
                           muted={!hasMetrics || gpus.length === 0}
                           badge={gpus.length > 1 ? `×${gpus.length}` : undefined}
                           tooltipContent={gpus.length > 0 ? <GpuHeatCells gpus={gpus} size={12} /> : undefined}
+                          size="sm"
                         />
                       </div>
                     </td>
@@ -297,58 +299,3 @@ export function FleetView(): JSX.Element {
   );
 }
 
-// ─────────────────────── 内部子组件 ───────────────────────
-
-/** 节点行的统一 metric tile — 与 Overview 节点健康度同款,5 个顶级页面收齐后再统一抽到 ui/ */
-function MetricTile({
-  label,
-  pct,
-  muted = false,
-  badge,
-  tooltipContent,
-}: {
-  label: string;
-  pct: number;
-  muted?: boolean;
-  badge?: string;
-  tooltipContent?: JSX.Element;
-}): JSX.Element {
-  const clamped = Math.max(0, Math.min(100, pct));
-  const color = muted
-    ? "#3a3f4a"
-    : clamped >= 90 ? "#f85149"
-    : clamped >= 70 ? "#f0b040"
-    : clamped >= 40 ? "#06b6d4"
-    : "#10b981";
-  const valueColorCls = muted
-    ? "text-gray-600"
-    : clamped >= 90 ? "text-red-300"
-    : clamped >= 70 ? "text-amber-300"
-    : clamped >= 40 ? "text-cyan-300"
-    : "text-emerald-300";
-
-  return (
-    <div className="group/tile relative min-w-0 rounded border border-white/[0.05] bg-white/[0.015] px-2 py-1 transition-colors group-hover:border-white/[0.08] hover:bg-white/[0.03]">
-      <div className="flex items-baseline justify-between gap-1.5">
-        <span className="text-[9.5px] font-medium uppercase tracking-[0.08em] text-gray-600">{label}</span>
-        {badge ? <span className="font-mono text-[9.5px] text-gray-600">{badge}</span> : null}
-      </div>
-      <div className={`mt-0.5 text-[13.5px] font-semibold leading-none tabular-nums ${valueColorCls}`}>
-        {muted ? "—" : `${Math.round(clamped)}%`}
-      </div>
-      <div className="mt-1 h-[2.5px] overflow-hidden rounded-full bg-white/[0.05]">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: muted ? 0 : `${clamped}%`, backgroundColor: color }}
-        />
-      </div>
-      {tooltipContent ? (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100">
-          <div className="whitespace-nowrap rounded-md border border-white/[0.08] bg-[#0c0f14] px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
-            {tooltipContent}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}

@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { useMemo } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { LineChart, BarChart } from "echarts/charts";
@@ -10,6 +10,8 @@ import { StatusPill } from "../../ui/StatusPill";
 import { MiniSparkline } from "../../ui/MiniSparkline";
 import { GpuHeatCells } from "../../ui/GpuHeatCells";
 import { DeltaBadge } from "../../ui/DeltaBadge";
+import { MetricTile } from "../../ui/MetricTile";
+import { GpuUtilGauge } from "../../ui/GpuUtilGauge";
 import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { formatRelative, bytesToReadable } from "../../lib/format";
 import type { components } from "../../types.generated";
@@ -267,7 +269,7 @@ export function OverviewView(): JSX.Element {
             <SectionHeading title="GPU 集群" sub="全局平均利用率与各节点首卡利用率" />
             <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
               <div className="flex flex-col items-center justify-center gap-5">
-                <GpuUtilGauge value={gpuStats.avgUtil} />
+                <GpuUtilGauge value={gpuStats.avgUtil} sublabel="AVG UTIL" caption="集群平均算力" />
                 <div className="w-full max-w-[240px]">
                   <div className="mb-1.5 flex items-baseline justify-between text-[11px]">
                     <span className="text-gray-500">显存占用</span>
@@ -578,138 +580,3 @@ function KpiItem({
   );
 }
 
-/** 节点健康度行的统一 metric tile — 同尺寸 / 同布局 / 同色阶,Grafana stat panel 同款语言 */
-function MetricTile({
-  label,
-  pct,
-  muted = false,
-  badge,
-  tooltipContent,
-}: {
-  label: string;
-  pct: number;
-  muted?: boolean;
-  badge?: string;
-  tooltipContent?: JSX.Element;
-}): JSX.Element {
-  const clamped = Math.max(0, Math.min(100, pct));
-  // 统一 load-level 色阶: < 40 emerald / 40-70 cyan / 70-90 amber / >= 90 red
-  const color = muted
-    ? "#3a3f4a"
-    : clamped >= 90
-      ? "#f85149"
-      : clamped >= 70
-        ? "#f0b040"
-        : clamped >= 40
-          ? "#06b6d4"
-          : "#10b981";
-  const valueColorCls = muted
-    ? "text-gray-600"
-    : clamped >= 90
-      ? "text-red-300"
-      : clamped >= 70
-        ? "text-amber-300"
-        : clamped >= 40
-          ? "text-cyan-300"
-          : "text-emerald-300";
-
-  return (
-    <div className="group/tile relative min-w-0 rounded-md border border-white/[0.05] bg-white/[0.015] px-2.5 py-1.5 transition-colors hover:border-white/[0.1] hover:bg-white/[0.03]">
-      <div className="flex items-baseline justify-between gap-1.5">
-        <span className="text-[9.5px] font-medium uppercase tracking-[0.08em] text-gray-600">
-          {label}
-        </span>
-        {badge ? (
-          <span className="font-mono text-[9.5px] text-gray-600">{badge}</span>
-        ) : null}
-      </div>
-      <div className={`mt-0.5 text-[15px] font-semibold leading-none tabular-nums ${valueColorCls}`}>
-        {muted ? "—" : `${Math.round(clamped)}%`}
-      </div>
-      <div className="mt-1.5 h-[2.5px] overflow-hidden rounded-full bg-white/[0.05]">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: muted ? 0 : `${clamped}%`, backgroundColor: color }}
-        />
-      </div>
-      {/* hover tooltip — 仅 GPU tile 用,展示多卡热力 */}
-      {tooltipContent ? (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100">
-          <div className="rounded-md border border-white/[0.08] bg-[#0c0f14] px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.5)] whitespace-nowrap">
-            {tooltipContent}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** GPU 算力利用率半圆仪表盘 — 与 MonitorPanel 同源,5 个顶级页面收齐后再统一抽到 ui/ */
-function GpuUtilGauge({ value }: { value: number }): JSX.Element {
-  const pct = Math.max(0, Math.min(100, value));
-  const radius = 78;
-  const cx = 100;
-  const cy = 100;
-  const arcLength = Math.PI * radius;
-  const dashOffset = arcLength * (1 - pct / 100);
-  const id = useId().replace(/:/g, "");
-  const gradId = `gpu-gauge-${id}`;
-
-  return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 200 120" width="200" height="120" className="block">
-        <defs>
-          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="38%" stopColor="#06b6d4" />
-            <stop offset="72%" stopColor="#f0b040" />
-            <stop offset="100%" stopColor="#f85149" />
-          </linearGradient>
-        </defs>
-        <path
-          d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
-          stroke={`url(#${gradId})`}
-          strokeOpacity="0.18"
-          strokeWidth="11"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <path
-          d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
-          stroke={`url(#${gradId})`}
-          strokeWidth="11"
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={arcLength}
-          strokeDashoffset={dashOffset}
-          style={{ transition: "stroke-dashoffset 0.6s ease-out" }}
-        />
-        <text
-          x={cx}
-          y={cy - 14}
-          textAnchor="middle"
-          fill="white"
-          fontSize="34"
-          fontWeight="600"
-          fontFamily="ui-monospace, SFMono-Regular, Consolas, monospace"
-          style={{ letterSpacing: "-1px" }}
-        >
-          {Math.round(pct)}
-          <tspan fontSize="16" fill="#6b7280" dx="2">%</tspan>
-        </text>
-        <text
-          x={cx}
-          y={cy + 6}
-          textAnchor="middle"
-          fill="#6b7280"
-          fontSize="10"
-          fontFamily="ui-monospace, monospace"
-          style={{ letterSpacing: "1.5px" }}
-        >
-          AVG UTIL
-        </text>
-      </svg>
-      <span className="-mt-1 text-[11.5px] text-gray-500">集群平均算力</span>
-    </div>
-  );
-}
