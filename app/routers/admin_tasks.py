@@ -12,7 +12,7 @@ from app.schemas import (
     AdminTaskArtifactView,
     AdminTaskCreateRequest,
     AdminTaskDetail,
-    AdminTaskListItem,
+    AdminTaskListPage,
     AdminTaskLogView,
     ReviewApproveRequest,
     ReviewEscalateRequest,
@@ -35,14 +35,28 @@ async def create_task(
     return await admin_tasks_service.create_task(payload, request, admin, db, settings)
 
 
-@router.get("", response_model=list[AdminTaskListItem])
+@router.get("", response_model=AdminTaskListPage)
 def list_tasks(
     _: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[AdminTaskListItem]:
-    return admin_tasks_service.list_tasks(db, limit=limit, offset=offset)
+    cursor: str | None = None,
+    node_id: str | None = None,
+    status: str | None = None,
+    type: str | None = None,  # noqa: A002 - API query parameter name
+    since: str | None = None,
+    until: str | None = None,
+) -> AdminTaskListPage:
+    return admin_tasks_service.list_tasks(
+        db,
+        limit=limit,
+        cursor=cursor,
+        node_id=node_id,
+        status=status,
+        task_type=type,
+        since=since,
+        until=until,
+    )
 
 
 @router.get("/{task_id}", response_model=AdminTaskDetail)

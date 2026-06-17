@@ -318,12 +318,12 @@ export function OverviewView(): JSX.Element {
                   const gpuAvg = gpus.length > 0
                     ? gpus.reduce((s, g) => s + Number(g.utilization_percent ?? 0), 0) / gpus.length
                     : 0;
-                  const isOnline = node.connection_status === "online";
+                  const isOnline = node.online_status === "online";
                   const statusTone = isOnline
                     ? { dot: "bg-emerald-400", glow: "shadow-[0_0_8px_rgba(16,185,129,0.55)]" }
-                    : node.connection_status === "offline"
+                    : node.online_status === "offline"
                       ? { dot: "bg-amber-400", glow: "" }
-                      : node.connection_status === "disabled"
+                      : node.online_status === "disabled"
                         ? { dot: "bg-gray-500", glow: "" }
                         : { dot: "bg-violet-400", glow: "" };
                   const hasMetrics = node.latest_status != null;

@@ -340,6 +340,12 @@ class AdminTaskListItem(BaseModel):
     finished_at: str | None
 
 
+class AdminTaskListPage(BaseModel):
+    items: list[AdminTaskListItem]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
+
+
 class AdminTaskLogView(BaseModel):
     stream: Literal["stdout", "stderr"]
     last_offset: int
@@ -451,6 +457,12 @@ class AuditEventView(BaseModel):
     created_at: str
 
 
+class AuditEventPage(BaseModel):
+    items: list[AuditEventView]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
+
+
 class SecurityWarningView(BaseModel):
     id: int
     source_type: str
@@ -459,6 +471,12 @@ class SecurityWarningView(BaseModel):
     command_excerpt: str | None
     detail: dict[str, Any]
     created_at: str
+
+
+class SecurityWarningPage(BaseModel):
+    items: list[SecurityWarningView]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
 
 
 class NodeTaskEventRequest(BaseModel):

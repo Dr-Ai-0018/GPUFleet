@@ -36,6 +36,7 @@ export type NodeCreateResponse = Omit<Schemas["NodeCreateResponse"], "onboarding
 };
 export type NodeResetSecretResponse = NodeCreateResponse;
 export type AdminTaskListItem = Schemas["AdminTaskListItem"];
+export type AdminTaskListPage = Schemas["AdminTaskListPage"];
 export type AdminTaskLogView = Schemas["AdminTaskLogView"];
 export type AdminTaskArtifactView = Schemas["AdminTaskArtifactView"];
 export type AdminTaskResultSummary = Schemas["AdminTaskResultSummary"];
@@ -44,7 +45,9 @@ export type AdminTaskDetail = Omit<Schemas["AdminTaskDetail"], "logs" | "artifac
   artifacts: AdminTaskArtifactView[];
 };
 export type AuditEventView = Schemas["AuditEventView"];
+export type AuditEventPage = Schemas["AuditEventPage"];
 export type SecurityWarningView = Schemas["SecurityWarningView"];
+export type SecurityWarningPage = Schemas["SecurityWarningPage"];
 export type AlertMessageView = Schemas["AlertMessageView"];
 
 export type OnlineStatus = NonNullable<NodeResponse["connection_status"]>;
@@ -64,4 +67,15 @@ export type TaskCreatePayload = Omit<Schemas["AdminTaskCreateRequest"], "type"> 
 export type ListQuery = {
   limit?: number;
   offset?: number;
+  cursor?: string;
+  node_id?: string;
+  status?: string;
+  type?: string;
+  since?: string;
+  until?: string;
+  actor_type?: string;
+  action?: string;
+  target_type?: string;
+  warning_type?: string;
+  source_type?: string;
 };

@@ -2,7 +2,9 @@ import type {
   AdminProfile,
   AdminTaskDetail,
   AdminTaskListItem,
+  AdminTaskListPage,
   AuditEventView,
+  AuditEventPage,
   DashboardOverview,
   NodeCreatePayload,
   NodeCreateResponse,
@@ -12,6 +14,7 @@ import type {
   NodeStatusPreview,
   NodeUpdatePayload,
   SecurityWarningView,
+  SecurityWarningPage,
   TaskCreatePayload,
   ListQuery,
   TokenPair,
@@ -120,6 +123,17 @@ function buildListQuery(query?: ListQuery): string {
   const params = new URLSearchParams();
   if (typeof query.limit === "number") params.set("limit", String(query.limit));
   if (typeof query.offset === "number") params.set("offset", String(query.offset));
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.node_id) params.set("node_id", query.node_id);
+  if (query.status) params.set("status", query.status);
+  if (query.type) params.set("type", query.type);
+  if (query.since) params.set("since", query.since);
+  if (query.until) params.set("until", query.until);
+  if (query.actor_type) params.set("actor_type", query.actor_type);
+  if (query.action) params.set("action", query.action);
+  if (query.target_type) params.set("target_type", query.target_type);
+  if (query.warning_type) params.set("warning_type", query.warning_type);
+  if (query.source_type) params.set("source_type", query.source_type);
   const search = params.toString();
   return search ? `?${search}` : "";
 }
@@ -141,6 +155,28 @@ async function requestAllPages<T>(
       return items;
     }
     offset += page.length;
+  }
+}
+
+async function requestAllCursorPages<T>(
+  token: string,
+  path: string,
+  limit = DEFAULT_PAGE_SIZE,
+): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+
+  while (true) {
+    const page = await request<{ items: T[]; next_cursor?: string | null }>(
+      `${path}${buildListQuery({ limit, cursor })}`,
+      {},
+      token,
+    );
+    items.push(...page.items);
+    if (!page.next_cursor) {
+      return items;
+    }
+    cursor = page.next_cursor;
   }
 }
 
@@ -250,8 +286,8 @@ export const api = {
     );
   },
 
-  listTasks(token: string, query?: ListQuery): Promise<AdminTaskListItem[]> {
-    return request<AdminTaskListItem[]>(
+  listTasks(token: string, query?: ListQuery): Promise<AdminTaskListPage> {
+    return request<AdminTaskListPage>(
       `${API_BASE}/admin/tasks${buildListQuery(query)}`,
       {},
       token,
@@ -259,7 +295,7 @@ export const api = {
   },
 
   listAllTasks(token: string): Promise<AdminTaskListItem[]> {
-    return requestAllPages<AdminTaskListItem>(token, `${API_BASE}/admin/tasks`);
+    return requestAllCursorPages<AdminTaskListItem>(token, `${API_BASE}/admin/tasks`);
   },
 
   getTaskDetail(token: string, taskId: string): Promise<AdminTaskDetail> {
@@ -290,9 +326,25 @@ export const api = {
     return request<AuditEventView[]>(`${API_BASE}/admin/audit-events?limit=${limit}`, {}, token);
   },
 
+  listAudits(token: string, query?: ListQuery): Promise<AuditEventPage> {
+    return request<AuditEventPage>(
+      `${API_BASE}/admin/audits${buildListQuery(query)}`,
+      {},
+      token,
+    );
+  },
+
   getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {
     return request<SecurityWarningView[]>(
       `${API_BASE}/admin/security-warnings?limit=${limit}`,
+      {},
+      token,
+    );
+  },
+
+  listWarnings(token: string, query?: ListQuery): Promise<SecurityWarningPage> {
+    return request<SecurityWarningPage>(
+      `${API_BASE}/admin/warnings${buildListQuery(query)}`,
       {},
       token,
     );

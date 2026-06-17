@@ -14,6 +14,7 @@ from app.schemas import (
     AdminTaskArtifactView,
     AdminTaskCreateRequest,
     AdminTaskDetail,
+    AdminTaskListPage,
     AdminTaskListItem,
     AdminTaskLogView,
     AdminTaskResultSummary,
@@ -21,6 +22,7 @@ from app.schemas import (
     ReviewEscalateRequest,
     ReviewRejectRequest,
 )
+from app.services.cursor_pagination import add_cursor_filter, add_time_filters, encode_cursor
 from app.services.task_state import TaskStateError, get_task_row, transition_task
 from app.task_utils import (
     MODAL_TASK_TYPES,
@@ -455,13 +457,57 @@ async def create_task(
         return task_row_to_detail(conn, row, include_logs=False, include_artifacts=False, include_result=False)
 
 
-def list_tasks(db: Database, *, limit: int, offset: int) -> list[AdminTaskListItem]:
+def list_tasks(
+    db: Database,
+    *,
+    limit: int,
+    cursor: str | None = None,
+    node_id: str | None = None,
+    status: str | None = None,
+    task_type: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> AdminTaskListPage:
+    sql_parts = ["SELECT * FROM tasks WHERE 1=1"]
+    count_parts = ["SELECT COUNT(*) AS count FROM tasks WHERE 1=1"]
+    params: list[object] = []
+    count_params: list[object] = []
+
+    def add_filter(condition: str, value: object) -> None:
+        sql_parts.append(condition)
+        count_parts.append(condition)
+        params.append(value)
+        count_params.append(value)
+
+    if node_id:
+        add_filter("AND node_id = ?", node_id)
+    if status:
+        add_filter("AND status = ?", status)
+    if task_type:
+        add_filter("AND type = ?", task_type)
+
+    add_time_filters(sql_parts, params, since=since, until=until)
+    add_time_filters(count_parts, count_params, since=since, until=until)
+    add_cursor_filter(sql_parts, params, cursor)
+
+    sql_parts.append("ORDER BY created_at DESC, id DESC")
+    sql_parts.append("LIMIT ?")
+    params.append(limit + 1)
+
     with db.connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM tasks ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
-            (limit, offset),
-        ).fetchall()
-    return [task_row_to_list_item(row) for row in rows]
+        rows = conn.execute("\n".join(sql_parts), params).fetchall()
+        total_estimate = conn.execute("\n".join(count_parts), count_params).fetchone()["count"]
+
+    page_rows = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit and page_rows:
+        last = page_rows[-1]
+        next_cursor = encode_cursor(created_at=last["created_at"], row_id=last["id"])
+    return AdminTaskListPage(
+        items=[task_row_to_list_item(row) for row in page_rows],
+        next_cursor=next_cursor,
+        total_estimate=total_estimate,
+    )
 
 
 def get_task(task_id: str, db: Database) -> AdminTaskDetail:

@@ -251,6 +251,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Audits Page */
+        get: operations["list_audits_page_api_v1_admin_audits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/security-warnings": {
         parameters: {
             query?: never;
@@ -260,6 +277,23 @@ export interface paths {
         };
         /** List Security Warnings */
         get: operations["list_security_warnings_api_v1_admin_security_warnings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/warnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Warnings Page */
+        get: operations["list_warnings_page_api_v1_admin_warnings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -802,6 +836,15 @@ export interface components {
             /** Finished At */
             finished_at: string | null;
         };
+        /** AdminTaskListPage */
+        AdminTaskListPage: {
+            /** Items */
+            items: components["schemas"]["AdminTaskListItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total Estimate */
+            total_estimate?: number | null;
+        };
         /** AdminTaskLogView */
         AdminTaskLogView: {
             /**
@@ -866,6 +909,15 @@ export interface components {
             expires_at: string | null;
             /** Created At */
             created_at: string;
+        };
+        /** AuditEventPage */
+        AuditEventPage: {
+            /** Items */
+            items: components["schemas"]["AuditEventView"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total Estimate */
+            total_estimate?: number | null;
         };
         /** AuditEventView */
         AuditEventView: {
@@ -1579,6 +1631,15 @@ export interface components {
             /** Note */
             note?: string | null;
         };
+        /** SecurityWarningPage */
+        SecurityWarningPage: {
+            /** Items */
+            items: components["schemas"]["SecurityWarningView"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total Estimate */
+            total_estimate?: number | null;
+        };
         /** SecurityWarningView */
         SecurityWarningView: {
             /** Id */
@@ -2199,6 +2260,43 @@ export interface operations {
             };
         };
     };
+    list_audits_page_api_v1_admin_audits_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                actor_type?: string | null;
+                action?: string | null;
+                target_type?: string | null;
+                since?: string | null;
+                until?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_security_warnings_api_v1_admin_security_warnings_get: {
         parameters: {
             query?: {
@@ -2230,11 +2328,15 @@ export interface operations {
             };
         };
     };
-    list_tasks_api_v1_admin_tasks_get: {
+    list_warnings_page_api_v1_admin_warnings_get: {
         parameters: {
             query?: {
                 limit?: number;
-                offset?: number;
+                cursor?: string | null;
+                warning_type?: string | null;
+                source_type?: string | null;
+                since?: string | null;
+                until?: string | null;
             };
             header?: never;
             path?: never;
@@ -2248,7 +2350,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminTaskListItem"][];
+                    "application/json": components["schemas"]["SecurityWarningPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tasks_api_v1_admin_tasks_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                node_id?: string | null;
+                status?: string | null;
+                type?: string | null;
+                since?: string | null;
+                until?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTaskListPage"];
                 };
             };
             /** @description Validation Error */
