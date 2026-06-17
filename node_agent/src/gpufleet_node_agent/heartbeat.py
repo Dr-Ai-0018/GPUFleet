@@ -37,10 +37,22 @@ def _merge_live_sample_metrics(
     cpu_percent = latest.get("cpu_percent")
     if cpu_percent is not None:
         cpu["usage_percent"] = cpu_percent
+    per_core = latest.get("per_core_percent")
+    if isinstance(per_core, list) and per_core:
+        cpu["per_core_percent"] = per_core
+    cpu_current_clock_mhz = latest.get("cpu_current_clock_mhz")
+    if cpu_current_clock_mhz is not None:
+        cpu["current_clock_mhz"] = cpu_current_clock_mhz
 
     memory_percent = latest.get("memory_percent")
     if memory_percent is not None:
         memory["usage_percent"] = memory_percent
+    memory_used_bytes = latest.get("memory_used_bytes")
+    if memory_used_bytes is not None:
+        memory["used_bytes"] = memory_used_bytes
+    memory_available_bytes = latest.get("memory_available_bytes")
+    if memory_available_bytes is not None:
+        memory["available_bytes"] = memory_available_bytes
 
     gpus_by_index = {int(gpu.get("index", idx)): gpu for idx, gpu in enumerate(gpus)}
     for sample_gpu in latest.get("gpus") or []:

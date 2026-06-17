@@ -211,7 +211,11 @@ class HeartbeatSample(BaseModel):
 
     ts: datetime = Field(description="采样时刻 (节点本地系统时钟, UTC ISO8601 含毫秒).")
     cpu_percent: float | None = Field(default=None, description="该时刻 CPU 使用率 (0-100).")
+    per_core_percent: list[float] = Field(default_factory=list, description="该时刻每个逻辑 CPU 核心的使用率 (0-100).")
+    cpu_current_clock_mhz: int | None = Field(default=None, description="该时刻 CPU 当前频率 (MHz).")
     memory_percent: float | None = Field(default=None, description="该时刻内存使用率 (0-100).")
+    memory_used_bytes: int | None = Field(default=None, description="该时刻已用内存字节数.")
+    memory_available_bytes: int | None = Field(default=None, description="该时刻可用内存字节数.")
     gpus: list[HeartbeatSampleGpu] = Field(
         default_factory=list,
         description="该时刻所有 GPU 卡的瞬时指标 (覆盖多卡场景).",

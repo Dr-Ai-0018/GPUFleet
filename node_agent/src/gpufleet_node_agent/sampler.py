@@ -99,18 +99,18 @@ def _collect_gpus_lite() -> list[dict[str, Any]]:
 # 采样主函数 (探针层)
 # ---------------------------------------------------------------------------
 
-# psutil.cpu_percent(interval=None) 首次调用是"自上次以来的平均", 第一次返 0.
+# psutil.cpu_percent(interval=None, percpu=True) 首次调用是"自上次以来的平均", 第一次返 0.
 # 启动时先调一次丢弃 (StarTrack 同款约定).
 _PSUTIL_PRIMED = False
 
 
 def _prime_psutil() -> None:
-    """首次调用 psutil.cpu_percent(interval=None) 返 0, 启动时先 prime 一次."""
+    """首次调用 psutil.cpu_percent(..., percpu=True) 返 0, 启动时先 prime 一次."""
     global _PSUTIL_PRIMED
     if _PSUTIL_PRIMED:
         return
     try:
-        psutil.cpu_percent(interval=None)
+        psutil.cpu_percent(interval=None, percpu=True)
         psutil.net_io_counters()
     except Exception:  # noqa: BLE001
         pass
@@ -121,15 +121,26 @@ def collect_sample() -> dict[str, Any]:
     """一次轻量采样 — 探针层. 整轮目标 < 10ms.
 
     设计要点 (参考 StarTrack agent_new.py):
-    - psutil.cpu_percent(interval=None): 非阻塞瞬时值, 与上次调用的差值
+    - psutil.cpu_percent(interval=None, percpu=True): 非阻塞瞬时值, 与上次调用的差值.
+      total 从 per-core 派生, 避免连续调用 psutil 重置内部缓存导致第二次全 0.
     - psutil.virtual_memory().percent: 瞬时
     - pynvml C 调用: 毫秒级
     - net_io_counters() 差值算 bps 不在这一层做 (在 SampleRingBuffer 内做, 因为需要上次值)
     """
+    per_core = psutil.cpu_percent(interval=None, percpu=True)
+    per_core_percent = [round(v, 2) for v in per_core]
+    cpu_percent = round(sum(per_core_percent) / len(per_core_percent), 2) if per_core_percent else 0.0
+    memory = psutil.virtual_memory()
+    cpu_freq = psutil.cpu_freq()
+
     return {
         "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-        "cpu_percent": round(psutil.cpu_percent(interval=None), 2),
-        "memory_percent": round(psutil.virtual_memory().percent, 2),
+        "cpu_percent": cpu_percent,
+        "per_core_percent": per_core_percent,
+        "cpu_current_clock_mhz": round(cpu_freq.current) if cpu_freq and cpu_freq.current else None,
+        "memory_percent": round(memory.percent, 2),
+        "memory_used_bytes": int(memory.used),
+        "memory_available_bytes": int(memory.available),
         "gpus": _collect_gpus_lite(),
     }
 

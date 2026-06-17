@@ -104,11 +104,12 @@ def test_ringbuffer_net_bps_first_push_is_none_second_has_value(monkeypatch: pyt
 
 def test_collect_sample_uses_psutil_and_pynvml_returns_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     """mock psutil + 模拟 NVML 三卡, 验证 sample 形状."""
-    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None: 67.5)
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None, percpu=False: [60.0, 70.0, 80.0, 50.0])
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.virtual_memory",
-        lambda: SimpleNamespace(percent=48.0),
+        lambda: SimpleNamespace(percent=48.0, used=480_000, available=520_000),
     )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: SimpleNamespace(current=2750.4))
     # 模拟 NVML init 后的句柄 + 各 API
     fake_handles = [object(), object(), object()]
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", fake_handles)
@@ -143,8 +144,12 @@ def test_collect_sample_uses_psutil_and_pynvml_returns_shape(monkeypatch: pytest
     sample = collect_sample()
 
     # 顶层字段
-    assert sample["cpu_percent"] == 67.5
+    assert sample["cpu_percent"] == 65.0
+    assert sample["per_core_percent"] == [60.0, 70.0, 80.0, 50.0]
+    assert sample["cpu_current_clock_mhz"] == 2750
     assert sample["memory_percent"] == 48.0
+    assert sample["memory_used_bytes"] == 480_000
+    assert sample["memory_available_bytes"] == 520_000
     assert "ts" in sample
     # 多 GPU 完整保留
     assert len(sample["gpus"]) == 3
@@ -160,18 +165,44 @@ def test_collect_sample_uses_psutil_and_pynvml_returns_shape(monkeypatch: pytest
 
 def test_collect_sample_handles_no_nvidia_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
     """非 GPU 节点 (NVML 未 init): gpus 数组为空, 不抛错."""
-    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None: 30.0)
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None, percpu=False: [30.0, 40.0])
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.virtual_memory",
-        lambda: SimpleNamespace(percent=40.0),
+        lambda: SimpleNamespace(percent=40.0, used=400_000, available=600_000),
     )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: None)
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", [])
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", False)
 
     sample = collect_sample()
-    assert sample["cpu_percent"] == 30.0
+    assert sample["cpu_percent"] == 35.0
+    assert sample["per_core_percent"] == [30.0, 40.0]
+    assert sample["cpu_current_clock_mhz"] is None
     assert sample["memory_percent"] == 40.0
     assert sample["gpus"] == []
+
+
+def test_collect_sample_reads_cpu_once_with_percpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+
+    def cpu_percent(interval=None, percpu=False):
+        calls.append(bool(percpu))
+        return [10.0, 30.0]
+
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", cpu_percent)
+    monkeypatch.setattr(
+        "gpufleet_node_agent.sampler.psutil.virtual_memory",
+        lambda: SimpleNamespace(percent=40.0, used=400_000, available=600_000),
+    )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: None)
+    monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", [])
+    monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", False)
+
+    sample = collect_sample()
+
+    assert calls == [True]
+    assert sample["cpu_percent"] == 20.0
+    assert sample["per_core_percent"] == [10.0, 30.0]
 
 
 def test_collect_sample_handles_nvml_per_card_failure_returns_cached(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -182,11 +213,12 @@ def test_collect_sample_handles_nvml_per_card_failure_returns_cached(monkeypatch
     """
     from gpufleet_node_agent import sampler
 
-    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None: 50.0)
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None, percpu=False: [50.0, 70.0])
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.virtual_memory",
-        lambda: SimpleNamespace(percent=50.0),
+        lambda: SimpleNamespace(percent=50.0, used=500_000, available=500_000),
     )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: SimpleNamespace(current=2400.0))
     fake_handles = ["h0", "h1"]
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", fake_handles)
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", True)
@@ -229,11 +261,12 @@ def test_collect_sample_handles_nvml_per_card_failure_returns_cached(monkeypatch
 
 def test_collect_sample_skips_card_when_no_cache_available(monkeypatch: pytest.MonkeyPatch) -> None:
     """启动后第一次读取就失败 (没有缓存可续) 时跳过该卡."""
-    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None: 50.0)
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None, percpu=False: [50.0, 70.0])
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.virtual_memory",
-        lambda: SimpleNamespace(percent=50.0),
+        lambda: SimpleNamespace(percent=50.0, used=500_000, available=500_000),
     )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: SimpleNamespace(current=2400.0))
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", ["h0", "h1"])
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", True)
     monkeypatch.setattr("gpufleet_node_agent.sampler._GPU_LAST_GOOD", {})  # 空缓存
@@ -263,11 +296,12 @@ def test_collect_sample_skips_card_when_no_cache_available(monkeypatch: pytest.M
 
 
 def test_start_sampler_pushes_into_buffer_then_stops(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None: 50.0)
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None, percpu=False: [50.0, 70.0])
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.virtual_memory",
-        lambda: SimpleNamespace(percent=50.0),
+        lambda: SimpleNamespace(percent=50.0, used=500_000, available=500_000),
     )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: SimpleNamespace(current=2400.0))
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.net_io_counters",
         lambda: SimpleNamespace(bytes_sent=0, bytes_recv=0),
@@ -284,7 +318,8 @@ def test_start_sampler_pushes_into_buffer_then_stops(monkeypatch: pytest.MonkeyP
         drained = buf.drain()
         assert len(drained) >= 1
         for sample in drained:
-            assert sample["cpu_percent"] == 50.0
+            assert sample["cpu_percent"] == 60.0
+            assert sample["per_core_percent"] == [50.0, 70.0]
             assert "ts" in sample
     finally:
         stop_event.set()
@@ -297,17 +332,18 @@ def test_start_sampler_swallows_single_tick_exception(monkeypatch: pytest.Monkey
     """单 tick 异常吞掉, sampler 继续跑."""
     call_count = {"n": 0}
 
-    def flaky_cpu_percent(interval=None):
+    def flaky_cpu_percent(interval=None, percpu=False):
         call_count["n"] += 1
         if call_count["n"] <= 2:
             raise RuntimeError("simulated psutil hiccup")
-        return 60.0
+        return [60.0, 80.0]
 
     monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", flaky_cpu_percent)
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.virtual_memory",
-        lambda: SimpleNamespace(percent=50.0),
+        lambda: SimpleNamespace(percent=50.0, used=500_000, available=500_000),
     )
+    monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: SimpleNamespace(current=2400.0))
     monkeypatch.setattr(
         "gpufleet_node_agent.sampler.psutil.net_io_counters",
         lambda: SimpleNamespace(bytes_sent=0, bytes_recv=0),
@@ -328,4 +364,5 @@ def test_start_sampler_swallows_single_tick_exception(monkeypatch: pytest.Monkey
     drained = buf.drain()
     assert len(drained) >= 1
     for sample in drained:
-        assert sample["cpu_percent"] == 60.0
+        assert sample["cpu_percent"] == 70.0
+        assert sample["per_core_percent"] == [60.0, 80.0]

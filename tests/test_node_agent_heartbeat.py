@@ -20,7 +20,11 @@ class FakeSampleBuffer:
             {
                 "ts": "2026-06-17T02:45:35.545+00:00",
                 "cpu_percent": 41.2,
+                "per_core_percent": [10.0, 20.0, 70.0, 64.8],
+                "cpu_current_clock_mhz": 2750,
                 "memory_percent": 88.6,
+                "memory_used_bytes": 888_000,
+                "memory_available_bytes": 112_000,
                 "upload_bps": 1234.5,
                 "download_bps": 9876.5,
                 "gpus": [
@@ -43,8 +47,13 @@ def test_build_heartbeat_payload_overlays_live_sample_metrics(monkeypatch) -> No
         "hostname": "node",
         "heartbeat_interval_sec": 5,
         "sample_interval_sec": 1,
-        "cpu": {"usage_percent": 10.0, "model": "CPU"},
-        "memory": {"usage_percent": 20.0, "total_bytes": 1000},
+        "cpu": {
+            "usage_percent": 10.0,
+            "model": "CPU",
+            "current_clock_mhz": 2000,
+            "per_core_percent": [1.0, 1.0, 1.0, 1.0],
+        },
+        "memory": {"usage_percent": 20.0, "total_bytes": 1_000_000, "used_bytes": 200_000, "available_bytes": 800_000},
         "disks": [],
         "gpus": [
             {
@@ -67,7 +76,11 @@ def test_build_heartbeat_payload_overlays_live_sample_metrics(monkeypatch) -> No
     payload = build_heartbeat_payload(SimpleNamespace(), sample_buffer=FakeSampleBuffer())
 
     assert payload["cpu"]["usage_percent"] == 41.2
+    assert payload["cpu"]["per_core_percent"] == [10.0, 20.0, 70.0, 64.8]
+    assert payload["cpu"]["current_clock_mhz"] == 2750
     assert payload["memory"]["usage_percent"] == 88.6
+    assert payload["memory"]["used_bytes"] == 888_000
+    assert payload["memory"]["available_bytes"] == 112_000
     assert payload["gpus"][0]["utilization_percent"] == 40.0
     assert payload["gpus"][0]["temperature_c"] == 53.0
     assert payload["gpus"][0]["used_vram_mb"] == 431
@@ -75,4 +88,3 @@ def test_build_heartbeat_payload_overlays_live_sample_metrics(monkeypatch) -> No
     assert payload["extra"]["network"]["tx_bytes_per_sec"] == 1234.5
     assert payload["extra"]["network"]["rx_bytes_per_sec"] == 9876.5
     assert payload["samples"][0]["gpus"][0]["util"] == 40.0
-
