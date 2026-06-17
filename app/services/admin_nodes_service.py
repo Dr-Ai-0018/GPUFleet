@@ -11,13 +11,20 @@ from app.schemas import (
     NodeOnboardingPackage,
     NodeCreateRequest,
     NodeCreateResponse,
+    NodeOnboardingLifecycleResponse,
     NodeResponse,
     NodeStatusHistoryItem,
     NodeStatusHistoryResponse,
     NodeStatusPreview,
     NodeUpdateRequest,
 )
-from app.security import derive_node_signing_key, encrypt_node_signing_key, generate_node_secret
+from app.security import (
+    decrypt_node_onboarding_token,
+    derive_node_signing_key,
+    encrypt_node_onboarding_token,
+    encrypt_node_signing_key,
+    generate_node_secret,
+)
 
 
 def decode_gpu_snapshot(raw_gpu_json: str) -> tuple[list[dict[str, object]], dict[str, object]]:
@@ -141,6 +148,84 @@ def build_onboarding_package(request: Request, payload: NodeCreateRequest, node_
     )
 
 
+def _build_install_snippet(pkg: NodeOnboardingPackage) -> str:
+    return "\n".join(
+        [
+            "# Copy this template into the node_agent host-local .env file.",
+            pkg.env_template,
+            "",
+            "# Then start the node agent.",
+            pkg.startup_command,
+        ]
+    )
+
+
+def _row_to_node_create_payload(row: object) -> NodeCreateRequest:
+    return NodeCreateRequest(
+        node_id=row["node_id"],
+        display_name=row["display_name"],
+        node_type=row["node_type"],
+        os_type=row["os_type"],
+        hostname=row["hostname"],
+        heartbeat_interval_sec=row["heartbeat_interval_sec"],
+        allowed_workdirs=json.loads(row["allowed_workdirs_json"]),
+        tags=json.loads(row["tags_json"]),
+        allow_shell=bool(row["allow_shell"]),
+        allow_modal=bool(row["allow_modal"]),
+    )
+
+
+def _token_status(row: object, now_utc: datetime) -> str:
+    encrypted = row["onboarding_token_encrypted"] if "onboarding_token_encrypted" in row.keys() else None
+    if not encrypted:
+        return "consumed" if row["last_seen_at"] or row["first_seen_at"] else "expired"
+
+    token_created_at = row["onboarding_token_created_at"] if "onboarding_token_created_at" in row.keys() else None
+    token_created = parse_iso_or_none(token_created_at)
+    last_seen = parse_iso_or_none(row["last_seen_at"])
+    if token_created is not None and last_seen is not None and last_seen > token_created:
+        return "consumed"
+
+    expires_at = row["onboarding_token_expires_at"] if "onboarding_token_expires_at" in row.keys() else None
+    if expires_at:
+        parsed = parse_iso_or_none(expires_at)
+        if parsed is not None and parsed <= now_utc:
+            return "expired"
+    return "active"
+
+
+def _build_onboarding_lifecycle_response(
+    request: Request,
+    row: object,
+    *,
+    token_override: str | None = None,
+) -> NodeOnboardingLifecycleResponse:
+    now_utc = datetime.now(UTC)
+    status_value = _token_status(row, now_utc)
+    token: str | None = None
+    if status_value == "active":
+        if token_override is not None:
+            token = token_override
+        else:
+            encrypted = row["onboarding_token_encrypted"] if "onboarding_token_encrypted" in row.keys() else None
+            if encrypted:
+                try:
+                    token = decrypt_node_onboarding_token(request.app.state.settings, encrypted)
+                except ValueError:
+                    token = None
+
+    payload = _row_to_node_create_payload(row)
+    package_secret = token or "<regenerate-token-to-view-secret>"
+    package = build_onboarding_package(request, payload, package_secret)
+    return NodeOnboardingLifecycleResponse(
+        token=token if status_value == "active" else None,
+        token_expires_at=row["onboarding_token_expires_at"] if "onboarding_token_expires_at" in row.keys() else None,
+        token_status=status_value,
+        install_snippet=_build_install_snippet(package),
+        env_template=package.env_template,
+    )
+
+
 def row_to_node_response(row: object, *, now_utc: datetime | None = None) -> NodeResponse:
     now = now_utc or datetime.now(UTC)
     is_enabled = bool(row["is_enabled"])
@@ -187,6 +272,7 @@ def create_node(payload: NodeCreateRequest, request: Request, admin: object, db:
     node_secret = generate_node_secret()
     signing_key = derive_node_signing_key(node_secret)
     encrypted_signing_key = encrypt_node_signing_key(request.app.state.settings, signing_key)
+    encrypted_onboarding_token = encrypt_node_onboarding_token(request.app.state.settings, node_secret)
 
     with db.connect() as conn:
         node_columns = db.get_table_columns(conn, "nodes")
@@ -206,10 +292,12 @@ def create_node(payload: NodeCreateRequest, request: Request, admin: object, db:
             conn.execute(
                 """
                 INSERT INTO nodes (
-                    node_id, display_name, node_secret_hash, node_signing_key, encrypted_signing_key, node_type, os_type, hostname,
+                    node_id, display_name, node_secret_hash, node_signing_key, encrypted_signing_key,
+                    onboarding_token_encrypted, onboarding_token_created_at, onboarding_token_expires_at,
+                    node_type, os_type, hostname,
                     heartbeat_interval_sec, allowed_workdirs_json, tags_json, allow_shell, allow_modal,
                     is_enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     payload.node_id,
@@ -217,6 +305,9 @@ def create_node(payload: NodeCreateRequest, request: Request, admin: object, db:
                     None,
                     "",
                     encrypted_signing_key,
+                    encrypted_onboarding_token,
+                    now_iso,
+                    None,
                     payload.node_type,
                     payload.os_type,
                     payload.hostname,
@@ -233,16 +324,21 @@ def create_node(payload: NodeCreateRequest, request: Request, admin: object, db:
             conn.execute(
                 """
                 INSERT INTO nodes (
-                    node_id, display_name, node_signing_key, encrypted_signing_key, node_type, os_type, hostname,
+                    node_id, display_name, node_signing_key, encrypted_signing_key,
+                    onboarding_token_encrypted, onboarding_token_created_at, onboarding_token_expires_at,
+                    node_type, os_type, hostname,
                     heartbeat_interval_sec, allowed_workdirs_json, tags_json, allow_shell, allow_modal,
                     is_enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     payload.node_id,
                     payload.display_name,
                     "",
                     encrypted_signing_key,
+                    encrypted_onboarding_token,
+                    now_iso,
+                    None,
                     payload.node_type,
                     payload.os_type,
                     payload.hostname,
@@ -282,6 +378,21 @@ def create_node(payload: NodeCreateRequest, request: Request, admin: object, db:
         node_secret=node_secret,
         onboarding=build_onboarding_package(request, payload, node_secret),
     )
+
+
+def get_node_onboarding(node_id: str, request: Request, db: Database) -> NodeOnboardingLifecycleResponse:
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+
+    if row is None:
+        raise ApiError(
+            code="ERR_NODE_NOT_FOUND",
+            message="Node not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+            details={"node_id": node_id},
+        )
+
+    return _build_onboarding_lifecycle_response(request, row)
 
 
 def get_node(node_id: str, db: Database) -> NodeResponse:
@@ -463,6 +574,7 @@ def reset_node_secret(node_id: str, request: Request, admin: object, db: Databas
     node_secret = generate_node_secret()
     signing_key = derive_node_signing_key(node_secret)
     encrypted_signing_key = encrypt_node_signing_key(request.app.state.settings, signing_key)
+    encrypted_onboarding_token = encrypt_node_onboarding_token(request.app.state.settings, node_secret)
 
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
@@ -479,15 +591,23 @@ def reset_node_secret(node_id: str, request: Request, admin: object, db: Databas
             conn.execute(
                 """
                 UPDATE nodes
-                SET node_secret_hash = ?, node_signing_key = ?, encrypted_signing_key = ?, updated_at = ?
+                SET node_secret_hash = ?, node_signing_key = ?, encrypted_signing_key = ?,
+                    onboarding_token_encrypted = ?, onboarding_token_created_at = ?, onboarding_token_expires_at = ?,
+                    updated_at = ?
                 WHERE node_id = ?
                 """,
-                (None, "", encrypted_signing_key, now_iso, node_id),
+                (None, "", encrypted_signing_key, encrypted_onboarding_token, now_iso, None, now_iso, node_id),
             )
         else:
             conn.execute(
-                "UPDATE nodes SET node_signing_key = ?, encrypted_signing_key = ?, updated_at = ? WHERE node_id = ?",
-                ("", encrypted_signing_key, now_iso, node_id),
+                """
+                UPDATE nodes
+                SET node_signing_key = ?, encrypted_signing_key = ?,
+                    onboarding_token_encrypted = ?, onboarding_token_created_at = ?, onboarding_token_expires_at = ?,
+                    updated_at = ?
+                WHERE node_id = ?
+                """,
+                ("", encrypted_signing_key, encrypted_onboarding_token, now_iso, None, now_iso, node_id),
             )
         conn.execute(
             """
@@ -527,6 +647,67 @@ def reset_node_secret(node_id: str, request: Request, admin: object, db: Databas
         node_secret=node_secret,
         onboarding=build_onboarding_package(request, fake_payload, node_secret),
     )
+
+
+def regenerate_node_onboarding(node_id: str, request: Request, admin: object, db: Database) -> NodeOnboardingLifecycleResponse:
+    now_iso = utc_now_iso()
+    node_secret = generate_node_secret()
+    signing_key = derive_node_signing_key(node_secret)
+    encrypted_signing_key = encrypt_node_signing_key(request.app.state.settings, signing_key)
+    encrypted_onboarding_token = encrypt_node_onboarding_token(request.app.state.settings, node_secret)
+
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        if row is None:
+            raise ApiError(
+                code="ERR_NODE_NOT_FOUND",
+                message="Node not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={"node_id": node_id},
+            )
+
+        node_columns = db.get_table_columns(conn, "nodes")
+        if "node_secret_hash" in node_columns:
+            conn.execute(
+                """
+                UPDATE nodes
+                SET node_secret_hash = ?, node_signing_key = ?, encrypted_signing_key = ?,
+                    onboarding_token_encrypted = ?, onboarding_token_created_at = ?, onboarding_token_expires_at = ?,
+                    updated_at = ?
+                WHERE node_id = ?
+                """,
+                (None, "", encrypted_signing_key, encrypted_onboarding_token, now_iso, None, now_iso, node_id),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE nodes
+                SET node_signing_key = ?, encrypted_signing_key = ?,
+                    onboarding_token_encrypted = ?, onboarding_token_created_at = ?, onboarding_token_expires_at = ?,
+                    updated_at = ?
+                WHERE node_id = ?
+                """,
+                ("", encrypted_signing_key, encrypted_onboarding_token, now_iso, None, now_iso, node_id),
+            )
+        conn.execute(
+            """
+            INSERT INTO audit_events (actor_type, actor_id, action, target_type, target_id, request_ip, detail_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                str(admin["id"]),
+                "regenerate_node_onboarding",
+                "node",
+                node_id,
+                request.client.host if request.client else None,
+                dumps_json({}),
+                now_iso,
+            ),
+        )
+        saved = conn.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+
+    return _build_onboarding_lifecycle_response(request, saved, token_override=node_secret)
 
 
 def delete_node(node_id: str, request: Request, admin: object, db: Database) -> None:

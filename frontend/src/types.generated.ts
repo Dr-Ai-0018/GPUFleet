@@ -121,6 +121,40 @@ export interface paths {
         patch: operations["update_node_api_v1_admin_nodes__node_id__patch"];
         trace?: never;
     };
+    "/api/v1/admin/nodes/{node_id}/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Node Onboarding */
+        get: operations["get_node_onboarding_api_v1_admin_nodes__node_id__onboarding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/nodes/{node_id}/onboarding/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Node Onboarding */
+        post: operations["regenerate_node_onboarding_api_v1_admin_nodes__node_id__onboarding_regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/nodes/{node_id}/disable": {
         parameters: {
             query?: never;
@@ -1475,6 +1509,25 @@ export interface components {
             signing_hint: string;
             onboarding: components["schemas"]["NodeOnboardingPackage"];
         };
+        /** NodeOnboardingLifecycleResponse */
+        NodeOnboardingLifecycleResponse: {
+            /**
+             * Token
+             * @description Plain onboarding node secret while the node is still awaiting first heartbeat.
+             */
+            token?: string | null;
+            /** Token Expires At */
+            token_expires_at?: string | null;
+            /**
+             * Token Status
+             * @enum {string}
+             */
+            token_status: "active" | "expired" | "consumed";
+            /** Install Snippet */
+            install_snippet: string;
+            /** Env Template */
+            env_template: string;
+        };
         /** NodeOnboardingPackage */
         NodeOnboardingPackage: {
             /** Control Plane Url */
@@ -2022,6 +2075,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NodeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_node_onboarding_api_v1_admin_nodes__node_id__onboarding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeOnboardingLifecycleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_node_onboarding_api_v1_admin_nodes__node_id__onboarding_regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeOnboardingLifecycleResponse"];
                 };
             };
             /** @description Validation Error */

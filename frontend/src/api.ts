@@ -8,6 +8,7 @@ import type {
   DashboardOverview,
   NodeCreatePayload,
   NodeCreateResponse,
+  NodeOnboardingLifecycleResponse,
   NodeResetSecretResponse,
   NodeResponse,
   NodeStatusHistoryResponse,
@@ -262,6 +263,22 @@ export const api = {
   resetNodeSecret(token: string, nodeId: string): Promise<NodeResetSecretResponse> {
     return request<NodeResetSecretResponse>(
       `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/reset-secret`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  getNodeOnboarding(token: string, nodeId: string): Promise<NodeOnboardingLifecycleResponse> {
+    return request<NodeOnboardingLifecycleResponse>(
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/onboarding`,
+      {},
+      token,
+    );
+  },
+
+  regenerateNodeOnboarding(token: string, nodeId: string): Promise<NodeOnboardingLifecycleResponse> {
+    return request<NodeOnboardingLifecycleResponse>(
+      `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/onboarding/regenerate`,
       { method: "POST" },
       token,
     );

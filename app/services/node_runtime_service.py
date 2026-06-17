@@ -505,6 +505,8 @@ async def _heartbeat_impl(request: Request, db: Database, settings: Settings) ->
                 first_seen_at = COALESCE(first_seen_at, ?),
                 last_seen_at = ?,
                 last_boot_id = ?,
+                onboarding_token_encrypted = NULL,
+                onboarding_token_expires_at = NULL,
                 updated_at = ?
             WHERE node_id = ?
             """,

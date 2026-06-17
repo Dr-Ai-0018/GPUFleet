@@ -10,6 +10,7 @@ from app.routers.admin_auth import limiter
 from app.schemas import (
     NodeCreateResponse,
     NodeCreateRequest,
+    NodeOnboardingLifecycleResponse,
     NodeResponse,
     NodeStatusHistoryResponse,
     NodeStatusPreview,
@@ -48,6 +49,27 @@ def get_node(
     db: Annotated[Database, Depends(get_db)],
 ) -> NodeResponse:
     return admin_nodes_service.get_node(node_id, db)
+
+
+@router.get("/{node_id}/onboarding", response_model=NodeOnboardingLifecycleResponse)
+def get_node_onboarding(
+    node_id: str,
+    request: Request,
+    _: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> NodeOnboardingLifecycleResponse:
+    return admin_nodes_service.get_node_onboarding(node_id, request, db)
+
+
+@router.post("/{node_id}/onboarding/regenerate", response_model=NodeOnboardingLifecycleResponse)
+@limiter.limit("30/minute")
+def regenerate_node_onboarding(
+    node_id: str,
+    request: Request,
+    admin: Annotated[object, Depends(get_current_admin)],
+    db: Annotated[Database, Depends(get_db)],
+) -> NodeOnboardingLifecycleResponse:
+    return admin_nodes_service.regenerate_node_onboarding(node_id, request, admin, db)
 
 
 @router.patch("/{node_id}", response_model=NodeResponse)

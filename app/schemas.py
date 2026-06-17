@@ -106,6 +106,14 @@ class NodeCreateResponse(NodeResponse):
     onboarding: NodeOnboardingPackage
 
 
+class NodeOnboardingLifecycleResponse(BaseModel):
+    token: str | None = Field(default=None, description="Plain onboarding node secret while the node is still awaiting first heartbeat.")
+    token_expires_at: str | None = None
+    token_status: Literal["active", "expired", "consumed"]
+    install_snippet: str
+    env_template: str
+
+
 class HeartbeatCpu(BaseModel):
     model: str | None = Field(default=None, description="CPU model name reported by the node.")
     logical_cores: int | None = Field(default=None, description="Visible logical CPU core count.")

@@ -72,6 +72,9 @@ class Database:
                     display_name TEXT NOT NULL,
                     node_signing_key TEXT,
                     encrypted_signing_key TEXT,
+                    onboarding_token_encrypted TEXT,
+                    onboarding_token_created_at TEXT,
+                    onboarding_token_expires_at TEXT,
                     node_type TEXT NOT NULL,
                     os_type TEXT,
                     hostname TEXT,
@@ -269,6 +272,12 @@ class Database:
             conn.execute("ALTER TABLE nodes ADD COLUMN node_signing_key TEXT")
         if "encrypted_signing_key" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN encrypted_signing_key TEXT")
+        if "onboarding_token_encrypted" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN onboarding_token_encrypted TEXT")
+        if "onboarding_token_created_at" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN onboarding_token_created_at TEXT")
+        if "onboarding_token_expires_at" not in node_columns:
+            conn.execute("ALTER TABLE nodes ADD COLUMN onboarding_token_expires_at TEXT")
         if "first_seen_at" not in node_columns:
             conn.execute("ALTER TABLE nodes ADD COLUMN first_seen_at TEXT")
         if "last_request_ts" not in node_columns:

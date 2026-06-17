@@ -35,6 +35,7 @@ export type NodeCreateResponse = Omit<Schemas["NodeCreateResponse"], "onboarding
   onboarding: NodeOnboardingPackage;
 };
 export type NodeResetSecretResponse = NodeCreateResponse;
+export type NodeOnboardingLifecycleResponse = Schemas["NodeOnboardingLifecycleResponse"];
 export type AdminTaskListItem = Schemas["AdminTaskListItem"];
 export type AdminTaskListPage = Schemas["AdminTaskListPage"];
 export type AdminTaskLogView = Schemas["AdminTaskLogView"];

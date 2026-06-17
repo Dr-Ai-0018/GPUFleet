@@ -108,6 +108,14 @@ def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> 
     return plaintext.decode("utf-8")
 
 
+def encrypt_node_onboarding_token(settings: Settings, node_secret: str) -> str:
+    return encrypt_node_signing_key(settings, node_secret)
+
+
+def decrypt_node_onboarding_token(settings: Settings, encrypted_token: str) -> str:
+    return decrypt_node_signing_key(settings, encrypted_token)
+
+
 def hash_request_body(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
 
