@@ -1,9 +1,10 @@
-/* Card — clean, no effects */
+/* Card — 跟 KpiTile v3 视觉一致 (深底 + surface-grad + 软白 border + 10px 圆角) */
 
 .card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  background-color: #0a0d12;
+  background-image: var(--surface-grad);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
   overflow: hidden;
 }
 
@@ -13,7 +14,7 @@
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .head h2 {
