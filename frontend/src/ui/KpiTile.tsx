@@ -57,6 +57,7 @@ type Props = {
   /** 左上 icon — 16-18px SVG. 颜色继承父级 (TONE_ICON_TEXT_CLS). */
   icon?: ReactNode;
   onClick?: MouseEventHandler<HTMLButtonElement>;
+  className?: string;
 };
 
 export function KpiTile({
@@ -67,6 +68,7 @@ export function KpiTile({
   active = false,
   icon,
   onClick,
+  className = "",
 }: Props): JSX.Element {
   const isInteractive = !!onClick;
 
@@ -90,22 +92,20 @@ export function KpiTile({
           <span className="text-[12px] tracking-[0.01em] text-gray-400">{label}</span>
         </div>
         {active ? (
-          <span className="mt-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-gray-500">
+          <span className="mt-1 font-mono text-[9.5px] tracking-[0.14em] text-gray-500 uppercase">
             active
           </span>
         ) : null}
       </div>
 
       {/* ── 大数字 ── */}
-      <div className="mt-3.5 text-[28px] font-medium leading-none tracking-[-0.02em] tabular-nums text-white">
+      <div className="mt-3.5 text-[28px] leading-none font-medium tracking-[-0.02em] text-white tabular-nums">
         {value}
       </div>
 
       {/* ── 副标 ── */}
       {sublabel ? (
-        <div className="mt-2 text-[11.5px] tracking-[0.01em] text-gray-500">
-          {sublabel}
-        </div>
+        <div className="mt-2 text-[11.5px] tracking-[0.01em] text-gray-500">{sublabel}</div>
       ) : null}
 
       {/* ── 底部柔色波浪线装饰 (质感的关键) ── */}
@@ -113,8 +113,7 @@ export function KpiTile({
     </div>
   );
 
-  const baseCls =
-    "relative block overflow-hidden rounded-[10px] border transition-[background-image,border-color] duration-200";
+  const baseCls = `relative block overflow-hidden rounded-[10px] border transition-[background-image,border-color] duration-200 ${className}`;
 
   if (isInteractive) {
     return (

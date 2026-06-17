@@ -139,8 +139,7 @@ export function Dropdown({
   }
 
   const heightCls = size === "sm" ? "h-[28px] text-[12px]" : "h-[34px] text-[13px]";
-  const selectedTextCls =
-    tone === "running" ? "text-[var(--c-running-soft-text)]" : "text-white";
+  const selectedTextCls = tone === "running" ? "text-[var(--c-running-soft-text)]" : "text-white";
 
   return (
     <div ref={wrapRef} className={`relative ${className}`}>
@@ -170,7 +169,7 @@ export function Dropdown({
           id={listId}
           ref={listRef}
           role="listbox"
-          className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[260px] overflow-y-auto rounded-[10px] border py-1"
+          className="absolute top-full right-0 left-0 z-50 mt-1.5 max-h-[260px] overflow-y-auto rounded-[10px] border py-1 max-[480px]:fixed max-[480px]:top-1/2 max-[480px]:right-4 max-[480px]:left-4 max-[480px]:max-h-[min(320px,70vh)] max-[480px]:-translate-y-1/2"
           style={{
             backgroundColor: "#0a0d12",
             backgroundImage: "var(--surface-grad)",
@@ -210,7 +209,16 @@ export function Dropdown({
                   <span className="truncate">{opt.label}</span>
                 </span>
                 {isSel ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 ) : null}
@@ -233,7 +241,13 @@ function Chevron({ open }: { open: boolean }): JSX.Element {
       fill="none"
       className={`shrink-0 text-gray-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
     >
-      <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M1 1l4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

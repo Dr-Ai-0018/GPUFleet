@@ -25,11 +25,30 @@ export function ConfirmDialog({
   onCancel,
 }: Props): JSX.Element | null {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onCancel();
+        return;
+      }
+      if (e.key !== "Tab") {
+        return;
+      }
+      const focusable = [cancelRef.current, confirmRef.current].filter(
+        (el): el is HTMLButtonElement => el !== null && !el.disabled,
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     },
     [onCancel],
@@ -38,7 +57,7 @@ export function ConfirmDialog({
   useEffect(() => {
     if (open) {
       document.addEventListener("keydown", handleKeyDown);
-      dialogRef.current?.focus();
+      cancelRef.current?.focus();
       return () => document.removeEventListener("keydown", handleKeyDown);
     }
   }, [open, handleKeyDown]);
@@ -64,10 +83,10 @@ export function ConfirmDialog({
           {message}
         </p>
         <div className={styles.actions}>
-          <Button variant="ghost" onClick={onCancel}>
+          <Button ref={cancelRef} variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          <Button variant={variant} onClick={onConfirm}>
+          <Button ref={confirmRef} variant={variant} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

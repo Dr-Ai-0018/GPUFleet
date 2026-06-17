@@ -8,10 +8,20 @@ import { mergeFirstPage } from "../../lib/listMerge";
 import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
 import { MiniSparkline } from "../../ui/MiniSparkline";
 import { KpiTile } from "../../ui/KpiTile";
+import { Dropdown } from "../../ui/Dropdown";
 import type { AdminTaskListItem } from "../../types";
 
 // ─── 单状态查询(后端 status 是单值字符串) ───
-type StatusFilter = "" | "pending" | "claimed" | "running" | "succeeded" | "failed" | "timeout" | "cancelled" | "lost";
+type StatusFilter =
+  | ""
+  | "pending"
+  | "claimed"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "timeout"
+  | "cancelled"
+  | "lost";
 
 const STATUS_TONE: Record<string, { dot: string; text: string }> = {
   pending: { dot: "bg-gray-500", text: "text-gray-300" },
@@ -137,9 +147,7 @@ export function TasksView(): JSX.Element {
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
-    return items.filter((t) =>
-      [t.task_id, t.node_id, t.type].join(" ").toLowerCase().includes(q),
-    );
+    return items.filter((t) => [t.task_id, t.node_id, t.type].join(" ").toLowerCase().includes(q));
   }, [items, query]);
 
   // ─── IntersectionObserver: 滚到底自动加载下一页 ───
@@ -160,9 +168,11 @@ export function TasksView(): JSX.Element {
 
   // ─── 可下发节点(右栏用) ───
   const connectedNodes = useMemo(
-    () => store.nodes.filter(
-      (n) => n.is_enabled && n.connection_status === "online" && n.onboarding_status === "connected",
-    ),
+    () =>
+      store.nodes.filter(
+        (n) =>
+          n.is_enabled && n.connection_status === "online" && n.onboarding_status === "connected",
+      ),
     [store.nodes],
   );
 
@@ -188,8 +198,9 @@ export function TasksView(): JSX.Element {
       </header>
 
       {/* ───── KPI strip = 状态筛选器 (KpiTile v3) ───── */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="-mx-4 mb-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0 sm:pb-0">
         <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
           label="全部"
           value={totalTasks}
           sublabel="task 总数"
@@ -199,6 +210,7 @@ export function TasksView(): JSX.Element {
           onClick={() => setStatusFilter("")}
         />
         <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
           label="进行中"
           value={runningCount}
           sublabel="running + claimed"
@@ -208,15 +220,19 @@ export function TasksView(): JSX.Element {
           onClick={() => setStatusFilter(statusFilter === "running" ? "" : "running")}
         />
         <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
           label="成功"
           value={succeededCount}
-          sublabel={totalTasks > 0 ? `${Math.round((succeededCount / totalTasks) * 100)}% 成功率` : "—"}
+          sublabel={
+            totalTasks > 0 ? `${Math.round((succeededCount / totalTasks) * 100)}% 成功率` : "—"
+          }
           tone="online"
           icon={<IconCheckCircle />}
           active={statusFilter === "succeeded"}
           onClick={() => setStatusFilter(statusFilter === "succeeded" ? "" : "succeeded")}
         />
         <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
           label="失败"
           value={failedCount}
           sublabel="failed + timeout"
@@ -253,10 +269,15 @@ export function TasksView(): JSX.Element {
           placeholder=""
           options={TIME_WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
         />
-        <div className="relative ml-2 flex-1 max-w-md">
+        <div className="relative ml-2 max-w-md flex-1">
           <svg
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600"
-            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-600"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
           >
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
@@ -266,7 +287,7 @@ export function TasksView(): JSX.Element {
             placeholder="本页内搜索 task_id / type / node…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-md border border-white/[0.07] bg-[#0a0d12] py-1.5 pl-9 pr-3 text-[12.5px] text-white outline-none transition-colors placeholder:text-gray-600 focus:border-cyan-400/40 focus:bg-[#0c1017]"
+            className="w-full rounded-md border border-white/[0.07] bg-[#0a0d12] py-1.5 pr-3 pl-9 text-[12.5px] text-white transition-colors outline-none placeholder:text-gray-600 focus:border-cyan-400/40 focus:bg-[#0c1017]"
           />
         </div>
         {hasAnyFilter ? (
@@ -301,10 +322,17 @@ export function TasksView(): JSX.Element {
                 <>
                   已加载 <span className="font-mono text-gray-300">{items.length}</span>
                   {totalEstimate != null && totalEstimate > items.length ? (
-                    <> / 共约 <span className="font-mono text-gray-300">{totalEstimate}</span></>
+                    <>
+                      {" "}
+                      / 共约 <span className="font-mono text-gray-300">{totalEstimate}</span>
+                    </>
                   ) : null}
                   {query.trim() ? (
-                    <> · 本页过滤 <span className="font-mono text-cyan-300">{visibleItems.length}</span></>
+                    <>
+                      {" "}
+                      · 本页过滤{" "}
+                      <span className="font-mono text-cyan-300">{visibleItems.length}</span>
+                    </>
                   ) : null}
                 </>
               )}
@@ -331,7 +359,7 @@ export function TasksView(): JSX.Element {
               </div>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-md border border-white/[0.05]">
+            <div className="overflow-x-auto overflow-y-hidden rounded-md border border-white/[0.05]">
               <table className="w-full text-left text-[12.5px]">
                 <thead>
                   <tr className="border-b border-white/[0.05] bg-white/[0.015] text-[11px] text-gray-500">
@@ -345,11 +373,23 @@ export function TasksView(): JSX.Element {
                 </thead>
                 <tbody>
                   {visibleItems.map((task) => {
-                    const tone = STATUS_TONE[task.status] ?? { dot: "bg-gray-500", text: "text-gray-400" };
+                    const tone = STATUS_TONE[task.status] ?? {
+                      dot: "bg-gray-500",
+                      text: "text-gray-400",
+                    };
                     return (
                       <tr
                         key={task.task_id}
                         onClick={() => navigate({ name: "task-detail", taskId: task.task_id })}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            navigate({ name: "task-detail", taskId: task.task_id });
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`打开任务 ${task.task_id}`}
                         className="group cursor-pointer border-b border-white/[0.03] transition-colors last:border-0 hover:bg-white/[0.02]"
                       >
                         <td className="px-4 py-3">
@@ -376,7 +416,9 @@ export function TasksView(): JSX.Element {
                           {formatRelative(task.created_at)}
                         </td>
                         <td className="px-4 py-3 text-right text-[11.5px] text-gray-500">
-                          {task.finished_at ? formatRelative(task.finished_at) : (
+                          {task.finished_at ? (
+                            formatRelative(task.finished_at)
+                          ) : (
                             <span className="text-gray-700">—</span>
                           )}
                         </td>
@@ -442,7 +484,9 @@ export function TasksView(): JSX.Element {
                       <button
                         type="button"
                         onClick={() => setNodeFilter(isFiltered ? "" : node.node_id)}
-                        onDoubleClick={() => navigate({ name: "node-detail", nodeId: node.node_id })}
+                        onDoubleClick={() =>
+                          navigate({ name: "node-detail", nodeId: node.node_id })
+                        }
                         className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
                           isFiltered
                             ? "border-cyan-400/40 bg-cyan-500/[0.08]"
@@ -452,13 +496,19 @@ export function TasksView(): JSX.Element {
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
                         <div className="min-w-0 flex-1">
-                          <div className={`truncate text-[12px] ${isFiltered ? "text-white" : "text-gray-300"}`}>
+                          <div
+                            className={`truncate text-[12px] ${isFiltered ? "text-white" : "text-gray-300"}`}
+                          >
                             {node.display_name}
                           </div>
-                          <div className="truncate font-mono text-[10px] text-gray-600">{node.node_type}</div>
+                          <div className="truncate font-mono text-[10px] text-gray-600">
+                            {node.node_type}
+                          </div>
                         </div>
                         {isFiltered ? (
-                          <span className="font-mono text-[9.5px] uppercase tracking-wider text-cyan-300">on</span>
+                          <span className="font-mono text-[9.5px] tracking-wider text-cyan-300 uppercase">
+                            on
+                          </span>
                         ) : null}
                       </button>
                     </li>
@@ -526,7 +576,16 @@ export function TasksView(): JSX.Element {
 
 function IconList(): JSX.Element {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="8" y1="6" x2="20" y2="6" />
       <line x1="8" y1="12" x2="20" y2="12" />
       <line x1="8" y1="18" x2="20" y2="18" />
@@ -539,7 +598,16 @@ function IconList(): JSX.Element {
 
 function IconLoader(): JSX.Element {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 2v4" />
       <path d="M12 18v4" />
       <path d="M4.93 4.93l2.83 2.83" />
@@ -554,7 +622,16 @@ function IconLoader(): JSX.Element {
 
 function IconCheckCircle(): JSX.Element {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="9" />
       <polyline points="9 12 11.5 14.5 16 10" />
     </svg>
@@ -563,7 +640,16 @@ function IconCheckCircle(): JSX.Element {
 
 function IconAlert(): JSX.Element {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 3 L22 19 H 2 Z" />
       <line x1="12" y1="10" x2="12" y2="14" />
       <circle cx="12" cy="17" r="0.5" fill="currentColor" />
@@ -583,9 +669,7 @@ function FilterSelect({
   options: Array<{ value: string; label: string }>;
 }): JSX.Element {
   // 注入 placeholder 作为可选"清空"项 (空 value)
-  const allOptions = placeholder
-    ? [{ value: "", label: placeholder }, ...options]
-    : options;
+  const allOptions = placeholder ? [{ value: "", label: placeholder }, ...options] : options;
   return (
     <Dropdown
       value={value}

@@ -83,9 +83,10 @@ function TabButton({
   badge: number;
   tone: "red" | "cyan";
 }): JSX.Element {
-  const badgeCls = tone === "red"
-    ? "border-red-400/30 bg-red-400/[0.08] text-red-300"
-    : "border-cyan-400/30 bg-cyan-400/[0.08] text-cyan-300";
+  const badgeCls =
+    tone === "red"
+      ? "border-red-400/30 bg-red-400/[0.08] text-red-300"
+      : "border-cyan-400/30 bg-cyan-400/[0.08] text-cyan-300";
   return (
     <button
       type="button"
@@ -124,7 +125,9 @@ function WarningsList(): JSX.Element {
 
   const seqRef = useRef(0);
   const loadingRef = useRef(false);
-  useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   type Mode = "reset" | "append" | "refresh";
   const fetchPage = useCallback(
@@ -173,7 +176,9 @@ function WarningsList(): JSX.Element {
       void fetchPage(null, "refresh");
     };
     const timer = window.setInterval(tick, POLL_INTERVAL_MS);
-    function onVis() { if (!document.hidden) tick(); }
+    function onVis() {
+      if (!document.hidden) tick();
+    }
     document.addEventListener("visibilitychange", onVis);
     return () => {
       window.clearInterval(timer);
@@ -188,7 +193,9 @@ function WarningsList(): JSX.Element {
     const el = sentinelRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
-      (entries) => { if (entries[0]?.isIntersecting) void fetchPage(cursor, "append"); },
+      (entries) => {
+        if (entries[0]?.isIntersecting) void fetchPage(cursor, "append");
+      },
       { rootMargin: "200px" },
     );
     io.observe(el);
@@ -199,7 +206,10 @@ function WarningsList(): JSX.Element {
     const q = query.trim().toLowerCase();
     if (!q) return items;
     return items.filter((w) =>
-      [w.warning_type, w.source_type, w.source_id ?? "", w.command_excerpt ?? ""].join(" ").toLowerCase().includes(q),
+      [w.warning_type, w.source_type, w.source_id ?? "", w.command_excerpt ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
     );
   }, [items, query]);
 
@@ -212,7 +222,10 @@ function WarningsList(): JSX.Element {
         onQuery={setQuery}
         placeholder="搜索类型 / 源 / 命令片段…"
         canClear={!!timeWindow || !!query.trim()}
-        onClear={() => { setTimeWindow(""); setQuery(""); }}
+        onClear={() => {
+          setTimeWindow("");
+          setQuery("");
+        }}
       />
 
       <ResultCounter
@@ -231,7 +244,7 @@ function WarningsList(): JSX.Element {
           sub={!timeWindow && !query ? "系统稳定运行,未捕获到危险操作" : "尝试清空筛选或扩大时间窗"}
         />
       ) : (
-        <div className="overflow-hidden rounded-md border border-white/[0.05]">
+        <div className="overflow-x-auto overflow-y-hidden rounded-md border border-white/[0.05]">
           <table className="w-full text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-white/[0.05] bg-white/[0.015] text-[11px] text-gray-500">
@@ -249,9 +262,22 @@ function WarningsList(): JSX.Element {
                   <FragmentRow key={w.id}>
                     <tr
                       onClick={() => setExpanded(isOpen ? null : w.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setExpanded(isOpen ? null : w.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      aria-label={`展开安全告警 ${w.warning_type}`}
                       className="group cursor-pointer border-b border-white/[0.03] transition-colors last:border-0 hover:bg-white/[0.02]"
                     >
-                      <td className="px-4 py-3 font-mono text-[11.5px] text-gray-500" title={formatTime(w.created_at)}>
+                      <td
+                        className="px-4 py-3 font-mono text-[11.5px] text-gray-500"
+                        title={formatTime(w.created_at)}
+                      >
                         {formatRelative(w.created_at)}
                       </td>
                       <td className="px-4 py-3">
@@ -263,7 +289,9 @@ function WarningsList(): JSX.Element {
                       <td className="px-4 py-3 text-[12px] text-gray-300">
                         <span className="font-mono text-gray-400">{w.source_type}</span>
                         {w.source_id ? (
-                          <span className="ml-1.5 font-mono text-[11px] text-gray-600">{w.source_id}</span>
+                          <span className="ml-1.5 font-mono text-[11px] text-gray-600">
+                            {w.source_id}
+                          </span>
                         ) : null}
                       </td>
                       <td className="max-w-[420px] truncate px-4 py-3 font-mono text-[11.5px] text-gray-500">
@@ -287,7 +315,9 @@ function WarningsList(): JSX.Element {
           </table>
           <div ref={sentinelRef} />
           {cursor && loading ? <LoadingFooter /> : null}
-          {!cursor && items.length > 0 && !loading ? <EndOfListFooter count={items.length} /> : null}
+          {!cursor && items.length > 0 && !loading ? (
+            <EndOfListFooter count={items.length} />
+          ) : null}
         </div>
       )}
     </div>
@@ -309,7 +339,9 @@ function AuditsList(): JSX.Element {
 
   const seqRef = useRef(0);
   const loadingRef = useRef(false);
-  useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   type Mode = "reset" | "append" | "refresh";
   const fetchPage = useCallback(
@@ -357,7 +389,9 @@ function AuditsList(): JSX.Element {
       void fetchPage(null, "refresh");
     };
     const timer = window.setInterval(tick, POLL_INTERVAL_MS);
-    function onVis() { if (!document.hidden) tick(); }
+    function onVis() {
+      if (!document.hidden) tick();
+    }
     document.addEventListener("visibilitychange", onVis);
     return () => {
       window.clearInterval(timer);
@@ -371,7 +405,9 @@ function AuditsList(): JSX.Element {
     const el = sentinelRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
-      (entries) => { if (entries[0]?.isIntersecting) void fetchPage(cursor, "append"); },
+      (entries) => {
+        if (entries[0]?.isIntersecting) void fetchPage(cursor, "append");
+      },
       { rootMargin: "200px" },
     );
     io.observe(el);
@@ -382,7 +418,17 @@ function AuditsList(): JSX.Element {
     const q = query.trim().toLowerCase();
     if (!q) return items;
     return items.filter((e) =>
-      [e.action, e.actor_type, e.actor_id ?? "", e.target_type, e.target_id ?? "", e.request_ip ?? ""].join(" ").toLowerCase().includes(q),
+      [
+        e.action,
+        e.actor_type,
+        e.actor_id ?? "",
+        e.target_type,
+        e.target_id ?? "",
+        e.request_ip ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
     );
   }, [items, query]);
 
@@ -395,7 +441,10 @@ function AuditsList(): JSX.Element {
         onQuery={setQuery}
         placeholder="搜索 action / 操作者 / 目标 / IP…"
         canClear={!!timeWindow || !!query.trim()}
-        onClear={() => { setTimeWindow(""); setQuery(""); }}
+        onClear={() => {
+          setTimeWindow("");
+          setQuery("");
+        }}
       />
 
       <ResultCounter
@@ -414,7 +463,7 @@ function AuditsList(): JSX.Element {
           sub={!timeWindow && !query ? "系统尚未记录管理操作" : "尝试清空筛选或扩大时间窗"}
         />
       ) : (
-        <div className="overflow-hidden rounded-md border border-white/[0.05]">
+        <div className="overflow-x-auto overflow-y-hidden rounded-md border border-white/[0.05]">
           <table className="w-full text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-white/[0.05] bg-white/[0.015] text-[11px] text-gray-500">
@@ -433,22 +482,43 @@ function AuditsList(): JSX.Element {
                   <FragmentRow key={e.id}>
                     <tr
                       onClick={() => setExpanded(isOpen ? null : e.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setExpanded(isOpen ? null : e.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      aria-label={`展开审计事件 ${e.action}`}
                       className="group cursor-pointer border-b border-white/[0.03] transition-colors last:border-0 hover:bg-white/[0.02]"
                     >
-                      <td className="px-4 py-3 font-mono text-[11.5px] text-gray-500" title={formatTime(e.created_at)}>
+                      <td
+                        className="px-4 py-3 font-mono text-[11.5px] text-gray-500"
+                        title={formatTime(e.created_at)}
+                      >
                         {formatRelative(e.created_at)}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-mono text-[11.5px] text-gray-300">{e.actor_type}</span>
+                        <span className="font-mono text-[11.5px] text-gray-300">
+                          {e.actor_type}
+                        </span>
                         {e.actor_id ? (
-                          <span className="ml-1.5 font-mono text-[10.5px] text-gray-600">{e.actor_id}</span>
+                          <span className="ml-1.5 font-mono text-[10.5px] text-gray-600">
+                            {e.actor_id}
+                          </span>
                         ) : null}
                       </td>
                       <td className="px-4 py-3 font-mono text-[12px] text-cyan-300">{e.action}</td>
                       <td className="px-4 py-3">
-                        <span className="font-mono text-[11.5px] text-gray-400">{e.target_type}</span>
+                        <span className="font-mono text-[11.5px] text-gray-400">
+                          {e.target_type}
+                        </span>
                         {e.target_id ? (
-                          <span className="ml-1.5 font-mono text-[10.5px] text-gray-600">{e.target_id}</span>
+                          <span className="ml-1.5 font-mono text-[10.5px] text-gray-600">
+                            {e.target_id}
+                          </span>
                         ) : null}
                       </td>
                       <td className="px-4 py-3 font-mono text-[11px] text-gray-500">
@@ -472,7 +542,9 @@ function AuditsList(): JSX.Element {
           </table>
           <div ref={sentinelRef} />
           {cursor && loading ? <LoadingFooter /> : null}
-          {!cursor && items.length > 0 && !loading ? <EndOfListFooter count={items.length} /> : null}
+          {!cursor && items.length > 0 && !loading ? (
+            <EndOfListFooter count={items.length} />
+          ) : null}
         </div>
       )}
     </div>
@@ -507,10 +579,15 @@ function FilterBar({
         size="sm"
         className="min-w-[120px]"
       />
-      <div className="relative ml-2 flex-1 max-w-md">
+      <div className="relative ml-2 max-w-md flex-1">
         <svg
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600"
-          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-600"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
         >
           <circle cx="11" cy="11" r="8" />
           <path d="M21 21l-4.35-4.35" />
@@ -520,7 +597,7 @@ function FilterBar({
           placeholder={placeholder}
           value={query}
           onChange={(e) => onQuery(e.target.value)}
-          className="w-full rounded-md border border-white/[0.07] bg-[#0a0d12] py-1.5 pl-9 pr-3 text-[12.5px] text-white outline-none transition-colors placeholder:text-gray-600 focus:border-cyan-400/40 focus:bg-[#0c1017]"
+          className="w-full rounded-md border border-white/[0.07] bg-[#0a0d12] py-1.5 pr-3 pl-9 text-[12.5px] text-white transition-colors outline-none placeholder:text-gray-600 focus:border-cyan-400/40 focus:bg-[#0c1017]"
         />
       </div>
       {canClear ? (
@@ -564,10 +641,16 @@ function ResultCounter({
           <>
             已加载 <span className="font-mono text-gray-300">{loaded}</span>
             {total != null && total > loaded ? (
-              <> / 共约 <span className="font-mono text-gray-300">{total}</span></>
+              <>
+                {" "}
+                / 共约 <span className="font-mono text-gray-300">{total}</span>
+              </>
             ) : null}
             {filtered != null ? (
-              <> · 本页过滤 <span className="font-mono text-cyan-300">{filtered}</span></>
+              <>
+                {" "}
+                · 本页过滤 <span className="font-mono text-cyan-300">{filtered}</span>
+              </>
             ) : null}
           </>
         )}
@@ -609,8 +692,12 @@ function EndOfListFooter({ count }: { count: number }): JSX.Element {
 function Chevron({ open }: { open: boolean }): JSX.Element {
   return (
     <svg
-      width="14" height="14" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
       className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}
     >
       <polyline points="9 18 15 12 9 6" />
