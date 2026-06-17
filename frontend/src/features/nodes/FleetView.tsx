@@ -6,19 +6,19 @@ import { nodeTypeLabel, osLabel } from "../../lib/labels";
 import { formatRelative } from "../../lib/format";
 import { GpuHeatCells } from "../../ui/GpuHeatCells";
 import { MetricTile } from "../../ui/MetricTile";
+import { KpiTile, type KpiTone } from "../../ui/KpiTile";
 import type { components } from "../../types.generated";
 
 type GpuSnapshot = components["schemas"]["HeartbeatGpu"];
 type ConnectionFilter = "all" | OnlineStatus;
 
-const STATUS_TONE: Record<OnlineStatus, { dot: string; glow: string; text: string; accent: string }> = {
-  online: { dot: "bg-emerald-400", glow: "shadow-[0_0_8px_rgba(16,185,129,0.55)]", text: "text-emerald-300", accent: "border-emerald-400/40" },
-  offline: { dot: "bg-amber-400", glow: "", text: "text-amber-300", accent: "border-amber-400/40" },
-  disabled: { dot: "bg-gray-500", glow: "", text: "text-gray-400", accent: "border-gray-500/40" },
-  never_seen: { dot: "bg-violet-400", glow: "", text: "text-violet-300", accent: "border-violet-400/40" },
+// 表格行的状态点 (旧 STATUS_TONE 简化版, 只留 dot + glow)
+const STATUS_DOT: Record<OnlineStatus, { dot: string; glow: string }> = {
+  online: { dot: "bg-emerald-400", glow: "shadow-[0_0_8px_rgba(16,185,129,0.45)]" },
+  offline: { dot: "bg-amber-400", glow: "" },
+  disabled: { dot: "bg-gray-500", glow: "" },
+  never_seen: { dot: "bg-violet-400", glow: "" },
 };
-
-const ALL_FILTER_ACCENT = "border-cyan-400/40 text-cyan-300";
 
 export function FleetView(): JSX.Element {
   const store = useConsoleStore();
@@ -43,12 +43,19 @@ export function FleetView(): JSX.Element {
     });
   }, [store.nodes, connFilter, query]);
 
-  const filterTiles: Array<{ value: ConnectionFilter; label: string; count: number; tone: OnlineStatus | null }> = [
-    { value: "all", label: "全部", count: nodeCounts.total, tone: null },
-    { value: "online", label: "在线", count: nodeCounts.online, tone: "online" },
-    { value: "offline", label: "离线", count: nodeCounts.offline, tone: "offline" },
-    { value: "never_seen", label: "未上线", count: nodeCounts.never_seen, tone: "never_seen" },
-    { value: "disabled", label: "停用", count: nodeCounts.disabled, tone: "disabled" },
+  const filterTiles: Array<{
+    value: ConnectionFilter;
+    label: string;
+    count: number;
+    tone: KpiTone;
+    icon: JSX.Element;
+    sublabel?: string;
+  }> = [
+    { value: "all", label: "全部", count: nodeCounts.total, tone: "neutral", icon: <IconLayers />, sublabel: "fleet 总览" },
+    { value: "online", label: "在线", count: nodeCounts.online, tone: "online", icon: <IconPulse />, sublabel: nodeCounts.total > 0 ? `${Math.round((nodeCounts.online / nodeCounts.total) * 100)}% 可用` : "—" },
+    { value: "offline", label: "离线", count: nodeCounts.offline, tone: "waiting", icon: <IconPlug />, sublabel: "心跳超时" },
+    { value: "never_seen", label: "未上线", count: nodeCounts.never_seen, tone: "violet", icon: <IconClock />, sublabel: "尚未首跳" },
+    { value: "disabled", label: "停用", count: nodeCounts.disabled, tone: "neutral", icon: <IconBan />, sublabel: "管理员停用" },
   ];
 
   return (
@@ -70,42 +77,20 @@ export function FleetView(): JSX.Element {
         </button>
       </header>
 
-      {/* ───── KPI strip = 筛选器 (数据显示即控件) ───── */}
-      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {filterTiles.map((t) => {
-          const isActive = connFilter === t.value;
-          const toneTextCls = t.tone ? STATUS_TONE[t.tone].text : "text-white";
-          const activeBorder = t.value === "all" ? ALL_FILTER_ACCENT : isActive ? STATUS_TONE[t.tone!].text + " " + STATUS_TONE[t.tone!].accent : "";
-          return (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setConnFilter(t.value)}
-              className={`group relative overflow-hidden rounded-md border px-3.5 py-3 text-left transition-all ${
-                isActive
-                  ? `${activeBorder} bg-white/[0.04]`
-                  : "border-white/[0.05] bg-[#0b0e13] hover:border-white/[0.12] hover:bg-[#0d1119]"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {t.tone ? (
-                    <span className={`h-1.5 w-1.5 rounded-full ${STATUS_TONE[t.tone].dot} ${isActive ? STATUS_TONE[t.tone].glow : ""}`} />
-                  ) : (
-                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.55)]" : "bg-gray-600"}`} />
-                  )}
-                  <span className={`text-[11.5px] font-medium ${isActive ? "text-white" : "text-gray-400"}`}>{t.label}</span>
-                </div>
-                {isActive ? (
-                  <span className="text-[9.5px] font-mono uppercase tracking-wider text-gray-600">active</span>
-                ) : null}
-              </div>
-              <div className={`mt-2 text-[24px] font-semibold tracking-tight tabular-nums ${isActive ? toneTextCls : "text-gray-200"}`}>
-                {t.count}
-              </div>
-            </button>
-          );
-        })}
+      {/* ───── KPI strip = 筛选器 (KpiTile v3, 独立卡 + icon + 波浪签名) ───── */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {filterTiles.map((t) => (
+          <KpiTile
+            key={t.value}
+            label={t.label}
+            value={t.count}
+            sublabel={t.sublabel}
+            tone={t.tone}
+            icon={t.icon}
+            active={connFilter === t.value}
+            onClick={() => setConnFilter(t.value)}
+          />
+        ))}
       </div>
 
       {/* ───── Search + roster meta ───── */}
@@ -189,7 +174,7 @@ export function FleetView(): JSX.Element {
                   ? gpus.reduce((s, g) => s + Number(g.utilization_percent ?? 0), 0) / gpus.length
                   : 0;
                 const hasMetrics = liveNode?.latest_status != null;
-                const tone = STATUS_TONE[node.connection_status];
+                const tone = STATUS_DOT[node.connection_status];
 
                 return (
                   <tr
@@ -299,3 +284,51 @@ export function FleetView(): JSX.Element {
   );
 }
 
+// ─── KPI 行 icon — 16-18px mono SVG, 颜色继承父级 ───
+
+function IconLayers(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </svg>
+  );
+}
+
+function IconPulse(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 12 7 12 10 5 14 19 17 12 21 12" />
+    </svg>
+  );
+}
+
+function IconPlug(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 2v6" />
+      <path d="M15 2v6" />
+      <path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8z" />
+      <path d="M12 17v5" />
+    </svg>
+  );
+}
+
+function IconClock(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15.5 14" />
+    </svg>
+  );
+}
+
+function IconBan(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <line x1="5.5" y1="5.5" x2="18.5" y2="18.5" />
+    </svg>
+  );
+}

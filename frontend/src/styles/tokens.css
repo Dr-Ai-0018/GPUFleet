@@ -113,6 +113,101 @@
   /* 只留一点点深度暗示, 不画"凸起" */
   --shadow-card-lite: 0 1px 1px rgba(0, 0, 0, 0.25);
 
+  /* =========================================================
+   * 质感层 — "黑底霓虹"高级感, 不是塑料贴纸
+   * 设计思路: 卡片是从黑面"凸起"的金属/玻璃, 接收顶部光
+   * ========================================================= */
+
+  /* ── 卡片纵向 gradient (顶部 +2.5% 亮, 底部 -1.5% 暗, 配 base 色) ── */
+  /* 用法: background-image: var(--surface-grad); background-color: #0a0d12; */
+  --surface-grad:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.028) 0%,
+      rgba(255, 255, 255, 0.008) 38%,
+      rgba(0, 0, 0, 0.18) 100%);
+  --surface-grad-active:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.055) 0%,
+      rgba(255, 255, 255, 0.015) 38%,
+      rgba(0, 0, 0, 0.20) 100%);
+  --surface-grad-hover:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.040) 0%,
+      rgba(255, 255, 255, 0.010) 38%,
+      rgba(0, 0, 0, 0.18) 100%);
+
+  /* ── Bezel (内阴影模拟"金属凸起" — 顶光底暗) ── */
+  /* 用法: box-shadow: var(--bezel-card); */
+  --bezel-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  --bezel-card-active:
+    inset 0 1px 0 rgba(255, 255, 255, 0.075),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+
+  /* ── 多层 Glow (强调态 — 真光源, 不是 LED 灯条 / 反光胶带)
+   * 关键: 没有"紧贴 1px 硬环"那一层 (会割边), 全部从 4px 起发, 远端拉到 56px 充分弥散
+   * 视觉效果: 光从卡片里"渗"出来, 边缘是软的, 不是"贴了一圈彩边"
+   * 卡片轮廓靠 transparent border + bezel 表达, 不靠 shadow ring
+   * ── */
+  --glow-cyan-3:
+    0 0 20px -6px rgba(6, 182, 212, 0.45),
+    0 0 56px -16px rgba(6, 182, 212, 0.22);
+  --glow-emerald-3:
+    0 0 20px -6px rgba(16, 185, 129, 0.45),
+    0 0 56px -16px rgba(16, 185, 129, 0.22);
+  --glow-amber-3:
+    0 0 20px -6px rgba(240, 176, 64, 0.45),
+    0 0 56px -16px rgba(240, 176, 64, 0.20);
+  --glow-red-3:
+    0 0 20px -6px rgba(248, 81, 73, 0.45),
+    0 0 56px -16px rgba(248, 81, 73, 0.20);
+  --glow-violet-3:
+    0 0 20px -6px rgba(139, 92, 246, 0.45),
+    0 0 56px -16px rgba(139, 92, 246, 0.20);
+
+  /* ── Soft Glow (弱版 — 给步骤条 / 容器 / 不抢焦点的元素用) ── */
+  --glow-cyan-soft:
+    0 0 16px -8px rgba(6, 182, 212, 0.38);
+  --glow-emerald-soft:
+    0 0 16px -8px rgba(16, 185, 129, 0.38);
+  --glow-amber-soft:
+    0 0 16px -8px rgba(240, 176, 64, 0.36);
+  --glow-red-soft:
+    0 0 16px -8px rgba(248, 81, 73, 0.36);
+  --glow-violet-soft:
+    0 0 16px -8px rgba(139, 92, 246, 0.36);
+
+  /* ── 进度条 gradient (示波器轨迹感, 暗端 → 亮端 + 末端 shadow 单独打) ── */
+  --bar-grad-emerald: linear-gradient(90deg, rgba(16, 185, 129, 0.45) 0%, #10b981 75%, #4adfa8 100%);
+  --bar-grad-cyan:    linear-gradient(90deg, rgba(6, 182, 212, 0.45) 0%, #06b6d4 75%, #4ed5e6 100%);
+  --bar-grad-amber:   linear-gradient(90deg, rgba(240, 176, 64, 0.45) 0%, #f0b040 75%, #ffd07a 100%);
+  --bar-grad-red:     linear-gradient(90deg, rgba(248, 81, 73, 0.45) 0%, #f85149 75%, #ff8080 100%);
+
+  /* ── 状态色"夹色"版 (主点 dot 用纯色, 大面积 fill / text 用夹色) ── */
+  /* tailwind 里的 emerald-300 / cyan-300 太鲜, 换成略灰的"霓虹粉笔色" */
+  --c-online-soft-text: #5eddb0;
+  --c-running-soft-text: #5ed1e6;
+  --c-waiting-soft-text: #f0c878;
+  --c-danger-soft-text: #ff8a80;
+  --c-violet-soft-text: #ad94f5;
+
+  /* ── Tone "软底色" (给 KPI icon 方框 / 标签徽章用) ── */
+  --tone-soft-bg-gray: rgba(255, 255, 255, 0.045);
+  --tone-soft-bg-emerald: rgba(16, 185, 129, 0.10);
+  --tone-soft-bg-cyan: rgba(6, 182, 212, 0.10);
+  --tone-soft-bg-amber: rgba(240, 176, 64, 0.12);
+  --tone-soft-bg-red: rgba(248, 81, 73, 0.10);
+  --tone-soft-bg-violet: rgba(139, 92, 246, 0.10);
+
+  /* ── Tone "纯 accent"色 (给左侧 accent bar / underline 用) ── */
+  --tone-accent-gray: rgba(255, 255, 255, 0.25);
+  --tone-accent-emerald: #10b981;
+  --tone-accent-cyan: #06b6d4;
+  --tone-accent-amber: #f0b040;
+  --tone-accent-red: #f85149;
+  --tone-accent-violet: #8b5cf6;
+
   /* Compat aliases */
   --glass-bg: var(--bg-surface);
   --glass-bg-strong: var(--bg-surface-2);

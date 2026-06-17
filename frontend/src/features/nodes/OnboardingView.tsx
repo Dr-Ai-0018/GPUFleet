@@ -5,16 +5,18 @@ import type { NodeCreateResponse, NodeOnboardingLifecycleResponse } from "../../
 import { NodeCreatePanel } from "./NodeCreatePanel";
 import { OnboardingPackagePanel } from "./OnboardingPackagePanel";
 import { CodeBlock } from "../../ui/CodeBlock";
+import { KpiTile } from "../../ui/KpiTile";
+import { LinearStepper } from "../../ui/LinearStepper";
 import { useToast } from "../../ui/Toast";
 import { formatRelative, formatTime } from "../../lib/format";
 import { labelForError, nodeTypeLabel, osLabel } from "../../lib/labels";
 
 type StageId = 1 | 2 | 3;
 
-const STAGES: Array<{ id: StageId; label: string; sub: string }> = [
-  { id: 1, label: "登记节点", sub: "填表生成 token + 安装包" },
-  { id: 2, label: "部署接入包", sub: "在节点机执行启动命令" },
-  { id: 3, label: "验证心跳", sub: "首次心跳上线即纳管" },
+const STAGES = [
+  { id: 1 as StageId, label: "登记节点", sub: "填表生成 token + 安装包" },
+  { id: 2 as StageId, label: "部署接入包", sub: "在节点机执行启动命令" },
+  { id: 3 as StageId, label: "验证心跳", sub: "首次心跳上线即纳管" },
 ];
 
 export function OnboardingView(): JSX.Element {
@@ -111,72 +113,35 @@ export function OnboardingView(): JSX.Element {
         </div>
       </header>
 
-      {/* ───── KPI strip ───── */}
-      <div className="mb-8 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {/* ───── KPI 卡片 (独立卡 + gap + 底部波浪装饰, 取浅色参考图精华移植深底) ───── */}
+      <div className="mb-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <KpiTile
           label="总节点"
           value={totalNodes}
-          dotCls="bg-gray-500"
-          textCls="text-white"
+          sublabel="Fleet nodes"
+          icon={<IconServer />}
         />
         <KpiTile
           label="在线"
           value={onlineNodes}
-          dotCls="bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.55)]"
-          textCls="text-emerald-300"
+          tone="online"
+          active={onlineNodes > 0}
+          sublabel={totalNodes > 0 ? `${Math.round((onlineNodes / totalNodes) * 100)}% 可用` : "—"}
+          icon={<IconPulse />}
         />
         <KpiTile
           label="待接入"
           value={awaitingCount}
-          dotCls={awaitingCount > 0 ? "bg-amber-400 shadow-[0_0_6px_rgba(245,176,64,0.55)]" : "bg-gray-600"}
-          textCls={awaitingCount > 0 ? "text-amber-300" : "text-gray-400"}
+          tone="waiting"
+          active={awaitingCount > 0}
+          sublabel={awaitingCount > 0 ? "等待首次心跳" : "全部已上线"}
+          icon={<IconHourglass />}
         />
       </div>
 
-      {/* ───── Stepper (横向流程) ───── */}
-      <div className="mb-10 flex items-center gap-2">
-        {STAGES.map((s, idx) => {
-          const isDone = currentStage > s.id;
-          const isActive = currentStage === s.id;
-          return (
-            <div key={s.id} className="flex flex-1 items-center gap-2">
-              <div
-                className={`flex-1 rounded-md border px-4 py-3 transition-all ${
-                  isActive
-                    ? "border-cyan-400/40 bg-cyan-500/[0.06]"
-                    : isDone
-                      ? "border-emerald-400/25 bg-emerald-500/[0.04]"
-                      : "border-white/[0.05] bg-[#0b0e13]"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <StageBadge id={s.id} isActive={isActive} isDone={isDone} />
-                  <span
-                    className={`text-[13px] font-medium ${
-                      isActive ? "text-cyan-200" : isDone ? "text-emerald-200" : "text-gray-300"
-                    }`}
-                  >
-                    {s.label}
-                  </span>
-                </div>
-                <div className="mt-1 pl-7 text-[11.5px] text-gray-500">{s.sub}</div>
-              </div>
-              {idx < STAGES.length - 1 ? (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className={`shrink-0 ${isDone ? "text-emerald-400/60" : "text-gray-700"}`}
-                >
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              ) : null}
-            </div>
-          );
-        })}
+      {/* ───── Stepper (Stripe / Linear 线性 stepper, 不再是 3 个独立发光卡片) ───── */}
+      <div className="mb-12">
+        <LinearStepper stages={STAGES} currentStage={currentStage} />
       </div>
 
       {/* ───── 主区: 登记表单 + 接入包 ───── */}
@@ -204,22 +169,27 @@ export function OnboardingView(): JSX.Element {
             {pkg ? (
               <OnboardingPackagePanel pkg={pkg} />
             ) : (
-              <div className="rounded-md border border-dashed border-white/[0.07] bg-[#0a0d12] px-6 py-14 text-center">
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  className="mx-auto text-gray-700"
+              <div
+                className="rounded-[10px] border px-6 py-14 text-center"
+                style={{
+                  backgroundColor: "#0a0d12",
+                  backgroundImage: "var(--surface-grad)",
+                  borderColor: "rgba(255,255,255,0.05)",
+                }}
+              >
+                {/* icon 在 tone 软方框里 (跟 KpiTile icon 同款语言) */}
+                <div
+                  className="mx-auto flex h-10 w-10 items-center justify-center rounded-[8px] text-[var(--c-running-soft-text)]"
+                  style={{ backgroundColor: "var(--tone-soft-bg-cyan)" }}
                 >
-                  <ellipse cx="12" cy="5" rx="9" ry="3" />
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                </svg>
-                <div className="mt-3 text-[12.5px] font-medium text-gray-400">等待登记完成</div>
-                <div className="mt-1 text-[11.5px] text-gray-600">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                  </svg>
+                </div>
+                <div className="mt-4 text-[13px] font-medium tracking-[-0.005em] text-gray-200">等待登记完成</div>
+                <div className="mt-1.5 text-[11.5px] leading-[1.6] text-gray-500">
                   左侧表单提交后,这里生成可复制的安装命令与 .env 模板
                 </div>
               </div>
@@ -367,59 +337,35 @@ function SectionHeading({ title, sub }: { title: string; sub: string }): JSX.Ele
   );
 }
 
-function KpiTile({
-  label,
-  value,
-  dotCls,
-  textCls,
-}: {
-  label: string;
-  value: number;
-  dotCls: string;
-  textCls: string;
-}): JSX.Element {
+// ─── KPI 行的 icon — 16x16 mono SVG, 颜色由父级 currentColor 决定 ───
+
+function IconServer(): JSX.Element {
   return (
-    <div className="rounded-md border border-white/[0.05] bg-[#0b0e13] px-3.5 py-3">
-      <div className="flex items-center gap-2">
-        <span className={`h-1.5 w-1.5 rounded-full ${dotCls}`} />
-        <span className="text-[11.5px] font-medium text-gray-400">{label}</span>
-      </div>
-      <div className={`mt-2 text-[24px] font-semibold tracking-tight tabular-nums ${textCls}`}>
-        {value}
-      </div>
-    </div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="6" rx="1.5" />
+      <rect x="3" y="14" width="18" height="6" rx="1.5" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+      <line x1="7" y1="17" x2="7.01" y2="17" />
+    </svg>
   );
 }
 
-function StageBadge({
-  id,
-  isActive,
-  isDone,
-}: {
-  id: StageId;
-  isActive: boolean;
-  isDone: boolean;
-}): JSX.Element {
-  if (isDone) {
-    return (
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-400/40 bg-emerald-500/[0.15] text-emerald-300">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      </span>
-    );
-  }
-  if (isActive) {
-    return (
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-500/[0.15] font-mono text-[10px] font-semibold text-cyan-200 shadow-[0_0_8px_rgba(6,182,212,0.35)]">
-        {id}
-      </span>
-    );
-  }
+function IconPulse(): JSX.Element {
   return (
-    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] font-mono text-[10px] font-semibold text-gray-600">
-      {id}
-    </span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 12 7 12 10 5 14 19 17 12 21 12" />
+    </svg>
+  );
+}
+
+function IconHourglass(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12" />
+      <path d="M6 21h12" />
+      <path d="M6 3v3a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3" />
+      <path d="M6 21v-3a6 6 0 0 1 6-6 6 6 0 0 1 6 6v3" />
+    </svg>
   );
 }
 
