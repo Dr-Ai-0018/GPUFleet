@@ -260,7 +260,7 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   );
 
   return (
-    <div className="mx-auto max-w-[1300px] space-y-6">
+    <div className="space-y-7">
       <ConfirmDialog
         open={confirmToggleOpen}
         title={
