@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { LineChart } from "echarts/charts";
@@ -14,7 +14,7 @@ import { useConsoleStore } from "../../../state/ConsoleStore";
 import { getRangeSpec, formatTick, type RangeKey } from "../../../lib/timeRange";
 import { useSmoothFeeder } from "../../../lib/useSmoothFeeder";
 import type { NodeStatusHistoryItem } from "../../../types";
-import { bytesPerSecondToReadable, availabilityText, cardCls, zhLabel, enLabel, zhBody } from "./shared";
+import { bytesPerSecondToReadable, availabilityText } from "./shared";
 import type { GpuSnapshot, MonitorPanelProps, NetworkSnapshot, NvidiaSnapshot } from "./types";
 
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
@@ -181,327 +181,297 @@ export function MonitorPanel({
     : 0;
 
   return (
-    <div className="space-y-8">
-      <section className="overflow-hidden rounded-[14px] border border-[var(--card-border)] bg-[var(--surface-card)]">
-        <div className="flex items-center justify-between border-b border-white/[0.04] px-6 py-4">
-          <div><div className={zhLabel}>运行概览</div></div>
-          <TimeRangePicker value={range} onChange={setRange} />
+    <div className="py-2">
+      {/* ═══════ TOP BAR — title + actions ═══════ */}
+      <header className="mb-10 flex items-end justify-between gap-6 border-b border-white/[0.045] pb-7">
+        <div>
+          <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-white">硬件监控</h2>
+          <p className="mt-1.5 text-[13px] leading-6 text-gray-500">
+            节点 agent 上报的实时遥测,采样 1 s,平滑播放。最近更新 <span className="text-cyan-400">{formatRelative(latestStatus.reported_at)}</span>。
+          </p>
         </div>
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,1.5fr)_340px]">
-          <div className="border-b border-white/[0.04] px-7 py-6 xl:border-b-0 xl:border-r">
-            <div className="flex items-start justify-between gap-6">
-              <div className="min-w-0">
-                <div className="text-[11px] font-medium tracking-[0.06em] text-cyan-300/75">核心负载</div>
-                <h3 className="mt-3 text-[22px] font-bold leading-[1.15] tracking-[-0.015em] text-white">CPU、内存、GPU</h3>
-                <p className="mt-2 text-[13px] leading-6 text-gray-400">{cpu?.model ?? "未知 CPU"}{primaryGpu ? ` · ${String(primaryGpu.model ?? "主 GPU")}` : ""}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className={zhLabel}>最近更新</div>
-                <div className="mt-2 text-[16px] font-mono text-cyan-300">{formatRelative(latestStatus.reported_at)}</div>
-              </div>
-            </div>
+        <TimeRangePicker value={range} onChange={setRange} />
+      </header>
 
-            <div className="mt-6 grid gap-0 border-t border-white/[0.04] lg:grid-cols-[1fr_1fr_1.15fr]">
-              {/* CPU — 大数字 + 横向进度条 */}
-              <div className="py-5 lg:pr-6">
-                <div className={enLabel}>CPU</div>
-                <div className="mt-3 flex items-end gap-2">
-                  <span className="text-[34px] font-bold font-mono leading-none text-white">{Math.round(cpuUse)}%</span>
-                  <span className="pb-1 text-[12px] font-mono text-gray-500">{physicalCoreCount ?? "?"}C / {coreCount}T</span>
-                </div>
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div className="h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-700" style={{ width: `${cpuUse}%` }} />
-                </div>
-                <div className="mt-3">
-                  <MiniSparkline data={historyItems.map((item) => item.cpu_usage_percent ?? 0)} width={240} height={32} color="#06b6d4" fillOpacity={0.06} className="opacity-80" />
-                </div>
-              </div>
-              {/* 内存 — 大数字 + 分段构成条 */}
-              <div className="border-t border-white/[0.04] py-5 lg:border-l lg:border-t-0 lg:px-6">
-                <div className={zhLabel}>内存</div>
-                <div className="mt-3 flex items-end gap-2">
-                  <span className="text-[34px] font-bold font-mono leading-none text-white">{Math.round(memUse)}%</span>
-                  <span className="pb-1 text-[12px] font-mono text-gray-500">{bytesToReadable(memUsed)} / {bytesToReadable(memTotal)}</span>
-                </div>
-                <MemoryCompositionBar total={memTotal} used={memUsed} cached={memCached ?? 0} available={memAvailable ?? 0} className="mt-4" />
-              </div>
-              <div className="border-t border-white/[0.04] py-5 lg:border-l lg:border-t-0 lg:pl-6">
-                <div className="flex items-start justify-between gap-6">
-                  <div className="min-w-0">
-                    <div className={zhLabel}>主 GPU</div>
-                    <div className="mt-3 flex items-end gap-3">
-                      <span className="text-[34px] font-bold font-mono leading-none text-white">{primaryGpu ? `${primaryGpuUtil}%` : "—"}</span>
-                      <span className="pb-1 text-[12px] font-mono text-gray-500">{primaryGpu ? `${primaryGpuVramPct}% VRAM` : "无加速卡"}</span>
+      {/* ═══════ MAIN + SIDEBAR LAYOUT ═══════ */}
+      <div className="grid grid-cols-1 gap-x-14 gap-y-16 xl:grid-cols-[minmax(0,1fr)_320px]">
+        {/* ╔════ MAIN COLUMN ════╗ */}
+        <div className="min-w-0 space-y-16">
+
+      {/* ═════════ Section: 处理器 ═════════ */}
+      <section>
+        <SectionHeading
+          title="处理器"
+          subtitle={cpu?.model ?? "未知 CPU"}
+          right={<span className="text-[12px] text-gray-500">{physicalCoreCount ? `${physicalCoreCount} 物理核 · ` : ""}{coreCount} 逻辑线程</span>}
+        />
+
+        <div className="mt-8 grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+          {/* Left column — 4 stats stacked vertically */}
+          <div className="grid grid-cols-2 gap-x-8 gap-y-7 self-start xl:grid-cols-1 xl:gap-y-6">
+            <InlineKv label="负载" value={`${Math.round(cpuUse)}%`} />
+            <InlineKv label="当前频率" value={currentClock != null ? `${currentClock} MHz` : "—"} />
+            <InlineKv label="最大频率" value={maxClock != null ? `${maxClock} MHz` : "—"} />
+            <InlineKv label="后端" value={pythonEnv?.supported_backends ? String(pythonEnv.supported_backends.length) : "—"} />
+          </div>
+
+          {/* Right column — chart */}
+          <div className="min-w-0">
+            <div className="mb-3 flex items-center justify-between text-[12px] text-gray-500">
+              <span>CPU 历史</span>
+              <span className="font-mono text-gray-600">{formatRelative(latestStatus.reported_at)}</span>
+            </div>
+            {historyItems.length > 0 ? (
+              <HistoryChart chartKey={`${nodeId}:cpu`} option={cpuHistoryOption} height={200} />
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-[12px] text-gray-600">等待历史数据…</div>
+            )}
+          </div>
+        </div>
+
+        {/* Per-core grid — full width below mosaic */}
+        {perCore.length > 0 ? (
+          <div className="mt-10">
+            <div className="mb-3 flex items-center justify-between text-[12px] text-gray-500">
+              <span>每核占用</span>
+              <span className="font-mono text-gray-600">{perCore.length} 线程</span>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-4 xl:grid-cols-8 2xl:grid-cols-10">
+              {perCore.map((value, idx) => {
+                const pct = Math.max(0, Math.min(100, Math.round(value)));
+                return (
+                  <div key={idx}>
+                    <div className="mb-1.5 flex items-center justify-between text-[10.5px] font-mono">
+                      <span className="text-gray-500">C{idx}</span>
+                      <span className="text-white/80">{pct}%</span>
                     </div>
-                    <div className="mt-4">
-                      <MiniSparkline data={historyItems.map((item) => item.gpu_utilization_percent ?? 0)} width={240} height={40} color="#a78bfa" fillOpacity={0.08} className="opacity-90" />
+                    <div className="h-1 overflow-hidden rounded-full bg-white/[0.05]">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: pct >= 90 ? "#f85149" : pct >= 70 ? "#f0b040" : "#06b6d4" }} />
                     </div>
                   </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
+          </div>
+        ) : null}
+      </section>
 
-            <div className={`mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 ${zhBody}`}>
-              <span>内存 {memSpeed != null ? `${memSpeed} MT/s` : "—"}</span>
-              <span>网络 {availabilityText(network?.ssid, "有线 / 隐藏")}</span>
-              <span>链路 {availabilityText(network?.link_speed, "—")}</span>
-              <span>环境 {pythonEnv?.python_version ? `Python ${pythonEnv.python_version}` : "—"}</span>
+      {/* ═════════ Section: 内存 ═════════ */}
+      <section>
+        <SectionHeading
+          title="内存"
+          subtitle={`${bytesToReadable(memUsed)} / ${bytesToReadable(memTotal)}`}
+          right={<span className="text-[12px] text-gray-500">压力 <span className="text-white">{Math.round(memUse)}%</span></span>}
+        />
+
+        <div className="mt-8 grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          {/* Left — gauge + composition + headline numbers */}
+          <div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-white/[0.05]">
+              <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-400 to-emerald-400 transition-all" style={{ width: `${memUse}%` }} />
+            </div>
+            <MemoryCompositionBar total={memTotal} used={memUsed} cached={memCached ?? 0} available={memAvailable ?? 0} className="mt-6" />
+            <div className="mt-9 grid grid-cols-3 gap-x-10">
+              <InlineKv label="Available" value={memAvailable != null ? bytesToReadable(memAvailable) : "—"} large />
+              <InlineKv label="Cached" value={memCached != null ? bytesToReadable(memCached) : "—"} large />
+              <InlineKv label="Reserved" value={hardwareReserved != null ? bytesToReadable(hardwareReserved) : "—"} large />
             </div>
           </div>
 
-          <div className="px-7 py-6">
-            <div className="space-y-6">
-              <div className="border-b border-white/[0.04] pb-5">
-                <div className={zhLabel}>网络</div>
-                <div className="mt-3 flex items-end justify-between gap-4">
-                  <div>
-                    <div className="text-[28px] font-bold leading-none text-white">{availabilityText(network?.link_speed, "N/A")}</div>
-                    <div className={`mt-3 ${zhBody} text-gray-500`}>{availabilityText(network?.adapter_name, "未连接")}</div>
-                  </div>
-                  <div className={`text-right ${zhBody}`}>
-                    <div>下载 {bytesPerSecondToReadable(network?.rx_bytes_per_sec)}</div>
-                    <div className="mt-1">上传 {bytesPerSecondToReadable(network?.tx_bytes_per_sec)}</div>
-                  </div>
-                </div>
-                <div className={`mt-4 flex flex-wrap gap-x-5 gap-y-2 ${zhBody}`}>
-                  <span>{availabilityText(network?.ssid, "有线 / 隐藏")}</span>
-                  <span>{availabilityText(network?.ipv4_address, "IPv4 —")}</span>
-                </div>
-              </div>
-
-              <div>
-                <div className={zhLabel}>运行环境</div>
-                <div className="mt-3 flex items-end justify-between gap-4">
-                  <div>
-                    <div className="text-[28px] font-bold leading-none text-white">{pythonEnv?.python_version ? `Python ${pythonEnv.python_version}` : "环境缺失"}</div>
-                    <div className={`mt-3 ${zhBody} text-gray-500`}>
-                      {pythonEnv?.active_environment_kind
-                        ? `${pythonEnv.active_environment_kind}${pythonEnv.active_environment_name ? ` · ${pythonEnv.active_environment_name}` : ""}`
-                        : "无环境元数据"}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={zhLabel}>后端</div>
-                    <div className="mt-2 text-[34px] font-bold font-mono leading-none text-cyan-300">{pythonEnv?.supported_backends ? pythonEnv.supported_backends.length : "—"}</div>
-                  </div>
-                </div>
-                <div className={`mt-4 flex flex-wrap gap-x-5 gap-y-2 ${zhBody}`}>
-                  <span>心跳 {formatRelative(latestStatus.reported_at)}</span>
-                  <span className="inline-flex items-center gap-1">GPU 温度 <TempColorBand temp={primaryGpu?.temperature_c != null ? Number(primaryGpu.temperature_c) : null} width={80} height={5} /></span>
-                </div>
-              </div>
-            </div>
+          {/* Right — secondary details, 2x3 mini grid */}
+          <div className="grid grid-cols-2 gap-x-8 gap-y-7">
+            <InlineKv label="Commit" value={memCommitUsed != null && memCommitLimit != null ? `${bytesToReadable(memCommitUsed)} / ${bytesToReadable(memCommitLimit)}` : "—"} />
+            <InlineKv label="Paged Pool" value={pagedPool != null ? bytesToReadable(pagedPool) : "—"} />
+            <InlineKv label="Nonpaged" value={nonpagedPool != null ? bytesToReadable(nonpagedPool) : "—"} />
+            <InlineKv label="Speed" value={memSpeed != null ? `${memSpeed} MT/s` : "—"} />
+            <InlineKv label="Slots" value={slotsUsed != null ? `${slotsUsed}/${slotsTotal ?? "?"}` : "—"} />
+            <InlineKv label="Form" value={formFactor && memoryType ? `${formFactor} · ${memoryType}` : (formFactor ?? memoryType ?? "—")} />
           </div>
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,0.85fr)]">
-        <section className={`${cardCls} space-y-6`}>
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_240px] xl:items-start">
-            <div className="space-y-5">
-              <div className="space-y-3">
-                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-gray-500">System Processor</p>
-                <h3 className="max-w-[16ch] text-[28px] font-bold leading-[1.12] tracking-[-0.02em] text-white">{cpu?.model ?? "未知 CPU"}</h3>
-                <p className="text-[14px] text-gray-500">{physicalCoreCount ? `${physicalCoreCount} physical cores / ` : ""}{coreCount} 逻辑线程</p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <InlineStat label="Physical" value={physicalCoreCount != null ? String(physicalCoreCount) : "—"} />
-                <InlineStat label="Logical" value={String(coreCount)} />
-                <InlineStat label="RAM" value={bytesToReadable(memTotal)} />
-                <InlineStat label="后端" value={pythonEnv?.supported_backends ? String(pythonEnv.supported_backends.length) : "—"} />
-              </div>
-            </div>
-
-            <div className="border border-cyan-500/10 bg-cyan-950/20 px-5 py-5">
-              <div className="text-[11px] font-medium tracking-[0.06em] text-cyan-300/70">CPU 负载</div>
-              <div className="mt-3 flex items-end gap-2">
-                <span className="text-5xl font-bold font-mono leading-none text-cyan-300">{Math.round(cpuUse)}</span>
-                <span className="pb-1 text-lg font-mono text-cyan-300/70">%</span>
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-300 transition-all" style={{ width: `${cpuUse}%` }} /></div>
-              <div className="mt-5 space-y-2 text-[11px] font-mono">
-                <div className="flex items-center justify-between border-b border-white/[0.04] pb-2"><span className="text-gray-500">Current Clock</span><span className="text-white">{currentClock != null ? `${currentClock} MHz` : "—"}</span></div>
-                <div className="flex items-center justify-between"><span className="text-gray-500">Max Clock</span><span className="text-white">{maxClock != null ? `${maxClock} MHz` : "—"}</span></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-white/[0.04] pt-5">
-            <div className="mb-4 flex items-center justify-between">
-              <span className={zhLabel}>CPU 历史</span>
-              <span className="text-[11px] font-mono text-gray-600">{formatRelative(latestStatus.reported_at)}</span>
-            </div>
-            {historyItems.length > 0 ? <HistoryChart chartKey={`${nodeId}:cpu`} option={cpuHistoryOption} height={150} /> : <div className="flex h-[150px] items-center justify-center text-[11px] text-gray-600">等待历史数据…</div>}
-          </div>
-
-          {perCore.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between"><span className={zhLabel}>每核占用</span><span className="text-[11px] text-gray-600">{perCore.length} 线程采样</span></div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-                {perCore.map((value, idx) => {
-                  const pct = Math.max(0, Math.min(100, Math.round(value)));
-                  return (
-                    <div key={idx} className="border border-white/[0.04] bg-white/[0.02] rounded px-3 py-2.5">
-                      <div className="mb-2 flex items-center justify-between text-[10px] font-mono"><span className="text-gray-500">C{idx}</span><span className="text-white/80">{pct}%</span></div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: pct >= 90 ? "#f85149" : pct >= 70 ? "#f0b040" : "#06b6d4" }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className={`${cardCls} space-y-6`}>
-          <div className="border border-cyan-500/10 bg-cyan-950/20 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className={zhLabel}>内存占用</p>
-                <h3 className="mt-2 text-[24px] font-bold tracking-[-0.01em] text-white">{bytesToReadable(memUsed)} / {bytesToReadable(memTotal)}</h3>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray-500">Pressure</div>
-                <div className="mt-2 text-4xl font-bold font-mono text-cyan-300">{Math.round(memUse)}<span className="ml-1 text-lg text-cyan-300/70">%</span></div>
-              </div>
-            </div>
-            <div className="mt-6 space-y-4">
-              <div className="h-3 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-400 to-emerald-400 transition-all" style={{ width: `${memUse}%` }} /></div>
-              <div className="grid grid-cols-3 gap-x-6 text-[11px] font-mono">
-                <div><div className="text-gray-500">Available</div><div className="mt-1 text-white">{memAvailable != null ? bytesToReadable(memAvailable) : "—"}</div></div>
-                <div><div className="text-gray-500">Cached</div><div className="mt-1 text-white">{memCached != null ? bytesToReadable(memCached) : "—"}</div></div>
-                <div><div className="text-gray-500">Reserved</div><div className="mt-1 text-white">{hardwareReserved != null ? bytesToReadable(hardwareReserved) : "—"}</div></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <MetricCell label="Commit" value={memCommitUsed != null && memCommitLimit != null ? `${bytesToReadable(memCommitUsed)} / ${bytesToReadable(memCommitLimit)}` : "—"} />
-            <MetricCell label="Paged Pool" value={pagedPool != null ? bytesToReadable(pagedPool) : "—"} />
-            <MetricCell label="Nonpaged" value={nonpagedPool != null ? bytesToReadable(nonpagedPool) : "—"} />
-            <MetricCell label="Speed" value={memSpeed != null ? `${memSpeed} MT/s` : "—"} />
-            <MetricCell label="Slots" value={slotsUsed != null ? `${slotsUsed}/${slotsTotal ?? "?"}` : "—"} />
-            <MetricCell label="Form" value={formFactor && memoryType ? `${formFactor} · ${memoryType}` : (formFactor ?? memoryType ?? "—")} />
-          </div>
-
-          <div className="border-t border-white/[0.04] pt-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div><p className={zhLabel}>网络链路</p><h4 className="mt-2 text-[20px] font-bold tracking-[-0.01em] text-white">{availabilityText(network?.adapter_name, "未连接")}</h4></div>
-              <div className="text-right text-[11px] font-mono"><div className="text-cyan-400">{availabilityText(network?.ssid, "Wired / Hidden")}</div><div className="mt-1 text-gray-500">{availabilityText(network?.link_speed)}</div></div>
-            </div>
-            <div className="grid gap-x-6 sm:grid-cols-2">
-              <div className="py-2"><div className="text-[10px] font-mono uppercase tracking-[0.14em] text-gray-500">Upload</div><div className="mt-1 text-2xl font-bold font-mono text-white">{bytesPerSecondToReadable(network?.tx_bytes_per_sec)}</div></div>
-              <div className="py-2"><div className="text-[10px] font-mono uppercase tracking-[0.14em] text-gray-500">Download</div><div className="mt-1 text-2xl font-bold font-mono text-white">{bytesPerSecondToReadable(network?.rx_bytes_per_sec)}</div></div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-              <InlineTag label="SSID" value={availabilityText(network?.ssid, "Wired / Hidden")} />
-              <span className="text-gray-700">·</span>
-              <InlineTag label="Radio" value={availabilityText(network?.radio_type)} />
-              <span className="text-gray-700">·</span>
-              <InlineTag label="Signal" value={availabilityText(network?.signal)} />
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <MetricCell label="IPv4" value={availabilityText(network?.ipv4_address)} />
-              <MetricCell label="IPv6" value={availabilityText(network?.ipv6_address)} />
-              <MetricCell label="Adapter" value={availabilityText(network?.interface_description ?? network?.adapter_name)} />
-              <MetricCell label="Link" value={availabilityText(network?.link_speed)} />
-            </div>
-          </div>
-
-          {pythonEnv?.python_version ? (
-            <div className="flex items-center justify-between rounded-2xl border border-white/[0.04] bg-white/[0.02] px-4 py-3 text-[12px]">
-              <span className="font-mono text-cyan-400">Python {pythonEnv.python_version}</span>
-              <span className="text-gray-500">{pythonEnv.active_environment_kind ? `${pythonEnv.active_environment_kind}${pythonEnv.active_environment_name ? ` · ${pythonEnv.active_environment_name}` : ""}` : "runtime"}</span>
-            </div>
-          ) : null}
-        </section>
-      </div>
-
+      {/* ═════════ Section: GPU (per device) ═════════ */}
       {gpus.length === 0 ? (
-        <div className="py-10 text-center text-[13px] text-gray-600">无 GPU 设备检测到</div>
+        <section>
+          <div className="py-8 text-center text-[13px] text-gray-600">无 GPU 设备检测到</div>
+        </section>
       ) : (
-        <div className="space-y-6">
-          {gpus.map((gpu, idx) => {
-            const currentGpu = gpu as GpuSnapshot;
-            const used = Number(currentGpu.used_vram_mb ?? 0);
-            const total = Number(currentGpu.total_vram_mb ?? 0);
-            const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
-            const util = Number(currentGpu.utilization_percent ?? 0);
-            const temp = currentGpu.temperature_c != null ? Number(currentGpu.temperature_c) : null;
-            const powerDraw = currentGpu.power_draw_w != null ? Number(currentGpu.power_draw_w) : null;
-            const powerLimit = currentGpu.power_limit_w != null ? Number(currentGpu.power_limit_w) : null;
-            const clockCur = currentGpu.clock_graphics_mhz != null ? Number(currentGpu.clock_graphics_mhz) : null;
-            const clockMax = currentGpu.clock_max_graphics_mhz != null ? Number(currentGpu.clock_max_graphics_mhz) : null;
-            const clockVideo = currentGpu.clock_video_mhz != null ? Number(currentGpu.clock_video_mhz) : null;
-            const fan = currentGpu.fan_speed_percent != null ? Number(currentGpu.fan_speed_percent) : null;
-            const pcieGen = currentGpu.pcie_gen != null ? Number(currentGpu.pcie_gen) : null;
-            const pcieWidth = currentGpu.pcie_width != null ? Number(currentGpu.pcie_width) : null;
-            const encoderUtil = currentGpu.encoder_utilization_percent != null ? Number(currentGpu.encoder_utilization_percent) : null;
-            const decoderUtil = currentGpu.decoder_utilization_percent != null ? Number(currentGpu.decoder_utilization_percent) : null;
-            const gpuIndex = typeof currentGpu.index === "number" ? currentGpu.index : idx;
+        gpus.map((gpu, idx) => {
+          const currentGpu = gpu as GpuSnapshot;
+          const used = Number(currentGpu.used_vram_mb ?? 0);
+          const total = Number(currentGpu.total_vram_mb ?? 0);
+          const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+          const util = Number(currentGpu.utilization_percent ?? 0);
+          const temp = currentGpu.temperature_c != null ? Number(currentGpu.temperature_c) : null;
+          const powerDraw = currentGpu.power_draw_w != null ? Number(currentGpu.power_draw_w) : null;
+          const powerLimit = currentGpu.power_limit_w != null ? Number(currentGpu.power_limit_w) : null;
+          const clockCur = currentGpu.clock_graphics_mhz != null ? Number(currentGpu.clock_graphics_mhz) : null;
+          const clockMax = currentGpu.clock_max_graphics_mhz != null ? Number(currentGpu.clock_max_graphics_mhz) : null;
+          const clockVideo = currentGpu.clock_video_mhz != null ? Number(currentGpu.clock_video_mhz) : null;
+          const fan = currentGpu.fan_speed_percent != null ? Number(currentGpu.fan_speed_percent) : null;
+          const pcieGen = currentGpu.pcie_gen != null ? Number(currentGpu.pcie_gen) : null;
+          const pcieWidth = currentGpu.pcie_width != null ? Number(currentGpu.pcie_width) : null;
+          const encoderUtil = currentGpu.encoder_utilization_percent != null ? Number(currentGpu.encoder_utilization_percent) : null;
+          const decoderUtil = currentGpu.decoder_utilization_percent != null ? Number(currentGpu.decoder_utilization_percent) : null;
+          const gpuIndex = typeof currentGpu.index === "number" ? currentGpu.index : idx;
 
-            return (
-              <div key={idx} className={`${cardCls} pb-6`}>
-                <div className="mb-5 flex items-center justify-between">
+          return (
+            <section key={idx}>
+              <SectionHeading
+                title={`GPU #${gpuIndex}`}
+                subtitle={String(currentGpu.model ?? "Unknown GPU")}
+                right={
                   <div className="flex items-center gap-3">
-                    <span className="text-[12px] font-mono font-bold uppercase text-gray-500">GPU #{gpuIndex}</span>
-                    <span className="text-[14px] font-bold text-white">{String(currentGpu.model ?? "Unknown GPU")}</span>
+                    <TempColorBand temp={temp} width={90} height={5} />
+                    <span className="text-[12px] text-gray-500">{temp != null ? `${Math.round(temp)}°C` : "—"}</span>
+                    {pcieGen != null ? <span className="text-[12px] font-mono text-gray-600">PCIe Gen{pcieGen} x{pcieWidth ?? "?"}</span> : null}
+                    <span className="text-[12px] font-mono text-gray-500">{total} MB</span>
+                    <span className={`rounded px-2 py-0.5 text-[10.5px] font-mono font-semibold ${util > 80 ? "bg-red-500/15 text-red-300" : util > 30 ? "bg-cyan-500/15 text-cyan-300" : "bg-emerald-500/15 text-emerald-300"}`}>{util > 0 ? "Active" : "Idle"}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <TempColorBand temp={temp} width={100} height={6} />
-                    {pcieGen != null ? <span className="text-[10px] font-mono text-gray-500">PCIe Gen{pcieGen} x{pcieWidth ?? "?"}</span> : null}
-                    <span className="text-[11px] font-mono text-gray-500">{total} MB</span>
-                    <span className={`rounded border px-2 py-0.5 text-[10px] font-mono font-bold ${util > 80 ? "border-red-800/30 bg-red-950/40 text-red-400" : util > 30 ? "border-cyan-800/30 bg-cyan-950/40 text-cyan-400" : "border-emerald-800/30 bg-emerald-950/40 text-emerald-400"}`}>{util > 0 ? "Active" : "Idle"}</span>
+                }
+              />
+
+              {/* Bars on left (1/3) + charts side-by-side on right (2/3) */}
+              <div className="mt-8 grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                {/* 左列 — 上下居中, 撑满 row 高度 */}
+                <div className="flex flex-col justify-center gap-8">
+                  {/* 算力利用率 仪表盘 + 显存竖条 (中央对齐) */}
+                  <div className="flex items-center justify-center gap-8">
+                    <GpuUtilGauge value={util} />
+                    <VramVerticalBar pct={pct} usedMb={used} totalMb={total} />
                   </div>
+                  {/* 功耗 横向条 */}
+                  {powerDraw != null && powerLimit != null ? (
+                    <BarRow label="功耗" value={`${powerDraw.toFixed(1)} W / ${powerLimit} W`} pct={Math.min(100, (powerDraw / powerLimit) * 100)} color="bg-amber-500/70" />
+                  ) : null}
                 </div>
-                <div className="grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr]">
-                  <div className="space-y-4">
-                    <div><div className={`mb-2 flex justify-between ${zhBody}`}><span>算力利用率</span><span className="font-mono font-bold text-white">{util}%</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-white/5"><div className={`h-full rounded-full ${util > 80 ? "bg-red-500" : "bg-cyan-500"}`} style={{ width: `${util}%` }} /></div></div>
-                    <div><div className={`mb-2 flex justify-between ${zhBody}`}><span>显存占用</span><span className="font-mono font-bold text-white">{used}/{total} MB ({pct}%)</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-white/5"><div className={`h-full rounded-full ${pct > 90 ? "bg-red-500" : "bg-cyan-400"}`} style={{ width: `${pct}%` }} /></div></div>
-                    {powerDraw != null && powerLimit != null ? <div><div className={`mb-2 flex justify-between ${zhBody}`}><span>功耗</span><span className="font-mono font-bold text-white">{powerDraw.toFixed(1)}W / {powerLimit}W</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-amber-500/70" style={{ width: `${Math.min(100, (powerDraw / powerLimit) * 100)}%` }} /></div></div> : null}
+
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                  <div>
+                    <div className="mb-3 flex items-center justify-between text-[12px] text-gray-500">
+                      <span>负载时间线</span>
+                      <span className="font-mono text-gray-600">Util · VRAM</span>
+                    </div>
+                    {idx === 0 && historyItems.length > 1 ? (
+                      <HistoryChart chartKey={`${nodeId}:gpu-load`} option={gpuLoadHistoryOption} height={240} />
+                    ) : (
+                      <div className="flex h-[240px] items-center justify-center text-[12px] text-gray-600">等待 GPU 历史数据…</div>
+                    )}
                   </div>
                   <div>
-                    <div className="mb-3 flex items-center justify-between"><div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Load Timeline</div><div className="text-[11px] font-mono text-gray-600">Util / VRAM</div></div>
-                    {idx === 0 && historyItems.length > 1 ? <HistoryChart chartKey={`${nodeId}:gpu-load`} option={gpuLoadHistoryOption} height={160} /> : <div className="flex h-[160px] items-center justify-center text-[11px] text-gray-600">等待 GPU 历史数据…</div>}
+                    <div className="mb-3 flex items-center justify-between text-[12px] text-gray-500">
+                      <span>温度 / 功耗 / 时钟</span>
+                      <span className="font-mono text-gray-600">Temp · Power · Clock</span>
+                    </div>
+                    {idx === 0 && historyItems.length > 1 ? (
+                      <HistoryChart chartKey={`${nodeId}:gpu-thermal`} option={gpuThermalHistoryOption} height={240} />
+                    ) : (
+                      <div className="flex h-[240px] items-center justify-center text-[12px] text-gray-600">等待 GPU 历史数据…</div>
+                    )}
                   </div>
                 </div>
-                <div className="mt-5 border-t border-white/[0.04] pt-4">
-                  <div className="mb-3 flex items-center justify-between"><div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Thermal / Power Timeline</div><div className="text-[11px] font-mono text-gray-600">Temp / Power / Clock</div></div>
-                  {idx === 0 && historyItems.length > 1 ? <HistoryChart chartKey={`${nodeId}:gpu-thermal`} option={gpuThermalHistoryOption} height={140} /> : <div className="flex h-[140px] items-center justify-center text-[11px] text-gray-600">等待 GPU 历史数据…</div>}
-                </div>
-                <div className="mt-5 grid grid-cols-3 gap-x-6 gap-y-5">
-                  <div><span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">TEMP</span><TempColorBand temp={temp} width={80} height={6} className="mt-1" /></div>
-                  <div><span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">POWER</span><span className="text-[16px] font-bold font-mono text-white">{powerDraw != null ? `${powerDraw.toFixed(0)}W` : "—"}</span></div>
-                  <div><span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">FAN</span><span className="text-[16px] font-bold font-mono text-white">{fan != null ? `${fan}%` : "N/A"}</span></div>
-                  <div><span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">CLOCK</span><span className="text-[16px] font-bold font-mono text-white">{clockCur ?? "—"} <span className="text-[11px] text-gray-600">MHz</span></span></div>
-                  <div><span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">BOOST</span><span className="text-[16px] font-bold font-mono text-white">{clockMax ?? "—"} <span className="text-[11px] text-gray-600">MHz</span></span></div>
-                  <div><span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">UTIL</span><span className="text-[16px] font-bold font-mono text-white">{util}%</span></div>
-                </div>
-                <div className="mt-5 grid grid-cols-4 gap-3">
-                  <MetricCell label="Driver" value={nvidia.driver_version ?? "—"} />
-                  <MetricCell label="CUDA" value={nvidia.cuda_version ?? "—"} />
-                  <MetricCell label="NVCC" value={nvidia.nvcc_version ?? "Not Installed"} />
-                  <MetricCell label="PCIe" value={pcieGen != null ? `Gen${pcieGen} x${pcieWidth ?? "?"}` : "—"} />
-                  <MetricCell label="Power Cap" value={powerLimit != null ? `${powerLimit} W` : "N/A"} />
-                  <MetricCell label="Encoder" value={encoderUtil != null ? `${encoderUtil}%` : "N/A"} />
-                  <MetricCell label="Decoder" value={decoderUtil != null ? `${decoderUtil}%` : "N/A"} />
-                  <MetricCell label="Video Clock" value={clockVideo != null ? `${clockVideo} MHz` : "N/A"} />
-                  <MetricCell label="SMI" value={nvidia.nvidia_smi_path ? "ready" : "—"} />
-                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      <div className={`${cardCls} p-4`}>
-        <div onClick={() => setShowJson(!showJson)} className="flex cursor-pointer items-center justify-between select-none text-xs font-mono text-gray-400 hover:text-white">
-          <span>{showJson ? "▾ 折叠原始 JSON" : "▸ 查看原始 JSON 数据 (Raw Snapshot)"}</span>
+              {/* Metrics grid below — 4 col x 3 row */}
+              <div className="mt-10 grid grid-cols-2 gap-x-10 gap-y-7 sm:grid-cols-4 xl:grid-cols-6">
+                <InlineKv label="Power" value={powerDraw != null ? `${powerDraw.toFixed(0)} W` : "—"} />
+                <InlineKv label="Fan" value={fan != null ? `${fan}%` : "N/A"} />
+                <InlineKv label="Clock" value={clockCur != null ? `${clockCur} MHz` : "—"} />
+                <InlineKv label="Boost" value={clockMax != null ? `${clockMax} MHz` : "—"} />
+                <InlineKv label="Video Clock" value={clockVideo != null ? `${clockVideo} MHz` : "—"} />
+                <InlineKv label="Power Cap" value={powerLimit != null ? `${powerLimit} W` : "N/A"} />
+                <InlineKv label="Driver" value={nvidia.driver_version ?? "—"} />
+                <InlineKv label="CUDA" value={nvidia.cuda_version ?? "—"} />
+                <InlineKv label="NVCC" value={nvidia.nvcc_version ?? "Not Installed"} />
+                <InlineKv label="PCIe" value={pcieGen != null ? `Gen${pcieGen} x${pcieWidth ?? "?"}` : "—"} />
+                <InlineKv label="Encoder" value={encoderUtil != null ? `${encoderUtil}%` : "N/A"} />
+                <InlineKv label="Decoder" value={decoderUtil != null ? `${decoderUtil}%` : "N/A"} />
+              </div>
+            </section>
+          );
+        })
+      )}
+        {/* ╚════ END MAIN COLUMN ════╝ */}
+        </div>
+
+        {/* ╔════ RIGHT SIDEBAR ════╗ */}
+        <aside className="space-y-8 self-start xl:sticky xl:top-2">
+          {/* KPI stack — 4 vertical mini tiles */}
+          <div className="space-y-3.5">
+            <SidebarKpi
+              label="CPU"
+              value={`${Math.round(cpuUse)}%`}
+              meta={`${physicalCoreCount ?? "?"}C / ${coreCount}T`}
+              accent="cyan"
+              barPct={cpuUse}
+              spark={<MiniSparkline data={historyItems.map((i) => i.cpu_usage_percent ?? 0)} width={260} height={22} color="#06b6d4" fillOpacity={0.08} />}
+            />
+            <SidebarKpi
+              label="内存"
+              value={`${Math.round(memUse)}%`}
+              meta={`${bytesToReadable(memUsed)} / ${bytesToReadable(memTotal)}`}
+              accent="emerald"
+              barPct={memUse}
+              spark={<MiniSparkline data={historyItems.map((i) => i.memory_usage_percent ?? 0)} width={260} height={22} color="#10b981" fillOpacity={0.10} />}
+            />
+            <SidebarKpi
+              label="主 GPU"
+              value={primaryGpu ? `${primaryGpuUtil}%` : "—"}
+              meta={primaryGpu ? `${primaryGpuVramPct}% VRAM` : "无加速卡"}
+              accent="violet"
+              barPct={primaryGpu ? primaryGpuUtil : 0}
+              spark={primaryGpu ? <MiniSparkline data={historyItems.map((i) => i.gpu_utilization_percent ?? 0)} width={260} height={22} color="#a78bfa" fillOpacity={0.10} /> : undefined}
+            />
+            <SidebarKpi
+              label="网络"
+              value={availabilityText(network?.link_speed, "N/A")}
+              meta={availabilityText(network?.adapter_name, "未连接")}
+              accent="sky"
+              extra={
+                <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
+                  <span>↓ {bytesPerSecondToReadable(network?.rx_bytes_per_sec)}</span>
+                  <span>↑ {bytesPerSecondToReadable(network?.tx_bytes_per_sec)}</span>
+                </div>
+              }
+            />
+          </div>
+
+          {/* 网络详细 */}
+          <div className="border-t border-white/[0.045] pt-6">
+            <div className="mb-4 text-[12px] font-semibold text-white">网络</div>
+            <div className="space-y-3">
+              <SidebarKv label="SSID" value={availabilityText(network?.ssid, "Wired / Hidden")} />
+              <SidebarKv label="Link" value={availabilityText(network?.link_speed)} />
+              <SidebarKv label="IPv4" value={availabilityText(network?.ipv4_address)} />
+              <SidebarKv label="IPv6" value={availabilityText(network?.ipv6_address)} />
+              <SidebarKv label="Adapter" value={availabilityText(network?.interface_description ?? network?.adapter_name)} />
+              <SidebarKv label="Radio" value={availabilityText(network?.radio_type)} />
+              <SidebarKv label="Signal" value={availabilityText(network?.signal)} />
+            </div>
+          </div>
+
+          {/* 运行时 */}
+          <div className="border-t border-white/[0.045] pt-6">
+            <div className="mb-4 text-[12px] font-semibold text-white">运行时</div>
+            <div className="space-y-3">
+              <SidebarKv label="Python" value={pythonEnv?.python_version ?? "—"} />
+              <SidebarKv label="Env" value={pythonEnv?.active_environment_kind ?? "—"} />
+              <SidebarKv label="Backends" value={pythonEnv?.supported_backends ? String(pythonEnv.supported_backends.length) : "—"} />
+              <SidebarKv label="心跳" value={formatRelative(latestStatus.reported_at)} />
+            </div>
+          </div>
+        </aside>
+        {/* ╚════ END RIGHT SIDEBAR ════╝ */}
+      </div>
+
+      {/* ═══════ BOTTOM — Raw JSON drawer (full width) ═══════ */}
+      <section className="mt-12 border-t border-white/[0.045] pt-6">
+        <div onClick={() => setShowJson(!showJson)} className="flex cursor-pointer items-center justify-between text-[12.5px] text-gray-500 hover:text-gray-300 transition-colors">
+          <span>{showJson ? "▾ 折叠原始 JSON" : "▸ 查看原始 JSON 数据"} <span className="ml-1 text-gray-600">(Raw Snapshot)</span></span>
+          <span className="font-mono text-gray-600">snapshot.json</span>
         </div>
         {showJson ? <div className="mt-4"><CodeBlock label="snapshot.json" value={prettyJson(latestStatus)} maxHeight={300} /></div> : null}
-      </div>
+      </section>
     </div>
   );
 }
@@ -520,20 +490,214 @@ function HistoryChart({ chartKey, option, height }: { chartKey: string; option: 
   );
 }
 
-function InlineStat({ label, value }: { label: string; value: string }): JSX.Element {
+/** Sidebar KPI tile — 紧凑垂直堆叠在右栏 */
+function SidebarKpi({
+  label,
+  value,
+  meta,
+  accent,
+  barPct,
+  spark,
+  extra,
+}: {
+  label: string;
+  value: string;
+  meta: string;
+  accent: "cyan" | "violet" | "emerald" | "sky";
+  barPct?: number;
+  spark?: JSX.Element;
+  extra?: JSX.Element;
+}): JSX.Element {
+  const accentColors: Record<string, { text: string; bar: string }> = {
+    cyan: { text: "text-cyan-300", bar: "from-cyan-600 to-cyan-400" },
+    violet: { text: "text-violet-300", bar: "from-violet-600 to-violet-400" },
+    emerald: { text: "text-emerald-300", bar: "from-emerald-600 to-emerald-400" },
+    sky: { text: "text-sky-300", bar: "from-sky-600 to-sky-400" },
+  };
+  const c = accentColors[accent];
   return (
-    <div className="border-t border-white/[0.05] pt-3">
-      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">{label}</div>
-      <div className="mt-2 text-[22px] font-bold font-mono text-white">{value}</div>
+    <div className="rounded-md border border-white/[0.05] bg-[#0b0e13] px-3.5 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[11.5px] font-medium text-gray-500">{label}</span>
+        <span className="font-mono text-[10.5px] text-gray-600">{meta}</span>
+      </div>
+      <div className={`mt-1.5 text-[22px] font-semibold leading-none tracking-[-0.02em] ${c.text}`}>{value}</div>
+      {barPct != null ? (
+        <div className="mt-2.5 h-[3px] overflow-hidden rounded-full bg-white/[0.05]">
+          <div className={`h-full rounded-full bg-gradient-to-r ${c.bar} transition-all duration-700`} style={{ width: `${Math.min(100, Math.max(0, barPct))}%` }} />
+        </div>
+      ) : null}
+      {spark ? <div className="mt-2 opacity-80">{spark}</div> : null}
+      {extra}
     </div>
   );
 }
 
-function MetricCell({ label, value }: { label: string; value: string }): JSX.Element {
+/** Sidebar K-V 一行 — label 左, value 右, 中间细线对齐 */
+function SidebarKv({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="min-w-0 border-b border-white/[0.04] py-2">
-      <span className="mb-1 block text-[9px] font-mono uppercase text-gray-500">{label}</span>
-      <span className="block break-all text-[13px] font-bold font-mono leading-snug text-white">{value}</span>
+    <div className="flex items-baseline justify-between gap-3 text-[12px]">
+      <span className="shrink-0 text-gray-500">{label}</span>
+      <span className="min-w-0 truncate text-right font-mono text-white/90">{value}</span>
+    </div>
+  );
+}
+
+/** Section 标题 — 大标题 + 副标题 + 可选右侧元信息 */
+function SectionHeading({ title, subtitle, right }: { title: string; subtitle?: string; right?: JSX.Element }): JSX.Element {
+  return (
+    <div className="flex items-end justify-between gap-6">
+      <div className="min-w-0">
+        <h3 className="text-[15px] font-semibold text-white tracking-[-0.005em]">{title}</h3>
+        {subtitle ? <p className="mt-1 text-[12.5px] leading-5 text-gray-500">{subtitle}</p> : null}
+      </div>
+      {right ? <div className="shrink-0">{right}</div> : null}
+    </div>
+  );
+}
+
+/** 内联 K-V 单元 — label 上, value 下, 可读且不会"过装饰" */
+function InlineKv({ label, value, large }: { label: string; value: string; large?: boolean }): JSX.Element {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10.5px] font-medium uppercase tracking-[0.08em] text-gray-500">{label}</div>
+      <div className={`mt-2.5 break-all font-mono text-white ${large ? "text-[18px] font-semibold" : "text-[13px]"}`}>{value}</div>
+    </div>
+  );
+}
+
+/** GPU 算力利用率半圆仪表盘 — 颜色随利用率沿弧线渐变 (emerald → cyan → amber → red) */
+function GpuUtilGauge({ value }: { value: number }): JSX.Element {
+  const pct = Math.max(0, Math.min(100, value));
+  const radius = 78;
+  const cx = 100;
+  const cy = 100;
+  const arcLength = Math.PI * radius;
+  const dashOffset = arcLength * (1 - pct / 100);
+  const id = useId().replace(/:/g, "");
+  const gradId = `gpu-gauge-${id}`;
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 200 120" width="200" height="120" className="block">
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="38%" stopColor="#06b6d4" />
+            <stop offset="72%" stopColor="#f0b040" />
+            <stop offset="100%" stopColor="#f85149" />
+          </linearGradient>
+        </defs>
+        {/* Background arc — 渐变低不透明度让"颜色区间"可见 */}
+        <path
+          d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
+          stroke={`url(#${gradId})`}
+          strokeOpacity="0.18"
+          strokeWidth="11"
+          fill="none"
+          strokeLinecap="round"
+        />
+        {/* Foreground arc — 当前值实色 */}
+        <path
+          d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
+          stroke={`url(#${gradId})`}
+          strokeWidth="11"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={arcLength}
+          strokeDashoffset={dashOffset}
+          style={{ transition: "stroke-dashoffset 0.6s ease-out" }}
+        />
+        {/* 大数字 + % */}
+        <text
+          x={cx}
+          y={cy - 14}
+          textAnchor="middle"
+          fill="white"
+          fontSize="34"
+          fontWeight="600"
+          fontFamily="ui-monospace, SFMono-Regular, Consolas, monospace"
+          style={{ letterSpacing: "-1px" }}
+        >
+          {Math.round(pct)}
+          <tspan fontSize="16" fill="#6b7280" dx="2">%</tspan>
+        </text>
+        {/* 小标签 */}
+        <text
+          x={cx}
+          y={cy + 6}
+          textAnchor="middle"
+          fill="#6b7280"
+          fontSize="10"
+          fontFamily="ui-monospace, monospace"
+          style={{ letterSpacing: "1.5px" }}
+        >
+          UTIL
+        </text>
+      </svg>
+      <span className="-mt-1 text-[11.5px] text-gray-500">算力利用率</span>
+    </div>
+  );
+}
+
+/** GPU 显存竖向进度条 — 仪表盘右侧, 像带刻度的温度计 */
+function VramVerticalBar({ pct, usedMb, totalMb }: { pct: number; usedMb: number; totalMb: number }): JSX.Element {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const color = clamped >= 90 ? "bg-red-500" : clamped >= 70 ? "bg-amber-500" : "bg-cyan-400";
+  const barHeight = 150; // px
+  const ticks = [100, 75, 50, 25, 0];
+  return (
+    <div className="flex flex-col items-center gap-2.5">
+      <span className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gray-500">VRAM</span>
+      <div className="flex items-stretch gap-1.5" style={{ height: `${barHeight}px` }}>
+        {/* 刻度尺 — 左侧, 5 个 tick + 数字 */}
+        <div className="relative w-7">
+          {ticks.map((t) => (
+            <div
+              key={t}
+              className="absolute right-0 flex items-center gap-1"
+              style={{ top: `${100 - t}%`, transform: "translateY(-50%)" }}
+            >
+              <span className="font-mono text-[8.5px] leading-none text-gray-600">{t}</span>
+              <span className="block h-px w-1.5 bg-white/15" />
+            </div>
+          ))}
+        </div>
+        {/* 竖条 */}
+        <div className="relative w-2.5 overflow-hidden rounded-full bg-white/[0.06]">
+          <div
+            className={`absolute bottom-0 left-0 right-0 rounded-full ${color} transition-all duration-500`}
+            style={{ height: `${clamped}%` }}
+          />
+          {/* 内嵌刻度细线 — 25/50/75% 处 */}
+          {[25, 50, 75].map((t) => (
+            <div
+              key={t}
+              className="absolute left-0 right-0 h-px bg-white/[0.08]"
+              style={{ bottom: `${t}%` }}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="text-center">
+        <div className="font-mono text-[13px] font-semibold leading-none text-white">{clamped}%</div>
+        <div className="mt-1.5 font-mono text-[10px] leading-none text-gray-500">{usedMb} / {totalMb} MB</div>
+      </div>
+    </div>
+  );
+}
+
+/** 横向进度条 — label 在左, value 在右, 下面条 */
+function BarRow({ label, value, pct, color }: { label: string; value: string; pct: number; color: string }): JSX.Element {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-[12.5px]">
+        <span className="text-gray-400">{label}</span>
+        <span className="font-mono text-white">{value}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
@@ -560,12 +724,3 @@ function MemoryCompositionBar({ total, used, cached, available, className }: { t
   );
 }
 
-function InlineTag({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <span className="text-[10px] font-mono text-gray-300">
-      <span className="text-gray-500">{label}</span>
-      <span className="mx-1 text-gray-600">/</span>
-      <span className="text-white">{value}</span>
-    </span>
-  );
-}
