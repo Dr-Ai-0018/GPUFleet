@@ -32,18 +32,18 @@ const SHAPE_MAP: Record<StatusTone, string> = {
 export function StatusPill({ tone, label, dot = true, subtle = false, pulse = false, shape = true }: Props): JSX.Element {
   const cls = [
     styles.pill,
-    styles[`tone_${tone}`],
-    subtle ? styles.subtle : "",
+    styles[`pill--tone-${tone}`],
+    subtle ? styles["pill--subtle"] : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   const indicator = shape ? (
-    <span className={`${styles.shape}${pulse ? ` ${styles.pulse}` : ""}`} aria-hidden>
+    <span className={`${styles["pill__shape"]}${pulse ? ` ${styles["pill--pulse"]}` : ""}`} aria-hidden>
       {SHAPE_MAP[tone] ?? "●"}
     </span>
   ) : dot ? (
-    <span className={`${styles.dot}${pulse ? ` ${styles.pulse}` : ""}`} aria-hidden />
+    <span className={`${styles["pill__dot"]}${pulse ? ` ${styles["pill--pulse"]}` : ""}`} aria-hidden />
   ) : null;
 
   return (

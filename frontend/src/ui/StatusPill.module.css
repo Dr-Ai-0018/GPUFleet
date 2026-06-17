@@ -1,4 +1,4 @@
-/* Status pill — simple, no blur */
+/* StatusPill — BEM-lite, tokens-only (无 hex / rgba) */
 
 .pill {
   display: inline-flex;
@@ -15,7 +15,7 @@
   white-space: nowrap;
 }
 
-.dot {
+.pill__dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -23,29 +23,64 @@
   flex-shrink: 0;
 }
 
-.shape {
+.pill__shape {
   font-size: 8px;
   line-height: 1;
   flex-shrink: 0;
   color: currentColor;
 }
 
-.pulse { animation: status-blink 2s ease-in-out infinite; }
+.pill--pulse {
+  animation: status-blink 2s ease-in-out infinite;
+}
 
-.subtle { background: transparent; border-color: transparent; }
+.pill--subtle {
+  background: transparent;
+  border-color: transparent;
+}
 
 /* Tones */
-.tone_online { color: var(--c-online-fg); background: var(--c-online-soft); border-color: var(--c-online-border); }
-.tone_online .dot { background: var(--c-online); }
+.pill--tone-online {
+  color: var(--c-online-fg);
+  background: var(--c-online-soft);
+  border-color: var(--c-online-border);
+}
+.pill--tone-online .pill__dot {
+  background: var(--c-online);
+}
 
-.tone_waiting { color: var(--c-waiting-fg); background: var(--c-waiting-soft); border-color: var(--c-waiting-border); }
-.tone_waiting .dot { background: var(--c-waiting); }
+.pill--tone-waiting {
+  color: var(--c-waiting-fg);
+  background: var(--c-waiting-soft);
+  border-color: var(--c-waiting-border);
+}
+.pill--tone-waiting .pill__dot {
+  background: var(--c-waiting);
+}
 
-.tone_offline { color: var(--c-offline); background: var(--c-offline-soft); border-color: var(--c-offline-border); }
+.pill--tone-offline {
+  color: var(--c-offline);
+  background: var(--c-offline-soft);
+  border-color: var(--c-offline-border);
+}
 
-.tone_danger { color: var(--c-danger-fg); background: var(--c-danger-soft); border-color: var(--c-danger-border); }
-.tone_danger .dot { background: var(--c-danger); }
+.pill--tone-danger {
+  color: var(--c-danger-fg);
+  background: var(--c-danger-soft);
+  border-color: var(--c-danger-border);
+}
+.pill--tone-danger .pill__dot {
+  background: var(--c-danger);
+}
 
-.tone_running { color: var(--c-running); background: var(--c-running-soft); border-color: var(--c-running-border); }
+.pill--tone-running {
+  color: var(--c-running);
+  background: var(--c-running-soft);
+  border-color: var(--c-running-border);
+}
 
-.tone_muted { color: var(--text-mute); background: transparent; border-color: var(--border); }
+.pill--tone-muted {
+  color: var(--text-mute);
+  background: transparent;
+  border-color: var(--border);
+}

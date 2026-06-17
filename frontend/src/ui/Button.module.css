@@ -1,4 +1,4 @@
-/* Buttons — clean, no shine effects */
+/* Button — BEM-lite naming, all colors via tokens */
 
 .btn {
   display: inline-flex;
@@ -10,54 +10,90 @@
   white-space: nowrap;
   user-select: none;
   border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s, color 0.1s;
+  transition:
+    background var(--dur-base),
+    border-color var(--dur-base),
+    color var(--dur-fast);
 }
 
-.btn:disabled { cursor: not-allowed; opacity: 0.4; }
-.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
 
 /* Sizes */
-.size_sm { padding: 0 10px; font-size: var(--fs-12); height: 28px; border-radius: var(--r-sm); }
-.size_md { padding: 0 14px; font-size: var(--fs-13); height: 34px; }
-.size_lg { padding: 0 20px; font-size: var(--fs-14); height: 38px; font-weight: 600; }
+.btn--size-sm {
+  padding: 0 10px;
+  font-size: var(--fs-12);
+  height: 28px;
+  border-radius: var(--r-sm);
+}
+.btn--size-md {
+  padding: 0 14px;
+  font-size: var(--fs-13);
+  height: 34px;
+}
+.btn--size-lg {
+  padding: 0 20px;
+  font-size: var(--fs-14);
+  height: 38px;
+  font-weight: 600;
+}
 
 /* Primary */
-.variant_primary {
+.btn--primary {
   background: var(--text);
   color: var(--bg-app);
   border-color: var(--text);
   font-weight: 600;
 }
-.variant_primary:hover:not(:disabled) { background: #ffffff; }
+.btn--primary:hover:not(:disabled) {
+  background: var(--text);
+  filter: brightness(1.05);
+}
 
 /* Accent */
-.variant_accent {
+.btn--accent {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--text);
   border-color: var(--accent);
   font-weight: 600;
 }
-.variant_accent:hover:not(:disabled) { background: var(--accent-hover); }
+.btn--accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
 
 /* Ghost */
-.variant_ghost {
+.btn--ghost {
   background: var(--bg-elev);
   color: var(--text);
   border-color: var(--border);
 }
-.variant_ghost:hover:not(:disabled) { background: var(--bg-elev-2); border-color: var(--border-strong); }
+.btn--ghost:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  border-color: var(--border-strong);
+}
 
 /* Quiet */
-.variant_quiet {
+.btn--quiet {
   background: transparent;
   color: var(--text-mute);
 }
-.variant_quiet:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
+.btn--quiet:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
 
 /* Danger */
-.variant_danger {
+.btn--danger {
   background: var(--c-danger-soft);
   color: var(--c-danger-fg);
   border-color: var(--c-danger-border);
 }
-.variant_danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.15); border-color: var(--c-danger); }
+.btn--danger:hover:not(:disabled) {
+  background: var(--c-danger-soft-strong);
+  border-color: var(--c-danger);
+}

@@ -1,52 +1,56 @@
-/* Card — 跟 KpiTile v3 视觉一致 (深底 + surface-grad + 软白 border + 10px 圆角) */
+/* Card — BEM-lite, tokens-only (跟 KpiTile v3 视觉一致) */
 
 .card {
-  background-color: #0a0d12;
+  background-color: var(--surface-deep);
   background-image: var(--surface-grad);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-md);
   overflow: hidden;
 }
 
-.head {
+.card__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--card-border);
 }
 
-.head h2 {
+.card__head h2 {
   margin: 0;
   font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text);
 }
 
-.sub {
+.card__sub {
   margin: 2px 0 0;
   font-size: var(--fs-12);
   color: var(--text-mute);
 }
 
-.actions {
+.card__actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
 
-.body { padding: 18px; }
-.bodyFlush { padding: 0; }
+.card__body {
+  padding: 18px;
+}
+.card__body--flush {
+  padding: 0;
+}
 
-.titleRow {
+.card__title-row {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
-.titleTag {
+.card__title-tag {
   font-family: var(--font-mono);
   font-size: var(--fs-11);
   padding: 2px 7px;
@@ -56,7 +60,7 @@
   border: 1px solid var(--border);
 }
 
-.actionsRow {
+.card__actions-row {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -64,7 +68,7 @@
 
 /* Field grid */
 
-.fieldGrid {
+.card__field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1px;
@@ -74,14 +78,14 @@
   overflow: hidden;
 }
 
-.field {
+.card__field {
   display: grid;
   gap: 3px;
   padding: 12px 14px;
   background: var(--bg-canvas);
 }
 
-.fieldLabel {
+.card__field-label {
   font-size: var(--fs-10);
   color: var(--text-faint);
   font-weight: 500;
@@ -89,19 +93,19 @@
   letter-spacing: 0.04em;
 }
 
-.fieldValue {
+.card__field-value {
   font-size: var(--fs-13);
   color: var(--text);
   word-break: break-all;
   font-weight: 500;
 }
 
-.fieldValueMono {
+.card__field-value--mono {
   font-family: var(--font-mono);
   font-size: var(--fs-12);
 }
 
-.fieldHint {
+.card__field-hint {
   font-size: var(--fs-11);
   color: var(--text-faint);
 }

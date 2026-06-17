@@ -1,4 +1,4 @@
-/* Confirm dialog */
+/* ConfirmDialog — BEM-lite, tokens-only */
 
 .overlay {
   position: fixed;
@@ -7,25 +7,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--overlay-bg);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  animation: fade-in 0.15s ease-out;
+  animation: fade-in var(--dur-base) ease-out;
 }
 
 .dialog {
-  background-color: #0a0d12;
+  background-color: var(--surface-deep);
   background-image: var(--surface-grad);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-md);
   padding: 24px;
   width: 420px;
   max-width: calc(100vw - 40px);
   outline: none;
-  animation: slide-down 0.2s ease-out;
-  box-shadow:
-    0 24px 64px -8px rgba(0, 0, 0, 0.7),
-    0 8px 24px -4px rgba(0, 0, 0, 0.4);
+  animation: slide-down var(--dur-enter) ease-out;
+  box-shadow: var(--shadow-dialog);
 }
 
 @media (max-width: 480px) {
@@ -39,12 +37,12 @@
     padding: 18px;
   }
 
-  .actions {
+  .dialog__actions {
     gap: 6px;
   }
 }
 
-.title {
+.dialog__title {
   font-size: var(--fs-15);
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -52,14 +50,14 @@
   color: var(--text);
 }
 
-.message {
+.dialog__message {
   font-size: var(--fs-13);
   color: var(--text-soft);
   margin: 0 0 22px;
   line-height: 1.55;
 }
 
-.actions {
+.dialog__actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;

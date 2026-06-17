@@ -76,13 +76,13 @@ export function ConfirmDialog({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="confirm-dialog-title" className={styles.title}>
+        <h2 id="confirm-dialog-title" className={styles["dialog__title"]}>
           {title}
         </h2>
-        <p id="confirm-dialog-message" className={styles.message}>
+        <p id="confirm-dialog-message" className={styles["dialog__message"]}>
           {message}
         </p>
-        <div className={styles.actions}>
+        <div className={styles["dialog__actions"]}>
           <Button ref={cancelRef} variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>

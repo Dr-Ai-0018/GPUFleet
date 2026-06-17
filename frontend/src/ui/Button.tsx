@@ -24,7 +24,12 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
   }: Props,
   ref,
 ): JSX.Element {
-  const cls = [styles.btn, styles[`variant_${variant}`], styles[`size_${size}`], className ?? ""]
+  const cls = [
+    styles.btn,
+    styles[`btn--${variant}`],
+    styles[`btn--size-${size}`],
+    className ?? "",
+  ]
     .filter(Boolean)
     .join(" ");
   return (

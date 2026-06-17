@@ -34,6 +34,12 @@ jobs:
       - name: Frontend lint
         working-directory: frontend
         run: pnpm lint
+      - name: Frontend CSS lint (D2 §3.3 token strict)
+        working-directory: frontend
+        run: pnpm lint:css
+      - name: Frontend color grep (D2 §3.3 .tsx 兜底)
+        working-directory: frontend
+        run: pnpm lint:colors
 
   backend-tests:
     runs-on: windows-latest

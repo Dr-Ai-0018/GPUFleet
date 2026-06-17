@@ -208,6 +208,18 @@
   --tone-accent-red: #f85149;
   --tone-accent-violet: #8b5cf6;
 
+  /* ── §4.2 示范迁移补 4 个 token (Card / ConfirmDialog / Button danger hover) ── */
+  /* "凸起面"基底色 — KpiTile / Card / Dropdown 弹层 / Dialog 共用 */
+  --surface-deep: #0a0d12;
+  /* Button danger hover 比 --c-danger-soft 略强一档 */
+  --c-danger-soft-strong: rgba(248, 81, 73, 0.18);
+  /* Dialog backdrop overlay */
+  --overlay-bg: rgba(0, 0, 0, 0.65);
+  /* Dialog 双层深阴影 */
+  --shadow-dialog:
+    0 24px 64px -8px rgba(0, 0, 0, 0.7),
+    0 8px 24px -4px rgba(0, 0, 0, 0.4);
+
   /* Compat aliases */
   --glass-bg: var(--bg-surface);
   --glass-bg-strong: var(--bg-surface-2);
