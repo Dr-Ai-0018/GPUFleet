@@ -163,6 +163,39 @@ def test_collect_sample_uses_psutil_and_pynvml_returns_shape(monkeypatch: pytest
     assert gpus_by_idx[0]["power_w"] == 180.0  # 180000 mW / 1000
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="PDH 仅 Windows 可用")
+def test_pdh_cpu_freq_returns_realistic_value_on_windows() -> None:
+    """烟雾测试: Windows 真机上 PDH 应该返回合理的当前频率.
+
+    确保 _init_pdh_cpu_freq + _read_current_cpu_freq_mhz 链路打通,
+    PDH counter "Processor Frequency" 真的能读到值, 不是 None 也不是离谱数.
+
+    注意: PDH init 会写一组模块级全局 state, 测试结束必须清理, 否则会污染
+    后面 monkey-patch psutil.cpu_freq 的 fallback 测试.
+    """
+    import gpufleet_node_agent.sampler as s
+
+    saved = (s._pdh_dll, s._pdh_query, s._pdh_counter, s._pdh_initialized)
+    try:
+        s._init_pdh_cpu_freq()  # 幂等; 已 init 则直接返回
+        # prime: 首次 PdhCollectQueryData 后立刻读可能拿到 0, 给一点时间让 counter 累计
+        s._read_current_cpu_freq_mhz()
+        time.sleep(0.05)
+        freq = s._read_current_cpu_freq_mhz()
+
+        # 现代 CPU 基本不会低于 200 MHz (节能档) 或高于 10 GHz (物理极限)
+        assert freq is not None, "PDH init 应该成功 (任何 Windows 都内建该 counter)"
+        assert 200 <= freq <= 10_000, f"频率 {freq} MHz 不在合理范围"
+    finally:
+        # 关掉 query handle + 复原全局 state, 不让 PDH init 状态泄漏到后面 fallback 测试
+        if s._pdh_dll is not None and s._pdh_query is not None:
+            try:
+                s._pdh_dll.PdhCloseQuery(s._pdh_query)
+            except Exception:  # noqa: BLE001
+                pass
+        s._pdh_dll, s._pdh_query, s._pdh_counter, s._pdh_initialized = saved
+
+
 def test_collect_sample_handles_no_nvidia_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
     """非 GPU 节点 (NVML 未 init): gpus 数组为空, 不抛错."""
     monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None, percpu=False: [30.0, 40.0])
