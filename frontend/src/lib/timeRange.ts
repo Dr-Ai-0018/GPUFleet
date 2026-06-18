@@ -37,6 +37,7 @@ export interface RangeSpec {
 }
 
 export const RANGE_PRESETS: RangeSpec[] = [
+  // fetchIntervalMs 对齐节点心跳节奏 (默认 5s/批 上报), tickMs=1s 由 useSmoothFeeder buffer+tick 模型平滑成 1Hz 滚动
   { key: "30s",  label: "最近 30 秒",  windowMs: 30_000,        fetchIntervalMs: 5_000,   tickMs: 1_000,    limit: 60,   xAxisFormat: "HH:mm:ss" },
   { key: "1m",   label: "最近 1 分钟", windowMs: 60_000,        fetchIntervalMs: 5_000,   tickMs: 1_000,    limit: 80,   xAxisFormat: "HH:mm:ss" },
   { key: "3m",   label: "最近 3 分钟", windowMs: 180_000,       fetchIntervalMs: 5_000,   tickMs: 2_000,    limit: 200,  xAxisFormat: "HH:mm:ss" },

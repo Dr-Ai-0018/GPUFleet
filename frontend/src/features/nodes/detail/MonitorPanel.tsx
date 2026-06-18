@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { LineChart } from "echarts/charts";
@@ -10,7 +10,6 @@ import { CodeBlock } from "../../../ui/CodeBlock";
 import { MiniSparkline } from "../../../ui/MiniSparkline";
 import { GpuUtilGauge } from "../../../ui/GpuUtilGauge";
 import { TempColorBand } from "../../../ui/TempColorBand";
-import { TimeRangePicker } from "../../../ui/TimeRangePicker";
 import { useConsoleStore } from "../../../state/ConsoleStore";
 import { getRangeSpec, formatTick, type RangeKey } from "../../../lib/timeRange";
 import { useSmoothFeeder } from "../../../lib/useSmoothFeeder";
@@ -35,14 +34,18 @@ export function MonitorPanel({
   setShowJson,
 }: MonitorPanelProps): JSX.Element {
   const { callApi } = useConsoleStore();
-  const [range, setRange] = useState<RangeKey>("30s");
+  // 实时监控页固定 30s 窗口. 后续"历史记录"页启用时, 改回 useState 即可,
+  // TimeRangePicker 和 timeRange.ts 14 档预设的基础设施都在.
+  const range: RangeKey = "30s";
   const rangeSpec = useMemo(() => getRangeSpec(range), [range]);
 
-  // 用户选择的窗口 + 节点 id 决定的 fetcher: 拉 [now - window, now] 区间
+  // fetcher 拉 [now-W, now] 区间. visible 不严格 trim, 后续 fetch 拿到的新点持续 append.
+  // X 轴 type:'time' 自适应: X 轴 max = lastX (每秒推进), X 轴 min = firstX (不动) → 数据整体压缩向左
+  // 收缩,所有点像素位置同步缩放, echarts 默认 300ms transition 一气呵成, 没有平移衔接卡顿.
   const fetcher = useCallback(async () => {
-    const sinceIso = new Date(Date.now() - rangeSpec.windowMs).toISOString();
+    const cutoffMs = Date.now() - rangeSpec.windowMs;
     const res = await callApi((token) =>
-      api.getNodeStatusHistory(token, nodeId, { since: sinceIso, limit: rangeSpec.limit }),
+      api.getNodeStatusHistory(token, nodeId, { since: new Date(cutoffMs).toISOString(), limit: rangeSpec.limit }),
     );
     return res.items;
   }, [callApi, nodeId, rangeSpec.windowMs, rangeSpec.limit]);
@@ -62,6 +65,9 @@ export function MonitorPanel({
     fetchIntervalMs: rangeSpec.fetchIntervalMs,
     tickMs: rangeSpec.tickMs,
     maxPoints,
+    // 不传 windowMs: visible append-only, X 轴 type:'time' 自适应"整体压缩"模式 → 丝滑无衔接卡顿.
+    // 切窗口/重 mount 时 hook 内部清状态 + 立即 fetch + 整批 flush 上屏
+    resetKey: range,
   });
 
   const historyItems = feeder.records;
@@ -71,7 +77,9 @@ export function MonitorPanel({
     [rangeSpec.xAxisFormat],
   );
 
-  // 共用的 xAxis (type='time' 让 ECharts 按真实时间戳自动布局, LTTB 出来的不连续 ts 也能正确放)
+  // X 轴 type:'time' 自适应 visible 范围, 不锁 min/max. visible append-only 时:
+  // X 轴 max = lastX (每秒推进 1 格), X 轴 min = firstX (不动) → 数据整体压缩向左收缩.
+  // 所有点像素位置同步缩放, echarts 默认 transition 一气呵成, 没有平移衔接的离散卡顿.
   const sharedXAxis = useMemo(() => ({
     type: "time" as const,
     axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } },
@@ -118,7 +126,7 @@ export function MonitorPanel({
         smooth: 0.3,
         symbol: "none",
         connectNulls: true,
-        lineStyle: { color: "#06b6d4", width: 1.8 },
+          lineStyle: { color: "#06b6d4", width: 1.8 },
         areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.16)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } },
         data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_utilization_percent ?? null]),
       },
@@ -128,7 +136,7 @@ export function MonitorPanel({
         smooth: 0.3,
         symbol: "none",
         connectNulls: true,
-        lineStyle: { color: "#22c55e", width: 1.5 },
+          lineStyle: { color: "#22c55e", width: 1.5 },
         data: historyItems.map<[number, number | null]>((item) => [new Date(item.reported_at).getTime(), item.gpu_memory_percent ?? null]),
       },
     ],
@@ -191,7 +199,6 @@ export function MonitorPanel({
             节点 agent 上报的实时遥测,采样 1 s,平滑播放。最近更新 <span className="text-cyan-400">{formatRelative(latestStatus.reported_at)}</span>。
           </p>
         </div>
-        <TimeRangePicker value={range} onChange={setRange} />
       </header>
 
       {/* ═══════ MAIN + SIDEBAR LAYOUT ═══════ */}
