@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +18,7 @@ class AgentSettings(BaseSettings):
     sample_interval_sec: int = Field(
         default=1,
         ge=1,
-        le=60,
+        le=3600,
         description="高密采样间隔 (秒). 默认 1s/次, 心跳时批量上传.",
     )
     sample_buffer_size: int = Field(
@@ -57,6 +57,12 @@ class AgentSettings(BaseSettings):
         extra="ignore",
     )
     _resolved_node_secret: str | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def validate_sampling_window(self) -> AgentSettings:
+        if self.sample_interval_sec > self.heartbeat_interval_sec:
+            raise ValueError("sample_interval_sec must be <= heartbeat_interval_sec")
+        return self
 
     def ensure_dirs(self) -> None:
         for path in (

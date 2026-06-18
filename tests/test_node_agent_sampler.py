@@ -19,6 +19,7 @@ if str(NODE_AGENT_SRC) not in sys.path:
     sys.path.insert(0, str(NODE_AGENT_SRC))
 
 from gpufleet_node_agent.sampler import (  # noqa: E402
+    Sampler,
     SampleRingBuffer,
     collect_sample,
     start_sampler,
@@ -238,12 +239,8 @@ def test_collect_sample_reads_cpu_once_with_percpu(monkeypatch: pytest.MonkeyPat
     assert sample["per_core_percent"] == [10.0, 30.0]
 
 
-def test_collect_sample_handles_nvml_per_card_failure_returns_cached(monkeypatch: pytest.MonkeyPatch) -> None:
-    """某张卡 NVML 调用挂掉时, 用上次成功值续上. 没缓存才跳过.
-
-    设计意图: 避免 sample 行的 GPU 字段成 NULL, 前端 ECharts spline 跨 NULL 连线会画出
-    夸张拖尾曲线 ("鬼畜"现象).
-    """
+def test_collect_sample_handles_nvml_per_card_failure_skips_failed_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    """某张卡 NVML 调用挂掉时跳过该卡, sampler 不缓存上次成功值."""
     from gpufleet_node_agent import sampler
 
     monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_percent", lambda interval=None, percpu=False: [50.0, 70.0])
@@ -255,8 +252,6 @@ def test_collect_sample_handles_nvml_per_card_failure_returns_cached(monkeypatch
     fake_handles = ["h0", "h1"]
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", fake_handles)
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", True)
-    # 重置缓存以隔离测试
-    monkeypatch.setattr("gpufleet_node_agent.sampler._GPU_LAST_GOOD", {})
 
     # 场景: 第一次两卡都成功, 第二次 h0 挂掉
     call_log = {"h0_count": 0}
@@ -283,11 +278,10 @@ def test_collect_sample_handles_nvml_per_card_failure_returns_cached(monkeypatch
     g0_first = {g["idx"]: g for g in sample1["gpus"]}[0]
     assert g0_first["util"] == 42.0
 
-    # 第二次采样: h0 挂掉, 应该用上次缓存值续上, 不是跳过
+    # 第二次采样: h0 挂掉, sampler 直接跳过失败卡, 不续上次缓存
     sample2 = sampler.collect_sample()
-    assert len(sample2["gpus"]) == 2  # 仍然两张卡 (不是 1)
-    g0_second = {g["idx"]: g for g in sample2["gpus"]}[0]
-    assert g0_second["util"] == 42.0  # 续用上次值
+    assert len(sample2["gpus"]) == 1
+    assert {g["idx"] for g in sample2["gpus"]} == {1}
     g1_second = {g["idx"]: g for g in sample2["gpus"]}[1]
     assert g1_second["util"] == 80.0  # h1 正常
 
@@ -302,7 +296,6 @@ def test_collect_sample_skips_card_when_no_cache_available(monkeypatch: pytest.M
     monkeypatch.setattr("gpufleet_node_agent.sampler.psutil.cpu_freq", lambda: SimpleNamespace(current=2400.0))
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_HANDLES", ["h0", "h1"])
     monkeypatch.setattr("gpufleet_node_agent.sampler._NVML_INITIALIZED", True)
-    monkeypatch.setattr("gpufleet_node_agent.sampler._GPU_LAST_GOOD", {})  # 空缓存
 
     def flaky_util(h):
         if h == "h0":
@@ -399,3 +392,44 @@ def test_start_sampler_swallows_single_tick_exception(monkeypatch: pytest.Monkey
     for sample in drained:
         assert sample["cpu_percent"] == 70.0
         assert sample["per_core_percent"] == [60.0, 80.0]
+
+
+def test_sampler_context_manager_drains_and_shutdown_stops_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "gpufleet_node_agent.sampler.collect_sample",
+        lambda: {"ts": time.time(), "cpu_percent": 1.0, "gpus": []},
+    )
+    monkeypatch.setattr(
+        "gpufleet_node_agent.sampler.psutil.net_io_counters",
+        lambda: SimpleNamespace(bytes_sent=0, bytes_recv=0),
+    )
+
+    with Sampler(sample_interval_sec=0.05, sample_buffer_size=5) as sampler:
+        time.sleep(0.16)
+        samples = sampler.drain()
+        assert len(samples) >= 2
+        assert sampler.drain() == []
+        thread = sampler._thread
+
+    assert thread is not None
+    assert not thread.is_alive()
+
+
+def test_sampler_shutdown_does_not_wait_for_next_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "gpufleet_node_agent.sampler.collect_sample",
+        lambda: {"ts": time.time(), "cpu_percent": 1.0, "gpus": []},
+    )
+    monkeypatch.setattr(
+        "gpufleet_node_agent.sampler.psutil.net_io_counters",
+        lambda: SimpleNamespace(bytes_sent=0, bytes_recv=0),
+    )
+
+    sampler = Sampler(sample_interval_sec=10.0, sample_buffer_size=5).start()
+    time.sleep(0.05)
+    started = time.monotonic()
+    sampler.shutdown(timeout=1)
+
+    assert time.monotonic() - started < 1
+    assert sampler._thread is not None
+    assert not sampler._thread.is_alive()

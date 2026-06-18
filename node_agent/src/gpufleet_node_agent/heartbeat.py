@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from gpufleet_node_agent.api_client import post_signed_json
 from gpufleet_node_agent.collect import collect_task_runtime
 from gpufleet_node_agent.config import AgentSettings
 from gpufleet_node_agent.fingerprint import get_cached as get_cached_fingerprint
-from gpufleet_node_agent.sampler import SampleRingBuffer
+
+
+class SampleDrain(Protocol):
+    def drain(self) -> list[dict[str, Any]]: ...
 
 
 def _latest_sample(samples: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -88,7 +91,7 @@ def _merge_live_sample_metrics(
 
 def build_heartbeat_payload(
     settings: AgentSettings,
-    sample_buffer: SampleRingBuffer | None = None,
+    sample_buffer: SampleDrain | None = None,
 ) -> dict[str, Any]:
     """构造心跳 payload — 从 fingerprint 缓存读 + drain sample buffer + 实时 task_runtime.
 
@@ -127,7 +130,7 @@ def build_heartbeat_payload(
 
 def send_heartbeat(
     settings: AgentSettings,
-    sample_buffer: SampleRingBuffer | None = None,
+    sample_buffer: SampleDrain | None = None,
 ) -> dict[str, Any]:
     payload = build_heartbeat_payload(settings, sample_buffer=sample_buffer)
     return post_signed_json(settings, "/api/v1/node/heartbeat", payload, timeout=30)

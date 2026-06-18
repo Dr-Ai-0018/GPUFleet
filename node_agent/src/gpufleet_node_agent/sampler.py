@@ -59,13 +59,8 @@ def _init_nvml() -> None:
         logger.info("nvml_init_skipped (no NVIDIA driver / non-GPU node)")
 
 
-# 每卡上次成功读到的指标, NVML 偶发失败时延续上次值, 避免 sample 行的 GPU 字段成 NULL
-# 否则前端 ECharts 跨 NULL 用 spline 连线会画出夸张拖尾曲线 ("鬼畜"现象)
-_GPU_LAST_GOOD: dict[int, dict[str, Any]] = {}
-
-
 def _collect_gpus_lite() -> list[dict[str, Any]]:
-    """毫秒级 GPU 探针. NVML 不可用时返空数组; 单卡读取失败时延续上次值."""
+    """毫秒级 GPU 探针. NVML 不可用时返空数组; 单卡读取失败时跳过该卡."""
     if not _NVML_INITIALIZED:
         return []
     result: list[dict[str, Any]] = []
@@ -86,14 +81,9 @@ def _collect_gpus_lite() -> list[dict[str, Any]]:
                 "vram_used_bytes": int(mem.used),
                 "power_w": power_w,
             }
-            _GPU_LAST_GOOD[idx] = sample
             result.append(sample)
         except Exception:  # noqa: BLE001
-            # 某次读取失败 — 用上次成功值续上, 避免 sample 行 GPU 字段 NULL 导致前端 spline 拖尾
-            cached = _GPU_LAST_GOOD.get(idx)
-            if cached is not None:
-                result.append(cached)
-            # 没缓存就跳过 (启动首次读取就失败的情况, 此时 NULL 也无法避免)
+            # 单卡偶发失败时直接跳过, 不在 sampler 层缓存; 基准行/慢路径负责完整画像.
             continue
     return result
 
@@ -334,3 +324,37 @@ def start_sampler(
     thread = Thread(target=loop, name="gpufleet-sampler", daemon=True)
     thread.start()
     return thread
+
+
+class Sampler:
+    """高密采样器: 后台线程写 ring buffer, 心跳侧 drain 后清空."""
+
+    def __init__(
+        self,
+        sample_interval_sec: float = 1.0,
+        sample_buffer_size: int = 5,
+        stop_event: Event | None = None,
+    ) -> None:
+        self.sample_interval_sec = sample_interval_sec
+        self.buffer = SampleRingBuffer(capacity=sample_buffer_size)
+        self._stop_event = stop_event or Event()
+        self._thread: Thread | None = None
+
+    def start(self) -> Sampler:
+        if self._thread is None or not self._thread.is_alive():
+            self._thread = start_sampler(self.buffer, self._stop_event, self.sample_interval_sec)
+        return self
+
+    def drain(self) -> list[dict[str, Any]]:
+        return self.buffer.drain()
+
+    def shutdown(self, timeout: float = 2.0) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
+
+    def __enter__(self) -> Sampler:
+        return self.start()
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.shutdown()

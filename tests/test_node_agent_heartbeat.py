@@ -40,13 +40,29 @@ class FakeSampleBuffer:
         ]
 
 
-def test_build_heartbeat_payload_overlays_live_sample_metrics(monkeypatch) -> None:
-    fingerprint = {
+class MultiSampleBuffer:
+    def __init__(self, count: int) -> None:
+        self.count = count
+
+    def drain(self) -> list[dict[str, object]]:
+        return [
+            {
+                "ts": f"2026-06-17T02:45:3{idx}.000+00:00",
+                "cpu_percent": float(idx),
+                "memory_percent": 50.0,
+                "gpus": [],
+            }
+            for idx in range(self.count)
+        ]
+
+
+def _fingerprint(heartbeat_interval_sec: int = 5, sample_interval_sec: int = 1) -> dict[str, object]:
+    return {
         "boot_id": "boot-live",
         "agent_version": "test",
         "hostname": "node",
-        "heartbeat_interval_sec": 5,
-        "sample_interval_sec": 1,
+        "heartbeat_interval_sec": heartbeat_interval_sec,
+        "sample_interval_sec": sample_interval_sec,
         "cpu": {
             "usage_percent": 10.0,
             "model": "CPU",
@@ -70,7 +86,10 @@ def test_build_heartbeat_payload_overlays_live_sample_metrics(monkeypatch) -> No
         "python_env": {},
         "extra": {"network": {"adapter_name": "Wi-Fi"}},
     }
-    monkeypatch.setattr("gpufleet_node_agent.heartbeat.get_cached_fingerprint", lambda _settings: fingerprint)
+
+
+def test_build_heartbeat_payload_overlays_live_sample_metrics(monkeypatch) -> None:
+    monkeypatch.setattr("gpufleet_node_agent.heartbeat.get_cached_fingerprint", lambda _settings: _fingerprint())
     monkeypatch.setattr("gpufleet_node_agent.heartbeat.collect_task_runtime", lambda _settings: {})
 
     payload = build_heartbeat_payload(SimpleNamespace(), sample_buffer=FakeSampleBuffer())
@@ -88,3 +107,24 @@ def test_build_heartbeat_payload_overlays_live_sample_metrics(monkeypatch) -> No
     assert payload["extra"]["network"]["tx_bytes_per_sec"] == 1234.5
     assert payload["extra"]["network"]["rx_bytes_per_sec"] == 9876.5
     assert payload["samples"][0]["gpus"][0]["util"] == 40.0
+
+
+def test_build_heartbeat_payload_drains_all_samples_for_heartbeat_window(monkeypatch) -> None:
+    heartbeat_interval_sec = 5
+    sample_interval_sec = 1
+    expected_count = heartbeat_interval_sec // sample_interval_sec
+
+    monkeypatch.setattr(
+        "gpufleet_node_agent.heartbeat.get_cached_fingerprint",
+        lambda _settings: _fingerprint(
+            heartbeat_interval_sec=heartbeat_interval_sec,
+            sample_interval_sec=sample_interval_sec,
+        ),
+    )
+    monkeypatch.setattr("gpufleet_node_agent.heartbeat.collect_task_runtime", lambda _settings: {})
+
+    payload = build_heartbeat_payload(SimpleNamespace(), sample_buffer=MultiSampleBuffer(expected_count))
+
+    assert payload["sample_interval_sec"] == sample_interval_sec
+    assert len(payload["samples"]) == expected_count
+    assert [sample["cpu_percent"] for sample in payload["samples"]] == [0.0, 1.0, 2.0, 3.0, 4.0]
