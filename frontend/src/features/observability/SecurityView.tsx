@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError } from "../../api";
+import { api } from "../../api";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { Dropdown } from "../../ui/Dropdown";
 import { formatRelative, formatTime, prettyJson } from "../../lib/format";
+import { labelForError } from "../../lib/labels";
 import { mergeFirstPage } from "../../lib/listMerge";
 import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
 import type { AuditEventView, SecurityWarningView } from "../../types";
@@ -152,7 +153,7 @@ function WarningsList(): JSX.Element {
         setTotal(page.total_estimate ?? null);
       } catch (err) {
         if (seq !== seqRef.current) return;
-        if (mode !== "refresh") setError(err instanceof ApiError ? err.message : "加载失败");
+        if (mode !== "refresh") setError(labelForError(err, "加载失败"));
       } finally {
         if (seq === seqRef.current && mode !== "refresh") setLoading(false);
       }
@@ -366,7 +367,7 @@ function AuditsList(): JSX.Element {
         setTotal(page.total_estimate ?? null);
       } catch (err) {
         if (seq !== seqRef.current) return;
-        if (mode !== "refresh") setError(err instanceof ApiError ? err.message : "加载失败");
+        if (mode !== "refresh") setError(labelForError(err, "加载失败"));
       } finally {
         if (seq === seqRef.current && mode !== "refresh") setLoading(false);
       }

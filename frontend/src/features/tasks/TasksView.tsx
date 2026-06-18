@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError } from "../../api";
+import { api } from "../../api";
 import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
-import { taskStatusLabel } from "../../lib/labels";
+import { labelForError, taskStatusLabel } from "../../lib/labels";
 import { formatRelative, formatTime } from "../../lib/format";
 import { mergeFirstPage } from "../../lib/listMerge";
 import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
@@ -102,7 +102,7 @@ export function TasksView(): JSX.Element {
         if (seq !== requestSeqRef.current) return;
         // 后台轮询失败静默处理, 别打扰用户; 用户交互失败才显示
         if (mode !== "refresh") {
-          setError(err instanceof ApiError ? err.message : "加载失败");
+          setError(labelForError(err, "加载失败"));
         }
       } finally {
         if (seq === requestSeqRef.current && mode !== "refresh") setLoading(false);

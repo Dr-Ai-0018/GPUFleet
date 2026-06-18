@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { api, ApiError } from "../../api";
+import { api } from "../../api";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import type { NodeCreateResponse, NodeOnboardingLifecycleResponse } from "../../types";
 import { NodeCreatePanel } from "./NodeCreatePanel";
@@ -57,8 +57,7 @@ export function OnboardingView(): JSX.Element {
         const data = await api.getNodeOnboarding(store.token, nodeId);
         setLifecycleByNode((s) => ({ ...s, [nodeId]: data }));
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : "加载失败";
-        setLifecycleErrorByNode((s) => ({ ...s, [nodeId]: msg }));
+        setLifecycleErrorByNode((s) => ({ ...s, [nodeId]: labelForError(err, "加载失败") }));
       } finally {
         setLifecycleLoadingByNode((s) => ({ ...s, [nodeId]: false }));
       }
