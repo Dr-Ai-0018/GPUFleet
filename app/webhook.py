@@ -110,6 +110,7 @@ class WebhookEmitter:
             # 容量满 -> 丢最旧, 让新事件进
             try:
                 self._queue.get_nowait()
+                self._queue.task_done()
             except asyncio.QueueEmpty:
                 pass
             try:
@@ -138,6 +139,7 @@ class WebhookEmitter:
     async def aclose(self) -> None:
         """关停: 取消 worker, 关 HTTP client. lifespan 退出时调用."""
         if self._worker_task is not None:
+            await self.drain(max_wait_sec=5.0)
             self._worker_task.cancel()
             try:
                 await self._worker_task
@@ -149,12 +151,11 @@ class WebhookEmitter:
             self._client = None
 
     async def drain(self, max_wait_sec: float = 5.0) -> None:
-        """等队列发完 (主要给测试用). 主流程关停一般用 aclose() 直接取消即可."""
-        deadline = asyncio.get_event_loop().time() + max_wait_sec
-        while not self._queue.empty():
-            if asyncio.get_event_loop().time() > deadline:
-                break
-            await asyncio.sleep(0.05)
+        """等队列发完, 最多等 max_wait_sec 秒."""
+        try:
+            await asyncio.wait_for(self._queue.join(), timeout=max_wait_sec)
+        except asyncio.TimeoutError:
+            logger.warning("webhook_drain_timeout", queue_depth=self._queue.qsize(), timeout_sec=max_wait_sec)
 
     # -- 内部 --
 

@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.db import Database, utc_now_iso
 from app.deps import get_current_admin, get_db
 from app.errors import ApiError
+from app.routers.admin_auth import limiter
 from app.schemas import AlertMessageView
 
 router = APIRouter(prefix="/api/v1/admin/alerts", tags=["admin-alerts"])
@@ -32,7 +33,9 @@ def _row_to_alert(row: object) -> AlertMessageView:
 
 
 @router.get("", response_model=list[AlertMessageView])
+@limiter.limit("30/minute")
 def list_alerts(
+    request: Request,
     _: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
     status_filter: Annotated[str | None, Query(alias="status")] = None,
@@ -56,7 +59,9 @@ def list_alerts(
 
 
 @router.get("/unread-count")
+@limiter.limit("30/minute")
 def unread_count(
+    request: Request,
     _: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
 ) -> dict[str, int]:
@@ -68,8 +73,10 @@ def unread_count(
 
 
 @router.post("/{alert_id}/read", response_model=AlertMessageView)
+@limiter.limit("30/minute")
 def mark_read(
     alert_id: int,
+    request: Request,
     admin: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
 ) -> AlertMessageView:

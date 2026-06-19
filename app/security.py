@@ -63,11 +63,15 @@ def derive_node_signing_key(node_secret: str) -> str:
     return hashlib.sha256(node_secret.encode("utf-8")).hexdigest()
 
 
+def _derive_encryption_key(secret: str) -> bytes:
+    return hashlib.sha256(secret.encode("utf-8")).digest()
+
+
 def _node_encryption_key(settings: Settings) -> bytes:
     secret = settings.node_key_encryption_secret
     if not secret or secret == "__NOT_SET__":
         raise ValueError("GPUFLEET_NODE_KEY_ENCRYPTION_SECRET is required")
-    return hashlib.sha256(secret.encode("utf-8")).digest()
+    return _derive_encryption_key(secret)
 
 
 def _xor_with_keystream(payload: bytes, key: bytes, nonce: bytes) -> bytes:
@@ -112,12 +116,18 @@ def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> 
     nonce = raw[:16]
     tag = raw[-32:]
     ciphertext = raw[16:-32]
-    key = _node_encryption_key(settings)
-    expected_tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
-    if not hmac.compare_digest(expected_tag, tag):
-        raise ValueError("Encrypted signing key authentication failed")
-    plaintext = _xor_with_keystream(ciphertext, key, nonce)
-    return plaintext.decode("utf-8")
+    secrets_to_try = [settings.node_key_encryption_secret]
+    if settings.jwt_secret not in secrets_to_try:
+        secrets_to_try.append(settings.jwt_secret)
+    for secret in secrets_to_try:
+        if not secret or secret == "__NOT_SET__":
+            continue
+        key = _derive_encryption_key(secret)
+        expected_tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
+        if hmac.compare_digest(expected_tag, tag):
+            plaintext = _xor_with_keystream(ciphertext, key, nonce)
+            return plaintext.decode("utf-8")
+    raise ValueError("Encrypted signing key authentication failed")
 
 
 def encrypt_node_onboarding_token(settings: Settings, node_secret: str) -> str:

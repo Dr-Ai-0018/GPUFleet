@@ -130,6 +130,27 @@ async def test_deliver_success_includes_envelope_fields_and_signature() -> None:
     assert received["headers"]["x-signature"] == expected_sig
 
 
+@pytest.mark.asyncio
+async def test_aclose_drains_queued_events_before_cancelling_worker() -> None:
+    """lifespan shutdown should give queued webhook events a chance to flush."""
+    received: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received.append(request.content)
+        return httpx.Response(200, text="ok")
+
+    transport = httpx.MockTransport(handler)
+    settings = _make_settings()
+    async with httpx.AsyncClient(transport=transport) as client:
+        emitter = WebhookEmitter(settings, client=client)
+        emitter.start()
+        emitter.emit("task.failed", {"task_id": "t-shutdown"}, severity="warning")
+        await emitter.aclose()
+
+    assert len(received) == 1
+    assert json.loads(received[0])["payload"] == {"task_id": "t-shutdown"}
+
+
 # -----------------------------------------------------------------------------
 # 失败重试 3 次后丢弃, 主流程不阻塞
 # -----------------------------------------------------------------------------

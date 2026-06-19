@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 import time
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,6 +100,9 @@ app.add_middleware(
     ],
 )
 
+_HTTP_TOTAL_CHILDREN: dict[tuple[int, str, str, str], Any] = {}
+_HTTP_DURATION_CHILDREN: dict[tuple[int, str, str], Any] = {}
+
 @app.middleware("http")
 async def _bind_request_id(
     request: Request,
@@ -144,15 +148,33 @@ async def _prometheus_http_metrics(
         # 异常发生时也要计入指标 (status=500), 然后让异常继续往上 propagate 给 exception handler
         elapsed = time.perf_counter() - started_at
         path_template = _path_template_or_raw(request)
-        gm.HTTP_REQUESTS_TOTAL.labels(method=method, path_template=path_template, status="500").inc()
-        gm.HTTP_REQUEST_DURATION_SECONDS.labels(method=method, path_template=path_template).observe(elapsed)
+        _http_total_child(method, path_template, "500").inc()
+        _http_duration_child(method, path_template).observe(elapsed)
         raise
 
     elapsed = time.perf_counter() - started_at
     path_template = _path_template_or_raw(request)
-    gm.HTTP_REQUESTS_TOTAL.labels(method=method, path_template=path_template, status=str(status_code)).inc()
-    gm.HTTP_REQUEST_DURATION_SECONDS.labels(method=method, path_template=path_template).observe(elapsed)
+    _http_total_child(method, path_template, str(status_code)).inc()
+    _http_duration_child(method, path_template).observe(elapsed)
     return response
+
+
+def _http_total_child(method: str, path_template: str, status: str) -> Any:
+    key = (id(gm.HTTP_REQUESTS_TOTAL), method, path_template, status)
+    child = _HTTP_TOTAL_CHILDREN.get(key)
+    if child is None:
+        child = gm.HTTP_REQUESTS_TOTAL.labels(method=method, path_template=path_template, status=status)
+        _HTTP_TOTAL_CHILDREN[key] = child
+    return child
+
+
+def _http_duration_child(method: str, path_template: str) -> Any:
+    key = (id(gm.HTTP_REQUEST_DURATION_SECONDS), method, path_template)
+    child = _HTTP_DURATION_CHILDREN.get(key)
+    if child is None:
+        child = gm.HTTP_REQUEST_DURATION_SECONDS.labels(method=method, path_template=path_template)
+        _HTTP_DURATION_CHILDREN[key] = child
+    return child
 
 
 def _path_template_or_raw(request: Request) -> str:

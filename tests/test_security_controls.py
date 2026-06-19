@@ -5,6 +5,9 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from httpx import Response
 
+from app.config import get_settings
+from app.db import Database, dumps_json, utc_now_iso
+
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "node-rate") -> None:
     resp = client.post(
@@ -31,6 +34,32 @@ def _assert_rate_limited(resp: Response) -> None:
     assert body["message"] == "Rate limit exceeded"
     assert "detail" not in body
     assert isinstance(body["details"]["retry_after_sec"], int)
+
+
+def _insert_alert() -> int:
+    db = Database(get_settings().database_path)
+    now_iso = utc_now_iso()
+    with db.connect() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO alert_messages (
+                alert_type, severity, title, summary, detail_json,
+                target_type, target_id, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "test.alert",
+                "warning",
+                "Test alert",
+                "rate limit fixture",
+                dumps_json({"ok": True}),
+                "task",
+                "task-rate",
+                "unread",
+                now_iso,
+            ),
+        )
+        return int(cursor.lastrowid)
 
 
 class TestCorsPolicy:
@@ -128,4 +157,21 @@ class TestRateLimits:
                 "workdir": "/workspace",
             },
         )
+        _assert_rate_limited(resp)
+
+    def test_alerts_unread_count_rate_limit(self, client: TestClient, auth_headers: dict[str, str]) -> None:
+        for i in range(30):
+            resp = client.get("/api/v1/admin/alerts/unread-count", headers=auth_headers)
+            assert resp.status_code == 200, f"Attempt {i + 1} failed: {resp.text}"
+
+        resp = client.get("/api/v1/admin/alerts/unread-count", headers=auth_headers)
+        _assert_rate_limited(resp)
+
+    def test_mark_alert_read_rate_limit(self, client: TestClient, auth_headers: dict[str, str]) -> None:
+        alert_id = _insert_alert()
+        for i in range(30):
+            resp = client.post(f"/api/v1/admin/alerts/{alert_id}/read", headers=auth_headers)
+            assert resp.status_code == 200, f"Attempt {i + 1} failed: {resp.text}"
+
+        resp = client.post(f"/api/v1/admin/alerts/{alert_id}/read", headers=auth_headers)
         _assert_rate_limited(resp)

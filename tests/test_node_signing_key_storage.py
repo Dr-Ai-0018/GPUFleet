@@ -19,8 +19,8 @@ from app.security import (
 )
 
 
-def _legacy_v1_encrypt(settings, signing_key: str) -> str:
-    key = hashlib.sha256(settings.node_key_encryption_secret.encode("utf-8")).digest()
+def _legacy_v1_encrypt(secret: str, signing_key: str) -> str:
+    key = hashlib.sha256(secret.encode("utf-8")).digest()
     nonce = b"legacy-nonce-000"
     plaintext = signing_key.encode("utf-8")
     output = bytearray()
@@ -82,7 +82,14 @@ class TestNodeSigningKeyStorage:
     def test_legacy_v1_encrypted_key_still_decrypts(self) -> None:
         settings = get_settings()
         signing_key = derive_node_signing_key("legacy-secret")
-        encrypted = _legacy_v1_encrypt(settings, signing_key)
+        encrypted = _legacy_v1_encrypt(settings.node_key_encryption_secret, signing_key)
+
+        assert decrypt_node_signing_key(settings, encrypted) == signing_key
+
+    def test_legacy_v1_jwt_fallback_key_still_decrypts(self) -> None:
+        settings = get_settings()
+        signing_key = derive_node_signing_key("legacy-jwt-fallback-secret")
+        encrypted = _legacy_v1_encrypt(settings.jwt_secret, signing_key)
 
         assert decrypt_node_signing_key(settings, encrypted) == signing_key
 

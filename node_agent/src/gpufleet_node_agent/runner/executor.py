@@ -219,7 +219,7 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
         final_status = "succeeded" if exit_code == 0 else "failed"
     except subprocess.TimeoutExpired:
         if process is not None:
-            process.kill()
+            terminate_process_tree(process, int(task.get("kill_grace_sec", 15)))
             stdout_text, stderr_text = process.communicate()
         finished_at = now_iso()
         final_status = "timeout"
