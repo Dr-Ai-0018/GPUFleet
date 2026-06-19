@@ -1,206 +1,420 @@
-/**
- * K2 骨架 — §5.2 关键路径覆盖(可迪 2026-06-17 出,天云 T4 实施)
- *
- * 范围:ConsoleStore 的三件关键行为
- *  1) callApi 的 401 → refresh → 重试 链路
- *  2) refreshOverview / refreshNodes / refreshTasks 的独立降级(单接口失败不影响其它)
- *  3) loading/error 聚合派生(deriveAggregateLoadState / deriveAggregateError)
- *
- * 渲染策略:
- *  - 用 @testing-library/react 的 renderHook(从 'react') + ConsoleStoreProvider 包一层
- *  - 推荐建一个 wrapper helper: makeWrapper({auth, onAuthUpdate, onAuthFailure})
- *  - api 模块整体 mock: vi.mock("../api", ...) 暴露每个方法独立 vi.fn()
- *  - 避免 setInterval 真触发污染测试: 用 vi.useFakeTimers 但只 advance 你需要的 5s 周期
- *
- * 断言风格不弱化。觉得断言写错了 → 提 issue 让人类裁定,不要 skip。
- */
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError, api } from "../api";
+import type {
+  AdminProfile,
+  AdminTaskListItem,
+  DashboardOverview,
+  NodeCreateResponse,
+  NodeResponse,
+  TokenPair,
+} from "../types";
+import { ConsoleStoreProvider, useConsoleStore } from "./ConsoleStore";
+import type { ReactNode } from "react";
 
-import { afterEach, beforeEach, describe, it, vi } from "vitest";
+vi.mock("../api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api")>();
+  return {
+    ApiError: actual.ApiError,
+    api: {
+      refresh: vi.fn(),
+      getMe: vi.fn(),
+      getOverview: vi.fn(),
+      listAllNodes: vi.fn(),
+      listAllTasks: vi.fn(),
+      getAuditEvents: vi.fn(),
+      getSecurityWarnings: vi.fn(),
+    },
+  };
+});
 
-// import { renderHook, act, waitFor } from "@testing-library/react";
-// import { ConsoleStoreProvider, useConsoleStore } from "./ConsoleStore";
-// import { api, ApiError } from "../api";
-// import type { ReactNode } from "react";
-// import type { TokenPair } from "../types";
+const mockedApi = vi.mocked(api);
 
-vi.mock("../api"); // 让 vitest 自动给每个 api.* 方法发 vi.fn()
+const authA: TokenPair = { access_token: "tok-A", refresh_token: "ref-A", token_type: "bearer" };
+const authB: TokenPair = { access_token: "tok-B", refresh_token: "ref-B", token_type: "bearer" };
+const meFixture = { username: "aka47" } as AdminProfile;
+const overviewFixture1 = {
+  total_nodes: 1,
+  online_nodes: 1,
+  queued_tasks: 0,
+  running_tasks: 0,
+  failed_tasks: 0,
+  nodes: [],
+  recent_tasks: [],
+} as unknown as DashboardOverview;
+const overviewFixture2 = {
+  ...overviewFixture1,
+  total_nodes: 2,
+} as DashboardOverview;
+const nodeFixture = { node_id: "node-1", display_name: "Node 1" } as NodeResponse;
+const taskFixture = { task_id: "task-1", status: "queued" } as AdminTaskListItem;
+const onboardingFixture = {
+  node: nodeFixture,
+  onboarding: {
+    token: "node-secret",
+    install_snippet: "uv run gpufleet-agent heartbeat-loop",
+    env_template: "GPUFLEET_AGENT_NODE_ID=node-1",
+    onboarding_steps: [],
+  },
+} as unknown as NodeCreateResponse;
 
-/* -------------------------------------------------------------------------- */
-/* Wrapper helper 占位 - 天云填实现                                            */
-/* -------------------------------------------------------------------------- */
-//
-// function makeWrapper(opts: {
-//   auth?: TokenPair;
-//   onAuthUpdate?: (a: TokenPair) => void;
-//   onAuthFailure?: () => void;
-// } = {}) {
-//   const auth = opts.auth ?? { access_token: "tok-A", refresh_token: "ref-A" };
-//   const onAuthUpdate = opts.onAuthUpdate ?? vi.fn();
-//   const onAuthFailure = opts.onAuthFailure ?? vi.fn();
-//   const Wrapper = ({ children }: { children: ReactNode }) => (
-//     <ConsoleStoreProvider auth={auth} onAuthUpdate={onAuthUpdate} onAuthFailure={onAuthFailure}>
-//       {children}
-//     </ConsoleStoreProvider>
-//   );
-//   return { Wrapper, onAuthUpdate, onAuthFailure, auth };
-// }
+function makeDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
-/* -------------------------------------------------------------------------- */
+function seedApiSuccess(): void {
+  mockedApi.refresh.mockResolvedValue(authB);
+  mockedApi.getMe.mockResolvedValue(meFixture);
+  mockedApi.getOverview.mockResolvedValue(overviewFixture1);
+  mockedApi.listAllNodes.mockResolvedValue([nodeFixture]);
+  mockedApi.listAllTasks.mockResolvedValue([taskFixture]);
+  mockedApi.getAuditEvents.mockResolvedValue([]);
+  mockedApi.getSecurityWarnings.mockResolvedValue([]);
+}
+
+function makeWrapper(
+  opts: {
+    auth?: TokenPair;
+    onAuthUpdate?: (auth: TokenPair) => void;
+    onAuthFailure?: () => void;
+  } = {},
+) {
+  let auth = opts.auth ?? authA;
+  const onAuthUpdate = opts.onAuthUpdate ?? vi.fn();
+  const onAuthFailure = opts.onAuthFailure ?? vi.fn();
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <ConsoleStoreProvider auth={auth} onAuthUpdate={onAuthUpdate} onAuthFailure={onAuthFailure}>
+      {children}
+    </ConsoleStoreProvider>
+  );
+  return {
+    Wrapper,
+    onAuthUpdate,
+    onAuthFailure,
+    auth,
+    setAuth(next: TokenPair) {
+      auth = next;
+    },
+  };
+}
+
+async function renderReadyStore(Wrapper: ({ children }: { children: ReactNode }) => JSX.Element) {
+  const hook = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
+  await waitFor(() => expect(hook.result.current.overviewLoading).toBe("ready"));
+  vi.clearAllMocks();
+  seedApiSuccess();
+  return hook;
+}
+
 describe("ConsoleStore · callApi 401 refresh 链路", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    seedApiSuccess();
   });
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
   });
 
-  it.todo(
-    "operation 首次返 401 → 自动 api.refresh → 用新 token 重试 operation 一次 → 透明成功",
-    // setup:
-    //   api.refresh.mockResolvedValue({access_token:'tok-B', refresh_token:'ref-B'})
-    //   const op = vi.fn()
-    //     .mockRejectedValueOnce(new ApiError(401,'ERR_UNAUTHORIZED','token expired'))
-    //     .mockResolvedValueOnce({ok:true})
-    // act: const { result } = renderHook(() => useConsoleStore(), { wrapper })
-    //      const out = await result.current.callApi(op)
-    // assert:
-    //   op 调用 2 次;第 1 次传 'tok-A',第 2 次传 'tok-B'
-    //   api.refresh 调用 1 次,参数 'ref-A'
-    //   onAuthUpdate 调用 1 次,参数为新 TokenPair
-    //   out === {ok:true}
-  );
+  it("operation 首次返 401 → 自动 api.refresh → 用新 token 重试 operation 一次 → 透明成功", async () => {
+    const { Wrapper, onAuthUpdate } = makeWrapper();
+    const operation = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(401, "ERR_UNAUTHORIZED", "token expired"))
+      .mockResolvedValueOnce({ ok: true });
 
-  it.todo(
-    "refresh 失败 → 调用 onAuthFailure → 抛 refreshError(不是原 401)",
-    // setup:
-    //   api.refresh.mockRejectedValue(new ApiError(401,'ERR_REFRESH_EXPIRED','expired'))
-    //   const op = vi.fn().mockRejectedValue(new ApiError(401,'ERR_UNAUTHORIZED','token expired'))
-    // act: await expect(callApi(op)).rejects.toMatchObject({code:'ERR_REFRESH_EXPIRED'})
-    // assert: onAuthFailure 调用 1 次;op 调用 1 次(不重试);api.refresh 调用 1 次
-  );
+    const { result } = await renderReadyStore(Wrapper);
+    let out: { ok: boolean } | undefined;
+    await act(async () => {
+      out = await result.current.callApi(operation);
+    });
 
-  it.todo(
-    "非 401 错误(403 / 500 / 网络错误)直接抛出,不触发 refresh,不调用 onAuthFailure",
-    // 对每个 status 跑一次;assert api.refresh.calledTimes === 0
-  );
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(operation).toHaveBeenNthCalledWith(1, "tok-A");
+    expect(operation).toHaveBeenNthCalledWith(2, "tok-B");
+    expect(mockedApi.refresh).toHaveBeenCalledTimes(1);
+    expect(mockedApi.refresh).toHaveBeenCalledWith("ref-A");
+    expect(onAuthUpdate).toHaveBeenCalledTimes(1);
+    expect(onAuthUpdate).toHaveBeenCalledWith(authB);
+    expect(out).toEqual({ ok: true });
+  });
 
-  it.todo(
-    "非 ApiError 异常(Error / TypeError)直接抛出,不触发 refresh",
-    // setup: op throw new Error('boom')
-    // assert: callApi rejects 同一个 Error;api.refresh 未调用
-  );
+  it("refresh 失败 → 调用 onAuthFailure → 抛 refreshError(不是原 401)", async () => {
+    const refreshError = new ApiError(401, "ERR_REFRESH_EXPIRED", "expired");
+    const operation = vi
+      .fn()
+      .mockRejectedValue(new ApiError(401, "ERR_UNAUTHORIZED", "token expired"));
+    const { Wrapper, onAuthFailure } = makeWrapper();
+    const { result } = await renderReadyStore(Wrapper);
+    mockedApi.refresh.mockRejectedValue(refreshError);
+
+    await expect(result.current.callApi(operation)).rejects.toBe(refreshError);
+
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect(mockedApi.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("非 401 错误(403 / 500 / 网络错误)直接抛出,不触发 refresh,不调用 onAuthFailure", async () => {
+    const cases = [
+      new ApiError(403, "ERR_FORBIDDEN", "forbidden"),
+      new ApiError(500, "ERR_INTERNAL", "db down"),
+      new TypeError("NetworkError"),
+    ];
+
+    for (const error of cases) {
+      vi.clearAllMocks();
+      seedApiSuccess();
+      const operation = vi.fn().mockRejectedValue(error);
+      const { Wrapper, onAuthFailure } = makeWrapper();
+      const { result, unmount } = await renderReadyStore(Wrapper);
+
+      await expect(result.current.callApi(operation)).rejects.toBe(error);
+
+      expect(mockedApi.refresh).not.toHaveBeenCalled();
+      expect(onAuthFailure).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  it("非 ApiError 异常(Error / TypeError)直接抛出,不触发 refresh", async () => {
+    const error = new Error("boom");
+    const operation = vi.fn().mockRejectedValue(error);
+    const { Wrapper } = makeWrapper();
+    const { result } = await renderReadyStore(Wrapper);
+
+    await expect(result.current.callApi(operation)).rejects.toBe(error);
+
+    expect(mockedApi.refresh).not.toHaveBeenCalled();
+  });
 });
 
-/* -------------------------------------------------------------------------- */
 describe("ConsoleStore · 独立降级刷新", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    seedApiSuccess();
   });
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
-  it.todo(
-    "refreshNodes 500 失败时,refreshOverview / refreshTasks 仍正常完成(refresh allSettled)",
-    // setup:
-    //   api.getMe.mockResolvedValue(meFixture)
-    //   api.getOverview.mockResolvedValue(overviewFixture)
-    //   api.listAllNodes.mockRejectedValue(new ApiError(500,'ERR_INTERNAL','db down'))
-    //   api.listAllTasks.mockResolvedValue([taskFixture])
-    //   api.getAuditEvents.mockResolvedValue([])
-    //   api.getSecurityWarnings.mockResolvedValue([])
-    // act: render hook;await waitFor(...) 直到 overviewLoading === 'ready'
-    // assert:
-    //   state.overview === overviewFixture 且 overviewLoading === 'ready' 且 overviewError === null
-    //   state.nodes === [] 且 nodesLoading === 'error' 且 nodesError 含 '节点'/i18n.console.nodesSection 文案
-    //   state.tasks === [taskFixture] 且 tasksLoading === 'ready'
-  );
+  it("refreshNodes 500 失败时,refreshOverview / refreshTasks 仍正常完成(refresh allSettled)", async () => {
+    mockedApi.listAllNodes.mockRejectedValue(new ApiError(500, "ERR_INTERNAL", "db down"));
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
 
-  it.todo(
-    "聚合 loading 在任一子项 loading 时为 'loading',全部完成才回 'ready'",
-    // setup: 让 getOverview / listAllNodes / listAllTasks 各自 pending 一段时间
-    // 顺序 advance 时间,assert 中间态 loading,end 态 ready
-  );
+    await waitFor(() => expect(result.current.overviewLoading).toBe("ready"));
+    await waitFor(() => expect(result.current.tasksLoading).toBe("ready"));
+    await waitFor(() => expect(result.current.nodesLoading).toBe("error"));
 
-  it.todo(
-    "聚合 lastError 用 ' · ' 连接所有子项 error,无 error 时为 null",
-    // setup: getOverview 抛 ApiError('ERR_A','msgA'),其余成功
-    // assert: state.lastError 含 'msgA';nodesError/tasksError null;lastError 不为空串
-    //
-    // 然后再触发一个成功 refresh,assert lastError → null
-  );
+    expect(result.current.overview).toBe(overviewFixture1);
+    expect(result.current.overviewError).toBeNull();
+    expect(result.current.nodes).toEqual([]);
+    expect(result.current.nodesError).toContain("节点");
+    expect(result.current.tasks).toEqual([taskFixture]);
+    expect(result.current.tasksError).toBeNull();
+  });
 
-  it.todo(
-    "silent: true 不切 loading 为 'loading'(后台轮询不该闪烁 UI)",
-    // setup: refresh 已经 ready;再以 silent:true 调 refreshOverview
-    // assert: 调用期间 overviewLoading 保持 'ready',不出现 'loading' 中间态
-  );
+  it("聚合 loading 在任一子项 loading 时为 'loading',全部完成才回 'ready'", async () => {
+    const overviewDeferred = makeDeferred<DashboardOverview>();
+    const nodesDeferred = makeDeferred<NodeResponse[]>();
+    const tasksDeferred = makeDeferred<AdminTaskListItem[]>();
+    mockedApi.getOverview.mockReturnValue(overviewDeferred.promise);
+    mockedApi.listAllNodes.mockReturnValue(nodesDeferred.promise);
+    mockedApi.listAllTasks.mockReturnValue(tasksDeferred.promise);
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
 
-  it.todo(
-    "组件卸载后(aliveRef.current = false)setState 不再调用,避免 React 警告",
-    // setup: 启动 refresh;在 fetch resolve 之前 unmount
-    // assert: hook 不再 update;无 "Can't perform a React state update on unmounted" 警告
-  );
+    await waitFor(() => expect(result.current.loading).toBe("loading"));
+
+    await act(async () => {
+      overviewDeferred.resolve(overviewFixture1);
+      nodesDeferred.resolve([nodeFixture]);
+      tasksDeferred.resolve([taskFixture]);
+    });
+
+    await waitFor(() => expect(result.current.loading).toBe("ready"));
+  });
+
+  it("聚合 lastError 用 ' · ' 连接所有子项 error,无 error 时为 null", async () => {
+    mockedApi.getOverview.mockRejectedValue(new ApiError(500, "ERR_A", "msgA"));
+    mockedApi.listAllNodes.mockRejectedValue(new ApiError(500, "ERR_B", "msgB"));
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.lastError).toContain("msgA"));
+    expect(result.current.lastError).toContain(" · ");
+    expect(result.current.lastError).toContain("msgB");
+
+    mockedApi.getOverview.mockResolvedValue(overviewFixture1);
+    mockedApi.listAllNodes.mockResolvedValue([nodeFixture]);
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    await waitFor(() => expect(result.current.lastError).toBeNull());
+  });
+
+  it("silent: true 不切 loading 为 'loading'(后台轮询不该闪烁 UI)", async () => {
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.overviewLoading).toBe("ready"));
+    const deferred = makeDeferred<DashboardOverview>();
+    mockedApi.getOverview.mockReturnValueOnce(deferred.promise);
+
+    act(() => {
+      void result.current.refreshOverview({ silent: true });
+    });
+
+    expect(result.current.overviewLoading).toBe("ready");
+
+    await act(async () => {
+      deferred.resolve(overviewFixture2);
+    });
+    await waitFor(() => expect(result.current.overview).toBe(overviewFixture2));
+  });
+
+  it("组件卸载后(aliveRef.current = false)setState 不再调用,避免 React 警告", async () => {
+    const overviewDeferred = makeDeferred<DashboardOverview>();
+    mockedApi.getOverview.mockReturnValue(overviewDeferred.promise);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { Wrapper } = makeWrapper();
+    const { unmount } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
+
+    unmount();
+    await act(async () => {
+      overviewDeferred.resolve(overviewFixture1);
+    });
+
+    expect(consoleError).not.toHaveBeenCalledWith(
+      expect.stringContaining("Can't perform a React state update on an unmounted component"),
+    );
+  });
 });
 
-/* -------------------------------------------------------------------------- */
 describe("ConsoleStore · 周期 refresh + token 变化", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    seedApiSuccess();
   });
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
   });
 
-  it.todo(
-    "mount 后立刻触发一次 refresh,然后每 5s silent refresh 一次",
-    // setup: 所有 api.* 都 resolve 空数据
-    // act: render;await initial refresh 完成;advanceTimers 5_001ms
-    // assert: api.getOverview 第 2 次调用发生;loading 保持 'ready' 不闪
-  );
+  it("mount 后立刻触发一次 refresh,然后每 5s silent refresh 一次", async () => {
+    vi.useFakeTimers();
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
 
-  it.todo(
-    "auth.access_token 为空字符串时,refresh* 立刻 return,不发请求",
-    // setup: auth = {access_token:'', refresh_token:''}
-    // assert: api.* 任一调用都 === 0
-  );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockedApi.getOverview).toHaveBeenCalledTimes(1);
 
-  it.todo(
-    "auth.access_token 变化时,setState 同步更新 state.token",
-    // setup: rerender 传新 auth
-    // assert: state.token === auth.access_token
-  );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_001);
+    });
+
+    expect(mockedApi.getOverview).toHaveBeenCalledTimes(2);
+    expect(result.current.overviewLoading).toBe("ready");
+  });
+
+  it("auth.access_token 为空字符串时,refresh* 立刻 return,不发请求", async () => {
+    const { Wrapper } = makeWrapper({
+      auth: { access_token: "", refresh_token: "", token_type: "bearer" },
+    });
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.refresh();
+      await result.current.refreshOverview();
+      await result.current.refreshNodes();
+      await result.current.refreshTasks();
+    });
+
+    expect(mockedApi.getMe).not.toHaveBeenCalled();
+    expect(mockedApi.getOverview).not.toHaveBeenCalled();
+    expect(mockedApi.listAllNodes).not.toHaveBeenCalled();
+    expect(mockedApi.listAllTasks).not.toHaveBeenCalled();
+  });
+
+  it("auth.access_token 变化时,setState 同步更新 state.token", async () => {
+    const wrapperState = makeWrapper();
+    const { result, rerender } = renderHook(() => useConsoleStore(), {
+      wrapper: wrapperState.Wrapper,
+    });
+
+    expect(result.current.token).toBe("tok-A");
+
+    wrapperState.setAuth(authB);
+    rerender();
+
+    await waitFor(() => expect(result.current.token).toBe("tok-B"));
+  });
 });
 
-/* -------------------------------------------------------------------------- */
 describe("ConsoleStore · prevOverview delta cache", () => {
-  it.todo(
-    "首次 refresh 后 prevOverview === null,overview === fixture1",
-    // 验证初始 cache 行为
-  );
+  beforeEach(() => {
+    seedApiSuccess();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
-  it.todo(
-    "第二次 refresh 后 prevOverview === fixture1,overview === fixture2",
-    // 验证 DeltaBadge 数据源(P0-#3)的语义不被破坏
-  );
+  it("首次 refresh 后 prevOverview === null,overview === fixture1", async () => {
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.overview).toBe(overviewFixture1));
+
+    expect(result.current.prevOverview).toBeNull();
+  });
+
+  it("第二次 refresh 后 prevOverview === fixture1,overview === fixture2", async () => {
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useConsoleStore(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.overview).toBe(overviewFixture1));
+    mockedApi.getOverview.mockResolvedValue(overviewFixture2);
+
+    await act(async () => {
+      await result.current.refreshOverview();
+    });
+
+    expect(result.current.prevOverview).toBe(overviewFixture1);
+    expect(result.current.overview).toBe(overviewFixture2);
+  });
 });
 
-/* -------------------------------------------------------------------------- */
 describe("ConsoleStore · setRecentOnboarding", () => {
-  it.todo(
-    "setRecentOnboarding(pkg) → state.recentOnboarding === pkg",
-  );
+  beforeEach(() => {
+    seedApiSuccess();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
-  it.todo(
-    "setRecentOnboarding(null) → state.recentOnboarding === null",
-  );
+  it("setRecentOnboarding(pkg) → state.recentOnboarding === pkg", async () => {
+    const { Wrapper } = makeWrapper();
+    const { result } = await renderReadyStore(Wrapper);
+
+    act(() => result.current.setRecentOnboarding(onboardingFixture));
+
+    expect(result.current.recentOnboarding).toBe(onboardingFixture);
+  });
+
+  it("setRecentOnboarding(null) → state.recentOnboarding === null", async () => {
+    const { Wrapper } = makeWrapper();
+    const { result } = await renderReadyStore(Wrapper);
+
+    act(() => result.current.setRecentOnboarding(onboardingFixture));
+    act(() => result.current.setRecentOnboarding(null));
+
+    expect(result.current.recentOnboarding).toBeNull();
+  });
 });
-
-/* 故意不在 K2 骨架内的项:
- *  - useConsoleStore 在 Provider 外抛错的语义已经在 type 层强制,不需要单测重复
- *  - 完整 E2E refresh chain(真 fetch + 真 API) → integration 套件覆盖
- *  - refresh interval 的 cleanup → React 18 strict mode 自带覆盖
- */

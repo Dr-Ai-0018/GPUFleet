@@ -71,6 +71,9 @@ async function fetchWithPolicy(input: string, init: RequestInit): Promise<Respon
       continue;
     } catch (error) {
       window.clearTimeout(timeoutId);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error("请求超时,请稍后重试");
+      }
       lastError = error;
       if (attempt === MAX_RETRY_ATTEMPTS) {
         break;
@@ -79,9 +82,6 @@ async function fetchWithPolicy(input: string, init: RequestInit): Promise<Respon
     }
   }
 
-  if (lastError instanceof DOMException && lastError.name === "AbortError") {
-    throw new Error("请求超时，请稍后重试");
-  }
   throw lastError instanceof Error ? lastError : new Error("请求失败");
 }
 
@@ -276,7 +276,10 @@ export const api = {
     );
   },
 
-  regenerateNodeOnboarding(token: string, nodeId: string): Promise<NodeOnboardingLifecycleResponse> {
+  regenerateNodeOnboarding(
+    token: string,
+    nodeId: string,
+  ): Promise<NodeOnboardingLifecycleResponse> {
     return request<NodeOnboardingLifecycleResponse>(
       `${API_BASE}/admin/nodes/${encodeURIComponent(nodeId)}/onboarding/regenerate`,
       { method: "POST" },
@@ -304,11 +307,7 @@ export const api = {
   },
 
   listTasks(token: string, query?: ListQuery): Promise<AdminTaskListPage> {
-    return request<AdminTaskListPage>(
-      `${API_BASE}/admin/tasks${buildListQuery(query)}`,
-      {},
-      token,
-    );
+    return request<AdminTaskListPage>(`${API_BASE}/admin/tasks${buildListQuery(query)}`, {}, token);
   },
 
   listAllTasks(token: string): Promise<AdminTaskListItem[]> {
@@ -344,11 +343,7 @@ export const api = {
   },
 
   listAudits(token: string, query?: ListQuery): Promise<AuditEventPage> {
-    return request<AuditEventPage>(
-      `${API_BASE}/admin/audits${buildListQuery(query)}`,
-      {},
-      token,
-    );
+    return request<AuditEventPage>(`${API_BASE}/admin/audits${buildListQuery(query)}`, {}, token);
   },
 
   getSecurityWarnings(token: string, limit = 50): Promise<SecurityWarningView[]> {

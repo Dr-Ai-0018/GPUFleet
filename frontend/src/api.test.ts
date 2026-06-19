@@ -5,6 +5,14 @@ function mockFetch(response: Response): void {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 }
 
+function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
+  return new Response(JSON.stringify(body), init);
+}
+
+function fetchMock(): ReturnType<typeof vi.fn> {
+  return vi.mocked(fetch) as unknown as ReturnType<typeof vi.fn>;
+}
+
 describe("api error parsing", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -50,7 +58,7 @@ describe("api error parsing", () => {
 /* ============================================================================
  * K2 骨架 — §5.2 关键路径覆盖(可迪 2026-06-17 出,天云 T4 实施)
  *
- * 天云接手时:把每个 it.todo 升为 it,按注释 setup + assert 补实现。
+ * 天云接手时:把每个占位用例升为可执行 it,按注释 setup + assert 补实现。
  *  - mock 策略: vi.stubGlobal("fetch", vi.fn()),按 case 配 mockResolvedValueOnce 链
  *  - 涉及定时器(超时/sleep 退避)的 case 必须用 vi.useFakeTimers() + vi.advanceTimersByTimeAsync
  *  - 断言风格跟 §1/§2 已冻结测试对齐:具体值,不弱化阈值
@@ -58,43 +66,124 @@ describe("api error parsing", () => {
  * ============================================================================ */
 
 describe("api · fetchWithPolicy 重试与超时", () => {
-  it.todo(
-    "首次 503 → 第二次 200 透明成功,fetch 被调用 2 次,第二次发生在 ~200ms 后",
-    // setup: useFakeTimers; fetch mockResolvedValueOnce(503).mockResolvedValueOnce(200+json)
-    // act: const p = api.getMe('tok'); await advanceTimersByTimeAsync(220); await p
-    // assert: fetch 调用次数 === 2;返回值 = mock 的 json;第二次 setTimeout delay arg === 200
-  );
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
-  it.todo(
-    "连续 4 次 503 → 用完重试(MAX_RETRY_ATTEMPTS+1 = 4 次)后抛 ApiError",
-    // setup: fetch 永远返 503 + body {code:'ERR_X', message:'down'}
-    // act: 包 try/catch;每次 advanceTimersByTimeAsync(200/400/800) 推进退避
-    // assert: fetch 调用 4 次;throw ApiError;error.status===503;error.code==='ERR_X'
-  );
+  it("首次 503 → 第二次 200 透明成功,fetch 被调用 2 次,第二次发生在 ~200ms 后", async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ code: "ERR_DOWN", message: "down" }, { status: 503 }))
+        .mockResolvedValueOnce(jsonResponse({ username: "aka47" }, { status: 200 })),
+    );
 
-  it.todo(
-    "退避严格遵循指数: setTimeout delay 第 1/2/3 次为 200 / 400 / 800ms",
-    // setup: spyOn(window,'setTimeout');fetch 永远 503
-    // assert: 重试 setTimeout 参数列表(过滤掉 AbortController 30s 的那批)严格匹配 [200,400,800]
-  );
+    const promise = api.getMe("tok");
+    await vi.advanceTimersByTimeAsync(220);
+    await expect(promise).resolves.toEqual({ username: "aka47" });
 
-  it.todo(
-    "4xx 不重试(400 / 401 / 403 / 404 / 409 / 422 各覆盖一次),fetch 调用 1 次",
-    // setup: 对每个 status,fetch 返该 status + 合法错误体;assert 调用次数 === 1
-  );
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(setTimeoutSpy.mock.calls.map((call) => call[1]).filter((ms) => ms !== 30_000)).toEqual([
+      200,
+    ]);
+  });
 
-  it.todo(
-    "请求超时 30s → AbortController.abort → 抛 Error('请求超时,请稍后重试')",
-    // setup: useFakeTimers; fetch 返一个永不 resolve 的 Promise
-    // act: const p = api.getMe('tok'); await advanceTimersByTimeAsync(30_001)
-    // assert: rejects.toThrow('请求超时,请稍后重试')
-  );
+  it("连续 4 次 503 → 用完重试(MAX_RETRY_ATTEMPTS+1 = 4 次)后抛 ApiError", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ code: "ERR_X", message: "down" }, { status: 503 })),
+    );
 
-  it.todo(
-    "网络错误(fetch reject TypeError)视为可重试,重试到上限后抛原 error",
-    // setup: fetch rejectedValue(new TypeError('NetworkError'))
-    // assert: fetch 调用 4 次;最终 throw 同一个 TypeError(error instanceof TypeError)
-  );
+    const promise = api.getMe("tok");
+    const assertion = expect(promise).rejects.toMatchObject({
+      status: 503,
+      code: "ERR_X",
+      message: "down",
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await assertion;
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("退避严格遵循指数: setTimeout delay 第 1/2/3 次为 200 / 400 / 800ms", async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ code: "ERR_X", message: "down" }, { status: 503 })),
+    );
+
+    const promise = api.getMe("tok");
+    const assertion = expect(promise).rejects.toBeInstanceOf(ApiError);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+
+    expect(setTimeoutSpy.mock.calls.map((call) => call[1]).filter((ms) => ms !== 30_000)).toEqual([
+      200, 400, 800,
+    ]);
+  });
+
+  it("4xx 不重试(400 / 401 / 403 / 404 / 409 / 422 各覆盖一次),fetch 调用 1 次", async () => {
+    for (const status of [400, 401, 403, 404, 409, 422]) {
+      vi.unstubAllGlobals();
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(
+            jsonResponse({ code: `ERR_${status}`, message: `status ${status}` }, { status }),
+          ),
+      );
+
+      await expect(api.getMe("tok")).rejects.toMatchObject({
+        status,
+        code: `ERR_${status}`,
+        message: `status ${status}`,
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("请求超时 30s → AbortController.abort → 抛 Error('请求超时,请稍后重试')", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: string, init: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        });
+      }),
+    );
+
+    const promise = api.getMe("tok");
+    const assertion = expect(promise).rejects.toThrow("请求超时,请稍后重试");
+    await vi.advanceTimersByTimeAsync(30_001);
+
+    await assertion;
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("网络错误(fetch reject TypeError)视为可重试,重试到上限后抛原 error", async () => {
+    vi.useFakeTimers();
+    const networkError = new TypeError("NetworkError");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(networkError));
+
+    const promise = api.getMe("tok");
+    const assertion = expect(promise).rejects.toBe(networkError);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await assertion;
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
 });
 
 describe("api · 响应体解析其它分支", () => {
@@ -102,37 +191,72 @@ describe("api · 响应体解析其它分支", () => {
     vi.unstubAllGlobals();
   });
 
-  it.todo(
-    "204 No Content → 返回 undefined,不抛错",
-    // setup: mockFetch(new Response(null, { status: 204 }))
-    // assert: await api.deleteNode('tok','n1') === undefined
-  );
+  it("204 No Content → 返回 undefined,不抛错", async () => {
+    mockFetch(new Response(null, { status: 204 }));
 
-  it.todo(
-    "错误体非 JSON(纯文本)→ code = ERR_HTTP_<status>,message = 原文",
-    // setup: mockFetch(new Response('gateway exploded', { status: 502 }))
-    // assert: error.code === 'ERR_HTTP_502'; error.message === 'gateway exploded'
-  );
+    await expect(api.deleteNode("tok", "n1")).resolves.toBeUndefined();
+  });
 
-  it.todo(
-    "错误体只含 {code} 缺 {message} → code 保留,message fallback 为 'HTTP <status>'",
-    // setup: mockFetch(new Response(JSON.stringify({code:'ERR_X'}), { status: 422 }))
-    // assert: error.code === 'ERR_X'; error.message === 'HTTP 422'
-  );
+  it("错误体非 JSON(纯文本)→ code = ERR_HTTP_<status>,message = 原文", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("gateway exploded", { status: 502 })),
+    );
 
-  it.todo(
-    "Authorization header 在传 token 时被设置为 'Bearer <token>',不传则缺席",
-    // setup: fetch mock,let captured: Headers; mockImpl 捕获 init.headers
-    // act: api.getMe('tok-abc') 与 api.login('u','p')
-    // assert: getMe 时 headers.get('Authorization')==='Bearer tok-abc';login 时 === null
-  );
+    const assertion = expect(api.getMe("tok")).rejects.toMatchObject({
+      status: 502,
+      code: "ERR_HTTP_502",
+      message: "gateway exploded",
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+  });
 
-  it.todo(
-    "POST + body 自动加 Content-Type: application/json",
-    // setup: 同上捕获 headers
-    // act: api.createNode('tok', payload)
-    // assert: headers.get('Content-Type') === 'application/json'
-  );
+  it("错误体只含 {code} 缺 {message} → code 保留,message fallback 为 'HTTP <status>'", async () => {
+    mockFetch(jsonResponse({ code: "ERR_X" }, { status: 422 }));
+
+    await expect(api.getMe("tok")).rejects.toMatchObject({
+      status: 422,
+      code: "ERR_X",
+      message: "HTTP 422",
+    });
+  });
+
+  it("Authorization header 在传 token 时被设置为 'Bearer <token>',不传则缺席", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ username: "aka47" })));
+    await api.getMe("tok-abc");
+    const authedHeaders = fetchMock().mock.calls[0][1].headers as Headers;
+
+    vi.unstubAllGlobals();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ access_token: "a", refresh_token: "r" })),
+    );
+    await api.login("u", "p");
+    const loginHeaders = fetchMock().mock.calls[0][1].headers as Headers;
+
+    expect(authedHeaders.get("Authorization")).toBe("Bearer tok-abc");
+    expect(loginHeaders.get("Authorization")).toBeNull();
+  });
+
+  it("POST + body 自动加 Content-Type: application/json", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ node_id: "n1" })));
+
+    await api.createNode("tok", {
+      node_id: "n1",
+      display_name: "Node 1",
+      node_type: "physical",
+      os_type: "linux",
+      hostname: "node-1",
+      heartbeat_interval_sec: 5,
+      allowed_workdirs: [],
+      tags: [],
+    });
+
+    const headers = fetchMock().mock.calls[0][1].headers as Headers;
+    expect(headers.get("Content-Type")).toBe("application/json");
+  });
 });
 
 describe("api · 分页 helper", () => {
@@ -140,33 +264,64 @@ describe("api · 分页 helper", () => {
     vi.unstubAllGlobals();
   });
 
-  it.todo(
-    "requestAllPages 在某页 length < limit 时停止,合并所有页(覆盖 listAllNodes)",
-    // setup: fetch mock 返 3 页:[200 items], [200 items], [50 items] (DEFAULT_PAGE_SIZE=200)
-    // act: api.listAllNodes('tok')
-    // assert: 返回 length === 450;fetch 调用 3 次;最后一次 query 含 offset=400
-  );
+  it("requestAllPages 在某页 length < limit 时停止,合并所有页(覆盖 listAllNodes)", async () => {
+    const makePage = (start: number, count: number) =>
+      Array.from({ length: count }, (_, index) => ({ node_id: `n${start + index}` }));
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse(makePage(0, 200)))
+        .mockResolvedValueOnce(jsonResponse(makePage(200, 200)))
+        .mockResolvedValueOnce(jsonResponse(makePage(400, 50))),
+    );
 
-  it.todo(
-    "requestAllCursorPages 用 next_cursor 串联,next_cursor=null 时停止(覆盖 listAllTasks)",
-    // setup: fetch mock 返 {items, next_cursor:'c1'} / {..., next_cursor:'c2'} / {..., next_cursor:null}
-    // act: api.listAllTasks('tok')
-    // assert: 3 次调用;第 2/3 次 URL 含 cursor=c1/c2;最终数组是 3 页 items concat
-  );
+    const nodes = await api.listAllNodes("tok");
+
+    expect(nodes).toHaveLength(450);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock().mock.calls[2][0])).toContain("offset=400");
+  });
+
+  it("requestAllCursorPages 用 next_cursor 串联,next_cursor=null 时停止(覆盖 listAllTasks)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ items: [{ task_id: "t0" }], next_cursor: "c1" }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ task_id: "t1" }], next_cursor: "c2" }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ task_id: "t2" }], next_cursor: null })),
+    );
+
+    const tasks = await api.listAllTasks("tok");
+
+    expect(tasks.map((task) => task.task_id)).toEqual(["t0", "t1", "t2"]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock().mock.calls[1][0])).toContain("cursor=c1");
+    expect(String(fetchMock().mock.calls[2][0])).toContain("cursor=c2");
+  });
 });
 
 describe("api · ApiError 类语义", () => {
-  it.todo(
-    "构造时 status / code / message / details 全部赋值,super(message) 落 Error.message",
-    // const e = new ApiError(404, 'ERR_X', 'msg', {a:1})
-    // assert: 4 字段都对;e instanceof ApiError && e instanceof Error;e.message === 'msg'
-  );
+  it("构造时 status / code / message / details 全部赋值,super(message) 落 Error.message", () => {
+    const details = { a: 1 };
+    const error = new ApiError(404, "ERR_X", "msg", details);
 
-  it.todo(
-    "message 为空时,super 使用 'HTTP <status>' 作为 fallback",
-    // const e = new ApiError(500, 'ERR_X', '')
-    // assert: e.message === 'HTTP 500'
-  );
+    expect(error.status).toBe(404);
+    expect(error.code).toBe("ERR_X");
+    expect(error.details).toBe(details);
+    expect(error.message).toBe("msg");
+    expect(error.body).toBe("msg");
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it("message 为空时,super 使用 'HTTP <status>' 作为 fallback", () => {
+    const error = new ApiError(500, "ERR_X", "");
+
+    expect(error.message).toBe("HTTP 500");
+    expect(error.body).toBe("HTTP 500");
+  });
 });
 
 /* 故意不在 K2 骨架内的项 - 写在这里是为了让接手者知道我们想过:

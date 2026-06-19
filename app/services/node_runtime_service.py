@@ -489,7 +489,7 @@ async def _heartbeat_impl(request: Request, db: Database, settings: Settings) ->
         raise ApiError(
             code="ERR_VALIDATION_INVALID_PAYLOAD",
             message="Invalid heartbeat payload",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
 
     now_iso = utc_now_iso()
@@ -612,7 +612,7 @@ async def task_events(request: Request, db: Database, settings: Settings) -> dic
         raise ApiError(
             code="ERR_VALIDATION_INVALID_PAYLOAD",
             message="Invalid task event payload",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
 
     now_iso = utc_now_iso()
@@ -657,7 +657,7 @@ async def task_log_chunk(request: Request, db: Database, settings: Settings) -> 
         raise ApiError(
             code="ERR_VALIDATION_INVALID_PAYLOAD",
             message="Invalid task log chunk payload",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
 
     now_iso = utc_now_iso()
@@ -791,7 +791,7 @@ async def task_result(request: Request, db: Database, settings: Settings) -> dic
         raise ApiError(
             code="ERR_VALIDATION_INVALID_PAYLOAD",
             message="Invalid task result payload",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
 
     now_iso = utc_now_iso()
@@ -862,7 +862,7 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
         raise ApiError(
             code="ERR_VALIDATION_INVALID_PAYLOAD",
             message="Invalid artifact upload payload",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
 
     with db.connect() as conn:
