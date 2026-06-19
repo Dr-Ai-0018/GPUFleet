@@ -12,18 +12,19 @@ from app.security import build_signed_headers_for_test
 
 def _setup_node_and_task(client: TestClient, auth_headers: dict[str, str]) -> tuple[str, str, str]:
     """Create a node and task, return (node_id, node_secret, task_id)."""
-    resp = client.post("/api/admin/nodes", headers=auth_headers, json={
+    resp = client.post("/api/v1/admin/nodes", headers=auth_headers, json={
         "node_id": "artifact-node",
         "display_name": "Artifact Test Node",
         "node_type": "physical",
         "os_type": "linux",
         "heartbeat_interval_sec": 5,
         "allowed_workdirs": ["/tmp"],
+        "allow_shell": True,
     })
     assert resp.status_code == 201
     node_secret = resp.json()["node_secret"]
 
-    resp = client.post("/api/admin/tasks", headers=auth_headers, json={
+    resp = client.post("/api/v1/admin/tasks", headers=auth_headers, json={
         "node_id": "artifact-node",
         "type": "shell",
         "payload": {"command": "echo hi"},
@@ -41,7 +42,7 @@ class TestArtifactUploadSecurity:
         _, node_secret, task_id = _setup_node_and_task(client, auth_headers)
 
         # Create a second node
-        resp = client.post("/api/admin/nodes", headers=auth_headers, json={
+        resp = client.post("/api/v1/admin/nodes", headers=auth_headers, json={
             "node_id": "other-node",
             "display_name": "Other Node",
             "node_type": "physical",
@@ -63,7 +64,7 @@ class TestArtifactUploadSecurity:
         }
         body = json.dumps(payload).encode()
         headers = build_signed_headers_for_test("other-node", other_secret, body)
-        resp = client.post("/api/node/artifact-upload", content=body, headers=headers)
+        resp = client.post("/api/v1/node/artifact-upload", content=body, headers=headers)
         assert resp.status_code == 404  # Task not found for this node
 
     def test_upload_size_limit(self, client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -89,7 +90,7 @@ class TestArtifactUploadSecurity:
             }
             body = json.dumps(payload).encode()
             headers = build_signed_headers_for_test(node_id, node_secret, body)
-            resp = client.post("/api/node/artifact-upload", content=body, headers=headers)
+            resp = client.post("/api/v1/node/artifact-upload", content=body, headers=headers)
             assert resp.status_code == 413
         finally:
             settings.max_artifact_bytes = original_max
@@ -109,7 +110,7 @@ class TestArtifactUploadSecurity:
         }
         body = json.dumps(payload).encode()
         headers = build_signed_headers_for_test(node_id, node_secret, body)
-        resp = client.post("/api/node/artifact-upload", content=body, headers=headers)
+        resp = client.post("/api/v1/node/artifact-upload", content=body, headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True

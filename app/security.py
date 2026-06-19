@@ -1,17 +1,26 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
 from passlib.context import CryptContext
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.config import Settings
 
 password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
+
+@dataclass(frozen=True)
+class DecryptedNodeSigningKey:
+    signing_key: str
+    source: str
 
 
 def hash_password(password: str) -> str:
@@ -61,6 +70,85 @@ def derive_node_signing_key(node_secret: str) -> str:
     return hashlib.sha256(node_secret.encode("utf-8")).hexdigest()
 
 
+def _derive_encryption_key(secret: str) -> bytes:
+    return hashlib.sha256(secret.encode("utf-8")).digest()
+
+
+def _node_encryption_key(settings: Settings) -> bytes:
+    secret = settings.node_key_encryption_secret
+    if not secret or secret == "__NOT_SET__":
+        raise ValueError("GPUFLEET_NODE_KEY_ENCRYPTION_SECRET is required")
+    return _derive_encryption_key(secret)
+
+
+def _xor_with_keystream(payload: bytes, key: bytes, nonce: bytes) -> bytes:
+    output = bytearray()
+    counter = 0
+    while len(output) < len(payload):
+        block = hmac.new(
+            key,
+            nonce + counter.to_bytes(4, "big"),
+            hashlib.sha256,
+        ).digest()
+        output.extend(block)
+        counter += 1
+    return bytes(a ^ b for a, b in zip(payload, output[: len(payload)]))
+
+
+def encrypt_node_signing_key(settings: Settings, signing_key: str) -> str:
+    key = _node_encryption_key(settings)
+    nonce = secrets.token_bytes(12)
+    plaintext = signing_key.encode("utf-8")
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, b"gpufleet-node-key-v2")
+    envelope = nonce + ciphertext
+    return "v2:" + base64.urlsafe_b64encode(envelope).decode("ascii")
+
+
+def decrypt_node_signing_key_with_metadata(settings: Settings, encrypted_signing_key: str) -> DecryptedNodeSigningKey:
+    if encrypted_signing_key.startswith("v2:"):
+        raw = base64.urlsafe_b64decode(encrypted_signing_key[3:].encode("ascii"))
+        if len(raw) < 28:
+            raise ValueError("Encrypted signing key payload too short")
+        nonce = raw[:12]
+        ciphertext = raw[12:]
+        key = _node_encryption_key(settings)
+        plaintext = AESGCM(key).decrypt(nonce, ciphertext, b"gpufleet-node-key-v2")
+        return DecryptedNodeSigningKey(plaintext.decode("utf-8"), "node_key_encryption_secret")
+
+    if not encrypted_signing_key.startswith("v1:"):
+        raise ValueError("Unsupported encrypted signing key format")
+    raw = base64.urlsafe_b64decode(encrypted_signing_key[3:].encode("ascii"))
+    if len(raw) < 48:
+        raise ValueError("Encrypted signing key payload too short")
+    nonce = raw[:16]
+    tag = raw[-32:]
+    ciphertext = raw[16:-32]
+    secrets_to_try = [("node_key_encryption_secret", settings.node_key_encryption_secret)]
+    if settings.node_key_v1_fallback_enabled and settings.jwt_secret != settings.node_key_encryption_secret:
+        secrets_to_try.append(("jwt_secret", settings.jwt_secret))
+    for source, secret in secrets_to_try:
+        if not secret or secret == "__NOT_SET__":
+            continue
+        key = _derive_encryption_key(secret)
+        expected_tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
+        if hmac.compare_digest(expected_tag, tag):
+            plaintext = _xor_with_keystream(ciphertext, key, nonce)
+            return DecryptedNodeSigningKey(plaintext.decode("utf-8"), source)
+    raise ValueError("Encrypted signing key authentication failed")
+
+
+def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> str:
+    return decrypt_node_signing_key_with_metadata(settings, encrypted_signing_key).signing_key
+
+
+def encrypt_node_onboarding_token(settings: Settings, node_secret: str) -> str:
+    return encrypt_node_signing_key(settings, node_secret)
+
+
+def decrypt_node_onboarding_token(settings: Settings, encrypted_token: str) -> str:
+    return decrypt_node_signing_key(settings, encrypted_token)
+
+
 def hash_request_body(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
 
@@ -92,9 +180,20 @@ def verify_node_request_signature(
     return hmac.compare_digest(expected, signature)
 
 
-def build_signed_headers_for_test(node_id: str, node_secret: str, body: bytes) -> dict[str, str]:
-    """Build signed request headers for testing. Mirrors node_agent's build_headers."""
-    timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
+def build_signed_headers_for_test(
+    node_id: str,
+    node_secret: str,
+    body: bytes,
+    *,
+    timestamp: str | None = None,
+) -> dict[str, str]:
+    """Build signed request headers for testing. Mirrors node_agent's build_headers.
+
+    timestamp 可选 — 默认用 now (秒级精度). 同一秒内多次心跳测试需要显式传不同 timestamp,
+    否则触发 last_request_ts 单调递增校验返 409.
+    """
+    if timestamp is None:
+        timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
     nonce = secrets.token_hex(12)
     signing_key = derive_node_signing_key(node_secret)
     body_hash = hash_request_body(body)

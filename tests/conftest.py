@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Generator
 
@@ -15,6 +13,7 @@ from fastapi.testclient import TestClient
 def _env_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Set required env vars and use a temp database for each test."""
     monkeypatch.setenv("GPUFLEET_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+    monkeypatch.setenv("GPUFLEET_NODE_KEY_ENCRYPTION_SECRET", "test-node-key-secret-at-least-32-bytes!!")
     monkeypatch.setenv("GPUFLEET_DEFAULT_ADMIN_USERNAME", "admin")
     monkeypatch.setenv("GPUFLEET_DEFAULT_ADMIN_PASSWORD", "test-admin-pass")
     monkeypatch.setenv("GPUFLEET_DATABASE_PATH", str(tmp_path / "test.db"))
@@ -44,7 +43,7 @@ def client(_env_setup: None) -> Generator[TestClient, None, None]:
 @pytest.fixture()
 def admin_token(client: TestClient) -> str:
     """Login as admin and return the access token."""
-    resp = client.post("/api/admin/login", json={
+    resp = client.post("/api/v1/admin/login", json={
         "username": "admin",
         "password": "test-admin-pass",
     })

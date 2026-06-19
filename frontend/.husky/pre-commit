@@ -1,0 +1,3 @@
+pnpm --dir frontend lint
+pnpm --dir frontend lint:css
+pnpm --dir frontend lint:colors

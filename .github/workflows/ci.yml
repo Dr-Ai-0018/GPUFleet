@@ -5,6 +5,42 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend lint deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" "ruff>=0.15.14"
+      - name: Backend lint
+        run: ruff check app node_agent
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend deps
+        working-directory: frontend
+        env:
+          HUSKY: 0
+        run: pnpm install --frozen-lockfile
+      - name: Frontend lint
+        working-directory: frontend
+        run: pnpm lint
+      - name: Frontend CSS lint (D2 §3.3 token strict)
+        working-directory: frontend
+        run: pnpm lint:css
+      - name: Frontend color grep (D2 §3.3 .tsx 兜底)
+        working-directory: frontend
+        run: pnpm lint:colors
+
   backend-tests:
     runs-on: windows-latest
     steps:
@@ -38,6 +74,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install frontend deps
+        env:
+          HUSKY: 0
         run: pnpm install --frozen-lockfile
       - name: Frontend tests
         run: pnpm test

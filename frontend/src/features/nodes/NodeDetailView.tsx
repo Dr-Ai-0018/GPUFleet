@@ -1,132 +1,40 @@
 import { useEffect, useMemo, useState } from "react";
-import ReactEChartsCore from "echarts-for-react/lib/core";
-import * as echarts from "echarts/core";
-import { LineChart } from "echarts/charts";
-import { GridComponent, TooltipComponent, LegendComponent } from "echarts/components";
-import { CanvasRenderer } from "echarts/renderers";
 import { ApiError, api } from "../../api";
 import { navigate } from "../../lib/routing";
+import { labelForError } from "../../lib/labels";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { EmptyState } from "../../ui/EmptyState";
-import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
-import { Gauge } from "../../ui/Gauge";
-import { ArcGauge } from "../../ui/ArcGauge";
-import { BlockProgress } from "../../ui/BlockProgress";
-import { MiniSparkline } from "../../ui/MiniSparkline";
 import { useToast } from "../../ui/Toast";
-import { connectionLabel, connectionTone, onboardingLabel, onboardingTone } from "../../lib/labels";
-import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
-import { TaskComposer } from "../tasks/TaskComposer";
-import type { NodeResetSecretResponse, NodeResponse, NodeStatusHistoryItem, NodeStatusPreview, OsType } from "../../types";
-import forms from "../../ui/forms.module.css";
-
-echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+import { ConfigPanel } from "./detail/ConfigPanel";
+import { MonitorPanel } from "./detail/MonitorPanel";
+import { TasksPanel } from "./detail/TasksPanel";
+import { HeroSummary } from "./detail/hero/HeroSummary";
+import type {
+  CpuSnapshot,
+  MemorySnapshot,
+  NodeDetailTabKey,
+  NodeEditForm,
+  PythonEnvSnapshot,
+} from "./detail/types";
+import { i18n } from "../../lib/i18n";
+import type { NodeResetSecretResponse, NodeResponse, NodeStatusPreview, OsType } from "../../types";
 
 type Props = { nodeId: string };
-type TabKey = "monitor" | "config" | "tasks";
-type CpuSnapshot = {
-  model?: string;
-  logical_cores?: number;
-  physical_cores?: number;
-  usage_percent?: number;
-  current_clock_mhz?: number;
-  max_clock_mhz?: number;
-  per_core_percent?: number[];
-};
-type MemorySnapshot = {
-  total_bytes?: number;
-  used_bytes?: number;
-  usage_percent?: number;
-  available_bytes?: number;
-  cached_bytes?: number;
-  commit_used_bytes?: number;
-  commit_limit_bytes?: number;
-  paged_pool_bytes?: number;
-  nonpaged_pool_bytes?: number;
-  speed_mtps?: number;
-  slots_used?: number;
-  slots_total?: number;
-  form_factor?: string;
-  memory_type?: string;
-  installed_bytes?: number;
-  hardware_reserved_bytes?: number;
-};
-type GpuSnapshot = {
-  index?: number;
-  model?: string;
-  total_vram_mb?: number;
-  used_vram_mb?: number;
-  utilization_percent?: number;
-  encoder_utilization_percent?: number;
-  decoder_utilization_percent?: number;
-  temperature_c?: number;
-  power_draw_w?: number;
-  power_limit_w?: number;
-  clock_graphics_mhz?: number;
-  clock_max_graphics_mhz?: number;
-  clock_video_mhz?: number;
-  fan_speed_percent?: number;
-  pcie_gen?: number;
-  pcie_width?: number;
-  encoder_sessions?: number;
-  decoder_sessions?: number;
-};
-type NvidiaSnapshot = {
-  driver_version?: string;
-  cuda_version?: string;
-  nvcc_version?: string;
-  nvidia_smi_path?: string;
-};
-type NetworkSnapshot = {
-  adapter_name?: string;
-  interface_description?: string;
-  link_speed?: string;
-  mac_address?: string;
-  ipv4_address?: string;
-  ipv6_address?: string;
-  ssid?: string;
-  signal?: string;
-  radio_type?: string;
-  tx_bytes_per_sec?: number;
-  rx_bytes_per_sec?: number;
-};
-
-function availabilityText(value: string | number | null | undefined, fallback = "N/A"): string {
-  if (value === null || value === undefined || value === "") return fallback;
-  return String(value);
-}
-
-function bytesPerSecondToReadable(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "N/A";
-  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(2)} MB/s`;
-  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB/s`;
-  return `${value.toFixed(0)} B/s`;
-}
-
-// Premium card style matching reference
-const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)] hover:border-white/[0.08]";
-const inputCls = "w-full bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-2 text-xs text-white outline-none focus:bg-[rgba(10,11,14,0.95)] focus:border-cyan-500/50 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.1)] transition-all font-mono";
-const labelCls = "text-[11px] font-mono text-gray-400";
-const badgeCls = "px-2.5 py-0.5 text-xs font-mono font-medium border rounded-md flex items-center gap-1.5";
-
-const beijingTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: "Asia/Shanghai",
-});
 
 export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const store = useConsoleStore();
+  const { callApi } = store;
   const toast = useToast();
-  const storeNode = store.nodes.find((n) => n.node_id === nodeId) ?? null;
-  const overviewNode = store.overview?.nodes.find((n) => n.node_id === nodeId) ?? null;
+  const storeNode = store.nodes.find((item) => item.node_id === nodeId) ?? null;
+  const overviewNode = store.overview?.nodes.find((item) => item.node_id === nodeId) ?? null;
   const [node, setNode] = useState<NodeResponse | null>(storeNode);
-  const [latestStatus, setLatestStatus] = useState<NodeStatusPreview | null>(overviewNode?.latest_status ?? null);
-  const [tab, setTab] = useState<TabKey>("monitor");
+  const [latestStatus, setLatestStatus] = useState<NodeStatusPreview | null>(
+    overviewNode?.latest_status ?? null,
+  );
+  const [tab, setTab] = useState<NodeDetailTabKey>("monitor");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -137,815 +45,365 @@ export function NodeDetailView({ nodeId }: Props): JSX.Element {
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [resetResult, setResetResult] = useState<NodeResetSecretResponse | null>(null);
   const [showJson, setShowJson] = useState(false);
-  const [editForm, setEditForm] = useState({ display_name: "", hostname: "", os_type: "windows" as OsType, heartbeat_interval_sec: 5, allowed_workdirs: "", tags: "" });
+  const [editForm, setEditForm] = useState<NodeEditForm>({
+    display_name: "",
+    hostname: "",
+    os_type: "windows" as OsType,
+    heartbeat_interval_sec: 5,
+    allowed_workdirs: "",
+    tags: "",
+  });
 
-  useEffect(() => { setNode(storeNode); }, [storeNode]);
-  useEffect(() => { setLatestStatus(overviewNode?.latest_status ?? null); }, [overviewNode]);
-  useEffect(() => { let c = false; (async () => { try { const [n, s] = await Promise.allSettled([store.callApi((t) => api.getNode(t, nodeId)), store.callApi((t) => api.getLatestNodeStatus(t, nodeId))]); if (c) return; if (n.status === "fulfilled") setNode(n.value); if (s.status === "fulfilled") setLatestStatus(s.value); else if (s.reason instanceof ApiError && s.reason.status === 404) setLatestStatus(null); } catch {} })(); return () => { c = true; }; }, [nodeId, store.callApi]);
-  useEffect(() => { if (!node) return; if (isEditDirty && editHydratedNodeId === node.node_id) return; setEditForm({ display_name: node.display_name, hostname: node.hostname ?? "", os_type: node.os_type === "linux" ? "linux" : "windows", heartbeat_interval_sec: node.heartbeat_interval_sec, allowed_workdirs: node.allowed_workdirs.join("\n"), tags: node.tags.join(", ") }); setEditError(null); setIsEditDirty(false); setEditHydratedNodeId(node.node_id); }, [node, isEditDirty, editHydratedNodeId]);
+  useEffect(() => {
+    setNode(storeNode);
+  }, [storeNode]);
 
-  function updateEdit(fn: (p: typeof editForm) => typeof editForm) { setIsEditDirty(true); setEditForm((p) => fn(p)); }
-  const recentTasks = useMemo(() => store.tasks.filter((t) => t.node_id === nodeId).slice(0, 10), [store.tasks, nodeId]);
+  // Mount 拉一次 node 详情 + latest status (instant hydrate)
+  useEffect(() => {
+    let cancelled = false;
 
-  if (!node) return <div className="py-20 text-center text-gray-500"><EmptyState title="未找到节点" action={<Button variant="accent" onClick={() => navigate({ name: "fleet" })}>返回</Button>} /></div>;
+    (async () => {
+      try {
+        const [nodeResult, statusResult] = await Promise.allSettled([
+          callApi((token) => api.getNode(token, nodeId)),
+          callApi((token) => api.getLatestNodeStatus(token, nodeId)),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        if (nodeResult.status === "fulfilled") {
+          setNode(nodeResult.value);
+        }
+        if (statusResult.status === "fulfilled") {
+          setLatestStatus(statusResult.value);
+        } else if (statusResult.reason instanceof ApiError && statusResult.reason.status === 404) {
+          setLatestStatus(null);
+        }
+      } catch {
+        // best-effort hydrate
+      }
+    })();
 
-  async function handleToggle() { if (!node) return; setBusy(true); try { const u = node.is_enabled ? await store.callApi((t) => api.disableNode(t, node.node_id)) : await store.callApi((t) => api.enableNode(t, node.node_id)); setNode(u); toast.push({ tone: node.is_enabled ? "warning" : "success", title: node.is_enabled ? "已停用" : "已启用" }); await store.refresh({ silent: true }); } catch (e) { toast.push({ tone: "error", title: "失败", description: e instanceof Error ? e.message : "" }); } finally { setBusy(false); } }
-  async function handleDelete() { if (!node) return; setBusy(true); try { await store.callApi((t) => api.deleteNode(t, node.node_id)); toast.push({ tone: "success", title: "已删除" }); await store.refresh({ silent: true }); navigate({ name: "fleet" }); } catch (e) { toast.push({ tone: "error", title: "失败" }); } finally { setBusy(false); } }
-  async function handleReset() { if (!node) return; setBusy(true); try { const r = await store.callApi((t) => api.resetNodeSecret(t, node.node_id)); setResetResult(r); toast.push({ tone: "success", title: "密钥已重置" }); } catch (e) { toast.push({ tone: "error", title: "失败" }); } finally { setBusy(false); } }
-  async function handleSave() { if (!node) return; setSaving(true); setEditError(null); try { const u = await store.callApi((t) => api.updateNode(t, node.node_id, { display_name: editForm.display_name.trim(), hostname: editForm.hostname.trim() || null, os_type: editForm.os_type, heartbeat_interval_sec: Number(editForm.heartbeat_interval_sec), allowed_workdirs: editForm.allowed_workdirs.split(/\r?\n/).map((s) => s.trim()).filter(Boolean), tags: editForm.tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean) })); setNode(u); setIsEditDirty(false); setEditHydratedNodeId(u.node_id); toast.push({ tone: "success", title: "已保存" }); await store.refresh({ silent: true }); } catch (e) { setEditError(e instanceof Error ? e.message : "失败"); } finally { setSaving(false); } }
+    return () => {
+      cancelled = true;
+    };
+  }, [nodeId, callApi]);
 
-  const canDispatch = node.is_enabled && node.connection_status === "online" && node.onboarding_status === "connected";
+  // Monitor tab 专属: 2s 轮询 latest status 让 KPI tile / GPU 仪表 / VRAM bar / 每核占用
+  // 都跟时序图同节奏地活起来. 切到 config/tasks tab 自动暂停, 后台 (document.hidden) 也暂停.
+  // 注意: 不再用 store.overview.nodes[].latest_status 的 5s 数据兜底, 因为它会覆盖更新鲜的轮询数据.
+  useEffect(() => {
+    if (!store.token) return;
+    if (tab !== "monitor") return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    async function poll() {
+      if (cancelled || inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        const next = await callApi((token) => api.getLatestNodeStatus(token, nodeId));
+        if (!cancelled) setLatestStatus(next);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404 && !cancelled) {
+          setLatestStatus(null);
+        }
+        // 其它错误静默, 下次再试
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const timer = window.setInterval(() => void poll(), 2000);
+
+    function onVisibilityChange() {
+      if (!document.hidden) void poll();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [store.token, nodeId, tab, callApi]);
+
+  useEffect(() => {
+    if (!node) {
+      return;
+    }
+    if (isEditDirty && editHydratedNodeId === node.node_id) {
+      return;
+    }
+    setEditForm({
+      display_name: node.display_name,
+      hostname: node.hostname ?? "",
+      os_type: node.os_type === "linux" ? "linux" : "windows",
+      heartbeat_interval_sec: node.heartbeat_interval_sec,
+      allowed_workdirs: node.allowed_workdirs.join("\n"),
+      tags: node.tags.join(", "),
+    });
+    setEditError(null);
+    setIsEditDirty(false);
+    setEditHydratedNodeId(node.node_id);
+  }, [node, isEditDirty, editHydratedNodeId]);
+
+  const updateEdit = (updater: (prev: NodeEditForm) => NodeEditForm): void => {
+    setIsEditDirty(true);
+    setEditForm((prev) => updater(prev));
+  };
+
+  const recentTasks = useMemo(
+    () => store.tasks.filter((task) => task.node_id === nodeId).slice(0, 10),
+    [store.tasks, nodeId],
+  );
+
+  if (!node) {
+    return (
+      <div className="py-20 text-center text-gray-500">
+        <EmptyState
+          title={i18n.nodeDetail.notFound}
+          action={
+            <Button variant="accent" onClick={() => navigate({ name: "fleet" })}>
+              {i18n.common.back}
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  const currentNode = node;
+
+  async function handleToggle() {
+    setBusy(true);
+    try {
+      const updated = currentNode.is_enabled
+        ? await store.callApi((token) => api.disableNode(token, currentNode.node_id))
+        : await store.callApi((token) => api.enableNode(token, currentNode.node_id));
+      setNode(updated);
+      toast.push({
+        tone: currentNode.is_enabled ? "warning" : "success",
+        title: currentNode.is_enabled
+          ? i18n.nodeDetail.actions.disabled
+          : i18n.nodeDetail.actions.enabled,
+      });
+      await store.refresh({ silent: true });
+    } catch (error) {
+      toast.push({
+        tone: "error",
+        title: i18n.common.failed,
+        description: labelForError(error, ""),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    setBusy(true);
+    try {
+      await store.callApi((token) => api.deleteNode(token, currentNode.node_id));
+      toast.push({ tone: "success", title: i18n.common.deleteSuccess });
+      await store.refresh({ silent: true });
+      navigate({ name: "fleet" });
+    } catch {
+      toast.push({ tone: "error", title: i18n.common.failed });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReset() {
+    setBusy(true);
+    try {
+      const result = await store.callApi((token) =>
+        api.resetNodeSecret(token, currentNode.node_id),
+      );
+      setResetResult(result);
+      toast.push({ tone: "success", title: i18n.nodeDetail.actions.resetDone });
+    } catch {
+      toast.push({ tone: "error", title: i18n.common.failed });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRefreshFingerprint() {
+    setBusy(true);
+    try {
+      await store.callApi((token) => api.refreshNodeFingerprint(token, currentNode.node_id));
+      toast.push({
+        tone: "success",
+        title: i18n.nodeDetail.actions.refreshFingerprintQueued,
+        description: i18n.nodeDetail.actions.refreshFingerprintNote,
+      });
+    } catch (error) {
+      toast.push({
+        tone: "error",
+        title: i18n.common.failed,
+        description: labelForError(error, ""),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setEditError(null);
+    try {
+      const updated = await store.callApi((token) =>
+        api.updateNode(token, currentNode.node_id, {
+          display_name: editForm.display_name.trim(),
+          hostname: editForm.hostname.trim() || null,
+          os_type: editForm.os_type,
+          heartbeat_interval_sec: Number(editForm.heartbeat_interval_sec),
+          allowed_workdirs: editForm.allowed_workdirs
+            .split(/\r?\n/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+          tags: editForm.tags
+            .split(/[,，]/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }),
+      );
+      setNode(updated);
+      setIsEditDirty(false);
+      setEditHydratedNodeId(updated.node_id);
+      toast.push({ tone: "success", title: i18n.common.saveSuccess });
+      await store.refresh({ silent: true });
+    } catch (error) {
+      setEditError(labelForError(error, i18n.common.failed));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const canDispatch =
+    currentNode.is_enabled &&
+    currentNode.connection_status === "online" &&
+    currentNode.onboarding_status === "connected";
   const cpu = latestStatus?.cpu as CpuSnapshot | undefined;
   const memory = latestStatus?.memory as MemorySnapshot | undefined;
-  const pythonEnv = latestStatus?.python_env as { python_version?: string; active_environment_kind?: string; active_environment_name?: string; supported_backends?: string[] } | undefined;
+  const pythonEnv = latestStatus?.python_env as PythonEnvSnapshot | undefined;
   const gpus = latestStatus?.gpus ?? [];
   const cpuUse = Number(cpu?.usage_percent ?? 0);
-  const memUse = Number(memory?.usage_percent ?? (memory?.total_bytes ? ((memory?.used_bytes ?? 0) / memory.total_bytes) * 100 : 0));
+  const memUse = Number(
+    memory?.usage_percent ??
+      (memory?.total_bytes ? ((memory?.used_bytes ?? 0) / memory.total_bytes) * 100 : 0),
+  );
 
   return (
-    <div className="max-w-[1300px] mx-auto space-y-6">
-      {/* Dialogs */}
-      <ConfirmDialog open={confirmToggleOpen} title={node.is_enabled ? "停用节点" : "启用节点"} message={node.is_enabled ? "停用后不再接收任务。" : "确认启用？"} confirmLabel="确认" cancelLabel="取消" variant={node.is_enabled ? "danger" : "accent"} onConfirm={() => { setConfirmToggleOpen(false); void handleToggle(); }} onCancel={() => setConfirmToggleOpen(false)} />
-      <ConfirmDialog open={confirmDeleteOpen} title="删除节点" message="不可撤销。" confirmLabel="删除" cancelLabel="取消" variant="danger" onConfirm={() => { setConfirmDeleteOpen(false); void handleDelete(); }} onCancel={() => setConfirmDeleteOpen(false)} />
-      <ConfirmDialog open={confirmResetOpen} title="重置密钥" message="当前 Agent 将失效。" confirmLabel="重置" cancelLabel="取消" variant="danger" onConfirm={() => { setConfirmResetOpen(false); void handleReset(); }} onCancel={() => setConfirmResetOpen(false)} />
+    <div className="space-y-7">
+      <ConfirmDialog
+        open={confirmToggleOpen}
+        title={
+          currentNode.is_enabled
+            ? i18n.nodeDetail.dialogs.disableTitle
+            : i18n.nodeDetail.dialogs.enableTitle
+        }
+        message={
+          currentNode.is_enabled
+            ? i18n.nodeDetail.dialogs.disableMessage
+            : i18n.nodeDetail.dialogs.enableMessage
+        }
+        confirmLabel={i18n.common.confirm}
+        cancelLabel={i18n.common.cancel}
+        variant={currentNode.is_enabled ? "danger" : "accent"}
+        onConfirm={() => {
+          setConfirmToggleOpen(false);
+          void handleToggle();
+        }}
+        onCancel={() => setConfirmToggleOpen(false)}
+      />
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title={i18n.nodeDetail.dialogs.deleteTitle}
+        message={i18n.nodeDetail.dialogs.deleteMessage}
+        confirmLabel={i18n.nodeDetail.actions.deleteNode}
+        cancelLabel={i18n.common.cancel}
+        variant="danger"
+        onConfirm={() => {
+          setConfirmDeleteOpen(false);
+          void handleDelete();
+        }}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
+      <ConfirmDialog
+        open={confirmResetOpen}
+        title={i18n.nodeDetail.dialogs.resetTitle}
+        message={i18n.nodeDetail.dialogs.resetMessage}
+        confirmLabel={i18n.nodeDetail.actions.resetSecret}
+        cancelLabel={i18n.common.cancel}
+        variant="danger"
+        onConfirm={() => {
+          setConfirmResetOpen(false);
+          void handleReset();
+        }}
+        onCancel={() => setConfirmResetOpen(false)}
+      />
 
       {resetResult ? (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
-          <div className="px-5 py-3 border-b border-red-500/20 flex justify-between items-center"><span className="text-xs font-bold text-red-400">新密钥 — 立即复制</span><button type="button" onClick={() => setResetResult(null)} className="text-red-400 hover:text-white">✕</button></div>
-          <div className="p-4"><CodeBlock label=".env" value={resetResult.onboarding.env_template} maxHeight={200} /></div>
+        <div className="overflow-hidden rounded-xl border border-red-500/20 bg-red-500/5">
+          <div className="flex items-center justify-between border-b border-red-500/20 px-5 py-3">
+            <span className="text-xs font-bold text-red-400">
+              {i18n.nodeDetail.resetSecretTitle} - {i18n.nodeDetail.resetSecretNote}
+            </span>
+            <button
+              type="button"
+              onClick={() => setResetResult(null)}
+              className="text-red-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="p-4">
+            <CodeBlock label=".env" value={resetResult.onboarding.env_template} maxHeight={200} />
+          </div>
         </div>
       ) : null}
 
-      {/* Node Meta Banner — TALL */}
-      <div className={`${cardCls} overflow-hidden relative py-7 px-6`}>
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[radial-gradient(ellipse_at_right,_var(--tw-gradient-stops))] from-cyan-950/20 to-transparent pointer-events-none" />
-        <div className="flex justify-between items-center relative z-10">
-          <div className="flex items-start gap-5">
-            <div className="w-14 h-14 rounded-xl bg-[#0F1116] border border-white/5 flex items-center justify-center relative">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-cyan-400"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
-              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#07080A] rounded-full flex items-center justify-center"><div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" /></div>
-            </div>
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold tracking-tight text-white">{node.display_name}</h1>
-                <StatusPill tone={connectionTone[node.connection_status]} label={connectionLabel[node.connection_status]} pulse={node.connection_status === "online"} />
-                <StatusPill tone={onboardingTone[node.onboarding_status]} label={onboardingLabel[node.onboarding_status]} />
-              </div>
-              <div className="flex items-center gap-5 text-[12px] text-gray-500">
-                <span className="font-mono">{node.node_id}</span>
-                <span>{node.hostname ?? "—"}</span>
-                <span>心跳 {node.heartbeat_interval_sec}s</span>
-                {node.last_seen_at ? <span>最近 {formatRelative(node.last_seen_at)}</span> : null}
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setConfirmResetOpen(true)} disabled={busy} className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[12px] font-medium rounded-lg transition-all disabled:opacity-40">重置密钥</button>
-            <button type="button" onClick={() => setConfirmDeleteOpen(true)} disabled={busy} className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[12px] font-medium rounded-lg transition-all disabled:opacity-40">删除</button>
-            <button type="button" onClick={() => setConfirmToggleOpen(true)} disabled={busy} className="px-4 py-2 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 text-[12px] font-medium rounded-lg transition-all disabled:opacity-40">{node.is_enabled ? "停用节点" : "启用节点"}</button>
-          </div>
-        </div>
-      </div>
+      <HeroSummary
+        node={currentNode}
+        busy={busy}
+        tab={tab}
+        onTabChange={setTab}
+        onResetSecret={() => setConfirmResetOpen(true)}
+        onDelete={() => setConfirmDeleteOpen(true)}
+        onToggleEnabled={() => setConfirmToggleOpen(true)}
+        onRefreshFingerprint={handleRefreshFingerprint}
+      />
 
-      {/* Tab bar — full width */}
-      <div className="flex gap-2 bg-[#090A0D] border border-white/5 p-1.5 rounded-lg">
-        {([["monitor", "硬件监控 Monitor"], ["config", "环境配置 Env Config"], ["tasks", "任务调度 Dispatch"]] as const).map(([id, label]) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={`flex-1 text-center py-2.5 px-4 text-[13px] font-bold rounded-md transition-all ${tab === id ? "bg-white/10 text-white shadow-md" : "text-gray-400 hover:text-white"}`}>{label}</button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {tab === "monitor" ? <TabMonitor nodeId={nodeId} cpu={cpu} memory={memory} pythonEnv={pythonEnv} gpus={gpus} cpuUse={cpuUse} memUse={memUse} latestStatus={latestStatus} showJson={showJson} setShowJson={setShowJson} /> : null}
-      {tab === "config" ? <TabConfig node={node} editForm={editForm} updateEdit={updateEdit} editError={editError} saving={saving} handleSave={handleSave} /> : null}
-      {tab === "tasks" ? <TabTasks node={node} canDispatch={canDispatch} recentTasks={recentTasks} /> : null}
-    </div>
-  );
-}
-
-
-/* ═══ MONITOR TAB — nvitop-density hardware panel ═══ */
-function TabMonitor({ nodeId, cpu, memory, pythonEnv, gpus, cpuUse, memUse, latestStatus, showJson, setShowJson }: {
-  nodeId: string;
-  cpu: CpuSnapshot | undefined; memory: MemorySnapshot | undefined; pythonEnv: any; gpus: GpuSnapshot[]; cpuUse: number; memUse: number;
-  latestStatus: NodeStatusPreview | null; showJson: boolean; setShowJson: (v: boolean) => void;
-}): JSX.Element {
-  const { callApi } = useConsoleStore();
-  const [historyItems, setHistoryItems] = useState<NodeStatusHistoryItem[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchHistory() {
-      try {
-        const res = await callApi((token) => api.getNodeStatusHistory(token, nodeId, 60));
-        if (!cancelled) setHistoryItems(res.items);
-      } catch {
-        // silently ignore — history is best-effort
-      }
-    }
-    void fetchHistory();
-    const id = window.setInterval(() => { void fetchHistory(); }, 5000);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [callApi, nodeId]);
-
-  const cpuHistoryOption = useMemo(() => ({
-    tooltip: { trigger: "axis" as const, backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)", textStyle: { color: "#c9d1d9", fontSize: 11 }, formatter: (params: any[]) => `CPU ${params[0]?.value ?? 0}%` },
-    grid: { left: 36, right: 8, top: 8, bottom: 20 },
-    xAxis: { type: "category" as const, data: historyItems.map((it) => beijingTimeFormatter.format(new Date(it.reported_at))), axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } }, axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) } },
-    yAxis: { type: "value" as const, min: 0, max: 100, splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } }, axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" } },
-    series: [{ type: "line" as const, smooth: true, symbol: "none", connectNulls: false, lineStyle: { color: "#06b6d4", width: 1.5 }, areaStyle: { color: { type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(6,182,212,0.15)" }, { offset: 1, color: "rgba(6,182,212,0)" }] } }, data: historyItems.map((it) => it.cpu_usage_percent) }],
-  }), [historyItems]);
-
-  const historyLabels = useMemo(
-    () => historyItems.map((it) => beijingTimeFormatter.format(new Date(it.reported_at))),
-    [historyItems],
-  );
-
-  const gpuLoadHistoryOption = useMemo(() => ({
-    tooltip: {
-      trigger: "axis" as const,
-      backgroundColor: "#0d1117",
-      borderColor: "rgba(255,255,255,0.05)",
-      textStyle: { color: "#c9d1d9", fontSize: 11 },
-    },
-    legend: {
-      top: 0,
-      right: 0,
-      textStyle: { color: "#6b7280", fontSize: 10 },
-      itemWidth: 10,
-      itemHeight: 4,
-    },
-    grid: { left: 34, right: 12, top: 28, bottom: 20 },
-    xAxis: {
-      type: "category" as const,
-      data: historyLabels,
-      axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } },
-      axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) },
-    },
-    yAxis: {
-      type: "value" as const,
-      min: 0,
-      max: 100,
-      splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } },
-      axisLabel: { color: "#4a5568", fontSize: 9, formatter: "{value}%" },
-    },
-    series: [
-      {
-        name: "GPU Util",
-        type: "line" as const,
-        smooth: true,
-        symbol: "none",
-        lineStyle: { color: "#06b6d4", width: 1.8 },
-        areaStyle: {
-          color: {
-            type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{ offset: 0, color: "rgba(6,182,212,0.16)" }, { offset: 1, color: "rgba(6,182,212,0)" }],
-          },
-        },
-        data: historyItems.map((it) => it.gpu_utilization_percent),
-      },
-      {
-        name: "VRAM",
-        type: "line" as const,
-        smooth: true,
-        symbol: "none",
-        lineStyle: { color: "#22c55e", width: 1.5 },
-        data: historyItems.map((it) => it.gpu_memory_percent),
-      },
-    ],
-  }), [historyItems, historyLabels]);
-
-  const gpuThermalHistoryOption = useMemo(() => ({
-    tooltip: {
-      trigger: "axis" as const,
-      backgroundColor: "#0d1117",
-      borderColor: "rgba(255,255,255,0.05)",
-      textStyle: { color: "#c9d1d9", fontSize: 11 },
-    },
-    legend: {
-      top: 0,
-      right: 0,
-      textStyle: { color: "#6b7280", fontSize: 10 },
-      itemWidth: 10,
-      itemHeight: 4,
-    },
-    grid: { left: 34, right: 38, top: 28, bottom: 20 },
-    xAxis: {
-      type: "category" as const,
-      data: historyLabels,
-      axisLine: { lineStyle: { color: "rgba(255,255,255,0.05)" } },
-      axisLabel: { color: "#4a5568", fontSize: 9, interval: Math.max(0, Math.floor(historyItems.length / 6) - 1) },
-    },
-    yAxis: [
-      {
-        type: "value" as const,
-        splitLine: { lineStyle: { color: "rgba(255,255,255,0.03)" } },
-        axisLabel: { color: "#4a5568", fontSize: 9 },
-      },
-      {
-        type: "value" as const,
-        splitLine: { show: false },
-        axisLabel: { color: "#4a5568", fontSize: 9 },
-      },
-    ],
-    series: [
-      {
-        name: "Temp",
-        type: "line" as const,
-        smooth: true,
-        symbol: "none",
-        lineStyle: { color: "#f97316", width: 1.5 },
-        data: historyItems.map((it) => it.gpu_temperature_c),
-      },
-      {
-        name: "Power",
-        type: "line" as const,
-        smooth: true,
-        symbol: "none",
-        yAxisIndex: 1,
-        lineStyle: { color: "#f59e0b", width: 1.5 },
-        data: historyItems.map((it) => it.gpu_power_draw_w),
-      },
-      {
-        name: "Clock",
-        type: "line" as const,
-        smooth: true,
-        symbol: "none",
-        yAxisIndex: 1,
-        lineStyle: { color: "#a78bfa", width: 1.3 },
-        data: historyItems.map((it) => it.gpu_clock_graphics_mhz),
-      },
-    ],
-  }), [historyItems, historyLabels]);
-
-  if (!latestStatus) return <div className="py-20 text-center text-gray-500">等待节点首次心跳上报</div>;
-
-  const coreCount = cpu?.logical_cores ?? 8;
-  const physicalCoreCount = cpu?.physical_cores ?? null;
-  const currentClock = cpu?.current_clock_mhz ?? null;
-  const maxClock = cpu?.max_clock_mhz ?? null;
-  const perCore = Array.isArray(cpu?.per_core_percent) ? cpu.per_core_percent : [];
-  const memTotal = memory?.total_bytes ?? 0;
-  const memUsed = memory?.used_bytes ?? 0;
-  const nvidia = (latestStatus.nvidia ?? {}) as NvidiaSnapshot;
-  const network = ((latestStatus.extra ?? {}) as { network?: NetworkSnapshot }).network;
-  const memAvailable = memory?.available_bytes ?? null;
-  const memCached = memory?.cached_bytes ?? null;
-  const memCommitUsed = memory?.commit_used_bytes ?? null;
-  const memCommitLimit = memory?.commit_limit_bytes ?? null;
-  const pagedPool = memory?.paged_pool_bytes ?? null;
-  const nonpagedPool = memory?.nonpaged_pool_bytes ?? null;
-  const memSpeed = memory?.speed_mtps ?? null;
-  const slotsUsed = memory?.slots_used ?? null;
-  const slotsTotal = memory?.slots_total ?? null;
-  const formFactor = memory?.form_factor ?? null;
-  const memoryType = memory?.memory_type ?? null;
-  const hardwareReserved = memory?.hardware_reserved_bytes ?? null;
-  const primaryGpu = (gpus[0] as GpuSnapshot | undefined) ?? null;
-  const primaryGpuUtil = Number(primaryGpu?.utilization_percent ?? 0);
-  const primaryGpuVramPct = primaryGpu && Number(primaryGpu.total_vram_mb ?? 0) > 0
-    ? Math.round((Number(primaryGpu.used_vram_mb ?? 0) / Number(primaryGpu.total_vram_mb ?? 1)) * 100)
-    : 0;
-
-  return (
-    <div className="space-y-8">
-      <section className="overflow-hidden rounded-[14px] border border-white/[0.04] bg-[linear-gradient(180deg,rgba(16,18,23,0.98)_0%,rgba(9,10,13,1)_100%)]">
-        <div className="flex items-center justify-between border-b border-white/[0.04] px-6 py-4">
-          <div>
-            <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">运行概览</div>
-          </div>
-          <div className="rounded-md border border-cyan-400/15 bg-cyan-400/[0.06] px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-cyan-300">
-            实时
-          </div>
-        </div>
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,1.5fr)_340px]">
-          <div className="border-b border-white/[0.04] px-7 py-6 xl:border-b-0 xl:border-r">
-            <div className="flex items-start justify-between gap-6">
-              <div className="min-w-0">
-                <div className="text-[10px] font-mono uppercase tracking-[0.22em] text-cyan-300/75">核心负载</div>
-                <h3 className="mt-3 text-[22px] font-bold leading-[1.15] tracking-[-0.015em] text-white">
-                  CPU、内存、GPU
-                </h3>
-                <p className="mt-2 text-[13px] leading-6 text-gray-400">
-                  {cpu?.model ?? "未知 CPU"}
-                  {primaryGpu ? ` · ${String(primaryGpu.model ?? "主 GPU")}` : ""}
-                </p>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">最近更新</div>
-                <div className="mt-2 text-[16px] font-mono text-cyan-300">{formatRelative(latestStatus.reported_at)}</div>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-0 border-t border-white/[0.04] lg:grid-cols-[1fr_1fr_1.15fr]">
-              <div className="py-5 lg:pr-6">
-                <div className="flex items-center justify-between gap-6">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">CPU</div>
-                    <div className="mt-3 text-[34px] font-bold font-mono leading-none text-white">{Math.round(cpuUse)}%</div>
-                    <div className="mt-3 text-[12px] font-mono text-gray-500">{physicalCoreCount ?? "?"}C / {coreCount}T</div>
-                  </div>
-                  <Gauge value={cpuUse} size={92} thickness={5} label="CPU" tone="calm" />
-                </div>
-              </div>
-
-              <div className="border-t border-white/[0.04] py-5 lg:border-l lg:border-t-0 lg:px-6">
-                <div className="flex items-center justify-between gap-6">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">内存</div>
-                    <div className="mt-3 text-[34px] font-bold font-mono leading-none text-white">{Math.round(memUse)}%</div>
-                    <div className="mt-3 text-[12px] font-mono text-gray-500">{bytesToReadable(memUsed)} / {bytesToReadable(memTotal)}</div>
-                  </div>
-                  <ArcGauge value={memUse} size={110} strokeWidth={8} color="#fbbf24" label={String(Math.round(memUse))} unit="%" />
-                </div>
-              </div>
-
-              <div className="border-t border-white/[0.04] py-5 lg:border-l lg:border-t-0 lg:pl-6">
-                <div className="flex items-start justify-between gap-6">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">主 GPU</div>
-                    <div className="mt-3 flex items-end gap-3">
-                      <span className="text-[34px] font-bold font-mono leading-none text-white">{primaryGpu ? `${primaryGpuUtil}%` : "—"}</span>
-                      <span className="pb-1 text-[12px] font-mono text-gray-500">{primaryGpu ? `${primaryGpuVramPct}% VRAM` : "无加速卡"}</span>
-                    </div>
-                    <div className="mt-4">
-                      <MiniSparkline
-                        data={historyItems.map((it) => it.gpu_utilization_percent ?? 0)}
-                        width={240}
-                        height={40}
-                        color="#a78bfa"
-                        fillOpacity={0.08}
-                        className="opacity-90"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[12px] font-mono text-gray-400">
-              <span>内存 {memSpeed != null ? `${memSpeed} MT/s` : "—"}</span>
-              <span>网络 {availabilityText(network?.ssid, "有线 / 隐藏")}</span>
-              <span>链路 {availabilityText(network?.link_speed, "—")}</span>
-              <span>环境 {pythonEnv?.python_version ? `Python ${pythonEnv.python_version}` : "—"}</span>
-            </div>
-          </div>
-
-          <div className="px-7 py-6">
-            <div className="space-y-6">
-              <div className="border-b border-white/[0.04] pb-5">
-                <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">网络</div>
-                <div className="mt-3 flex items-end justify-between gap-4">
-                  <div>
-                    <div className="text-[28px] font-bold leading-none text-white">{availabilityText(network?.link_speed, "N/A")}</div>
-                    <div className="mt-3 text-[12px] font-mono text-gray-500">{availabilityText(network?.adapter_name, "未连接")}</div>
-                  </div>
-                  <div className="text-right text-[12px] font-mono text-gray-400">
-                    <div>下载 {bytesPerSecondToReadable(network?.rx_bytes_per_sec)}</div>
-                    <div className="mt-1">上传 {bytesPerSecondToReadable(network?.tx_bytes_per_sec)}</div>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[12px] font-mono text-gray-400">
-                  <span>{availabilityText(network?.ssid, "有线 / 隐藏")}</span>
-                  <span>{availabilityText(network?.ipv4_address, "IPv4 —")}</span>
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">运行环境</div>
-                <div className="mt-3 flex items-end justify-between gap-4">
-                  <div>
-                    <div className="text-[28px] font-bold leading-none text-white">{pythonEnv?.python_version ? `Python ${pythonEnv.python_version}` : "环境缺失"}</div>
-                    <div className="mt-3 text-[12px] font-mono text-gray-500">
-                      {pythonEnv?.active_environment_kind
-                        ? `${pythonEnv.active_environment_kind}${pythonEnv.active_environment_name ? ` · ${pythonEnv.active_environment_name}` : ""}`
-                        : "无环境元数据"}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">后端</div>
-                    <div className="mt-2 text-[34px] font-bold font-mono leading-none text-cyan-300">{pythonEnv?.supported_backends ? pythonEnv.supported_backends.length : "—"}</div>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[12px] font-mono text-gray-400">
-                  <span>心跳 {formatRelative(latestStatus.reported_at)}</span>
-                  <span>GPU 温度 {primaryGpu?.temperature_c != null ? `${primaryGpu.temperature_c}°C` : "—"}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,0.85fr)]">
-        <section className={`${cardCls} space-y-6`}>
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_240px] xl:items-start">
-            <div className="space-y-5">
-              <div className="space-y-3">
-                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-gray-500">System Processor</p>
-                <h3 className="max-w-[16ch] text-[28px] font-bold leading-[1.12] tracking-[-0.02em] text-white">{cpu?.model ?? "未知 CPU"}</h3>
-                <p className="text-[14px] text-gray-500">
-                  {physicalCoreCount ? `${physicalCoreCount} physical cores / ` : ""}
-                  {coreCount} 逻辑线程
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <InlineStat label="Physical" value={physicalCoreCount != null ? String(physicalCoreCount) : "—"} />
-                <InlineStat label="Logical" value={String(coreCount)} />
-                <InlineStat label="RAM" value={bytesToReadable(memTotal)} />
-                <InlineStat label="后端" value={pythonEnv?.supported_backends ? String(pythonEnv.supported_backends.length) : "—"} />
-              </div>
-            </div>
-
-            <div className="border border-cyan-500/12 bg-[linear-gradient(180deg,rgba(34,211,238,0.05),rgba(9,22,28,0.82))] px-5 py-5">
-              <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-300/70">CPU 负载</div>
-              <div className="mt-3 flex items-end gap-2">
-                <span className="text-5xl font-bold font-mono leading-none text-cyan-300">{Math.round(cpuUse)}</span>
-                <span className="pb-1 text-lg font-mono text-cyan-300/70">%</span>
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5">
-                <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-300 transition-all" style={{ width: `${cpuUse}%` }} />
-              </div>
-              <div className="mt-5 space-y-3 text-[11px] font-mono">
-                <div className="border border-white/6 bg-white/[0.03] px-3 py-3">
-                  <div className="text-gray-500">Current Clock</div>
-                  <div className="mt-1 text-white">{currentClock != null ? `${currentClock} MHz` : "—"}</div>
-                </div>
-                <div className="border border-white/6 bg-white/[0.03] px-3 py-3">
-                  <div className="text-gray-500">Max Clock</div>
-                  <div className="mt-1 text-white">{maxClock != null ? `${maxClock} MHz` : "—"}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="border border-white/[0.04] bg-[#0b0d11] px-5 py-5">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">CPU 历史</span>
-              <span className="text-[11px] font-mono text-gray-600">{formatRelative(latestStatus.reported_at)}</span>
-            </div>
-            {historyItems.length > 0 ? (
-              <ReactEChartsCore echarts={echarts} option={cpuHistoryOption} style={{ height: 150 }} opts={{ renderer: "canvas" }} />
-            ) : (
-              <div className="flex h-[150px] items-center justify-center text-[11px] font-mono text-gray-600">等待历史数据…</div>
-            )}
-          </div>
-
-          {perCore.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">每核占用</span>
-                <span className="text-[11px] font-mono text-gray-600">{perCore.length} 线程采样</span>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-                {perCore.map((value: number, idx: number) => {
-                  const pct = Math.max(0, Math.min(100, Math.round(value)));
-                  return (
-                    <div key={idx} className="border border-white/[0.04] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] px-3 py-2.5">
-                      <div className="mb-2 flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-gray-500">C{idx}</span>
-                        <span className="text-white/80">{pct}%</span>
-                      </div>
-                      <BlockProgress value={pct} blocks={8} height={6} color="auto" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className={`${cardCls} space-y-6`}>
-          <div className="border border-cyan-500/10 bg-[linear-gradient(180deg,rgba(34,211,238,0.05),rgba(255,255,255,0.01))] p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray-500">内存占用</p>
-                <h3 className="mt-2 text-[24px] font-bold tracking-[-0.01em] text-white">{bytesToReadable(memUsed)} / {bytesToReadable(memTotal)}</h3>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray-500">Pressure</div>
-                <div className="mt-2 text-4xl font-bold font-mono text-cyan-300">{Math.round(memUse)}<span className="ml-1 text-lg text-cyan-300/70">%</span></div>
-              </div>
-            </div>
-            <div className="mt-6 space-y-4">
-              <div className="h-3 overflow-hidden rounded-full bg-black/30">
-                <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-400 to-emerald-400 transition-all" style={{ width: `${memUse}%` }} />
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-[11px] font-mono">
-                <div className="border border-white/5 bg-black/20 px-3 py-2">
-                  <div className="text-gray-500">Available</div>
-                  <div className="mt-1 text-white">{memAvailable != null ? bytesToReadable(memAvailable) : "—"}</div>
-                </div>
-                <div className="border border-white/5 bg-black/20 px-3 py-2">
-                  <div className="text-gray-500">Cached</div>
-                  <div className="mt-1 text-white">{memCached != null ? bytesToReadable(memCached) : "—"}</div>
-                </div>
-                <div className="border border-white/5 bg-black/20 px-3 py-2">
-                  <div className="text-gray-500">Reserved</div>
-                  <div className="mt-1 text-white">{hardwareReserved != null ? bytesToReadable(hardwareReserved) : "—"}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <MetricCell label="Commit" value={memCommitUsed != null && memCommitLimit != null ? `${bytesToReadable(memCommitUsed)} / ${bytesToReadable(memCommitLimit)}` : "—"} />
-            <MetricCell label="Paged Pool" value={pagedPool != null ? bytesToReadable(pagedPool) : "—"} />
-            <MetricCell label="Nonpaged" value={nonpagedPool != null ? bytesToReadable(nonpagedPool) : "—"} />
-            <MetricCell label="Speed" value={memSpeed != null ? `${memSpeed} MT/s` : "—"} />
-            <MetricCell label="Slots" value={slotsUsed != null ? `${slotsUsed}/${slotsTotal ?? "?"}` : "—"} />
-            <MetricCell label="Form" value={formFactor && memoryType ? `${formFactor} · ${memoryType}` : (formFactor ?? memoryType ?? "—")} />
-          </div>
-
-          <div className="border border-white/[0.04] bg-[#0b0d11] p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">网络链路</p>
-                <h4 className="mt-2 text-[20px] font-bold tracking-[-0.01em] text-white">{availabilityText(network?.adapter_name, "未连接")}</h4>
-              </div>
-              <div className="text-right text-[11px] font-mono">
-                <div className="text-cyan-400">{availabilityText(network?.ssid, "Wired / Hidden")}</div>
-                <div className="mt-1 text-gray-500">{availabilityText(network?.link_speed)}</div>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="border border-white/[0.04] bg-white/[0.02] px-4 py-3">
-                <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-gray-500">Upload</div>
-                <div className="mt-2 text-2xl font-bold font-mono text-white">{bytesPerSecondToReadable(network?.tx_bytes_per_sec)}</div>
-              </div>
-              <div className="border border-white/[0.04] bg-white/[0.02] px-4 py-3">
-                <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-gray-500">Download</div>
-                <div className="mt-2 text-2xl font-bold font-mono text-white">{bytesPerSecondToReadable(network?.rx_bytes_per_sec)}</div>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <InlineTag label="SSID" value={availabilityText(network?.ssid, "Wired / Hidden")} />
-              <InlineTag label="Radio" value={availabilityText(network?.radio_type)} />
-              <InlineTag label="Signal" value={availabilityText(network?.signal)} />
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <MetricCell label="IPv4" value={availabilityText(network?.ipv4_address)} />
-              <MetricCell label="IPv6" value={availabilityText(network?.ipv6_address)} />
-              <MetricCell label="Adapter" value={availabilityText(network?.interface_description ?? network?.adapter_name)} />
-              <MetricCell label="Link" value={availabilityText(network?.link_speed)} />
-            </div>
-          </div>
-
-          {pythonEnv?.python_version ? (
-            <div className="flex items-center justify-between rounded-2xl border border-white/[0.04] bg-white/[0.02] px-4 py-3 text-[12px]">
-              <span className="font-mono text-cyan-400">Python {pythonEnv.python_version}</span>
-              <span className="text-gray-500">{pythonEnv.active_environment_kind ? `${pythonEnv.active_environment_kind}${pythonEnv.active_environment_name ? ` · ${pythonEnv.active_environment_name}` : ""}` : "runtime"}</span>
-            </div>
-          ) : null}
-        </section>
-      </div>
-
-      {/* GPUs — flat section, no individual card wrappers */}
-      {gpus.length === 0 ? (
-        <div className="py-10 text-center text-gray-600 text-[13px]">无 GPU 设备检测到</div>
-      ) : (
-        <div className="space-y-6">
-          {gpus.map((gpu, idx) => {
-        const g = gpu as GpuSnapshot;
-        const used = Number(g.used_vram_mb ?? 0);
-        const total = Number(g.total_vram_mb ?? 0);
-        const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
-        const util = Number(g.utilization_percent ?? 0);
-        const temp = g.temperature_c != null ? Number(g.temperature_c) : null;
-        const powerDraw = g.power_draw_w != null ? Number(g.power_draw_w) : null;
-        const powerLimit = g.power_limit_w != null ? Number(g.power_limit_w) : null;
-        const clockCur = g.clock_graphics_mhz != null ? Number(g.clock_graphics_mhz) : null;
-        const clockMax = g.clock_max_graphics_mhz != null ? Number(g.clock_max_graphics_mhz) : null;
-        const clockVideo = g.clock_video_mhz != null ? Number(g.clock_video_mhz) : null;
-        const fan = g.fan_speed_percent != null ? Number(g.fan_speed_percent) : null;
-        const pcieGen = g.pcie_gen != null ? Number(g.pcie_gen) : null;
-        const pcieWidth = g.pcie_width != null ? Number(g.pcie_width) : null;
-        const encoderUtil = g.encoder_utilization_percent != null ? Number(g.encoder_utilization_percent) : null;
-        const decoderUtil = g.decoder_utilization_percent != null ? Number(g.decoder_utilization_percent) : null;
-        const gpuIndex = typeof g.index === "number" ? g.index : idx;
-
-        return (
-              <div key={idx} className={`${cardCls} pb-6`}>
-                <div className="flex justify-between items-center mb-5">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[12px] font-mono text-gray-500 uppercase font-bold">GPU #{gpuIndex}</span>
-                    <span className="text-[14px] font-bold text-white">{String(g.model ?? "Unknown GPU")}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {pcieGen != null ? <span className="text-[10px] text-gray-500 font-mono">PCIe Gen{pcieGen} x{pcieWidth ?? "?"}</span> : null}
-                    <span className="text-[11px] font-mono text-gray-500">{total} MB</span>
-                    <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${util > 80 ? "bg-red-950/40 text-red-400 border-red-800/30" : util > 30 ? "bg-cyan-950/40 text-cyan-400 border-cyan-800/30" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/30"}`}>{util > 0 ? "Active" : "Idle"}</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr]">
-                  <div className="space-y-4">
-                    <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">算力利用率</span><span className="text-white font-bold font-mono">{util}%</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${util > 80 ? "bg-red-500" : "bg-cyan-500"}`} style={{ width: `${util}%` }} /></div></div>
-                    <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">显存占用</span><span className="text-white font-bold font-mono">{used}/{total} MB ({pct}%)</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct > 90 ? "bg-red-500" : "bg-cyan-400"}`} style={{ width: `${pct}%` }} /></div></div>
-                    {powerDraw != null && powerLimit != null ? <div><div className="flex justify-between text-[12px] mb-2"><span className="text-gray-400">功耗</span><span className="text-white font-bold font-mono">{powerDraw.toFixed(1)}W / {powerLimit}W</span></div><div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-amber-500/70 rounded-full" style={{ width: `${Math.min(100, (powerDraw / powerLimit) * 100)}%` }} /></div></div> : null}
-                  </div>
-                  <div className="rounded-2xl border border-white/[0.04] bg-[#0b0d11] p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Load Timeline</div>
-                      <div className="text-[11px] font-mono text-gray-600">Util / VRAM</div>
-                    </div>
-                    {idx === 0 && historyItems.length > 1 ? (
-                      <ReactEChartsCore echarts={echarts} option={gpuLoadHistoryOption} style={{ height: 160 }} opts={{ renderer: "canvas" }} />
-                    ) : (
-                      <div className="flex h-[160px] items-center justify-center text-[11px] font-mono text-gray-600">等待 GPU 历史数据…</div>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-5 rounded-2xl border border-white/[0.04] bg-[#0b0d11] p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">Thermal / Power Timeline</div>
-                    <div className="text-[11px] font-mono text-gray-600">Temp / Power / Clock</div>
-                  </div>
-                  {idx === 0 && historyItems.length > 1 ? (
-                    <ReactEChartsCore echarts={echarts} option={gpuThermalHistoryOption} style={{ height: 140 }} opts={{ renderer: "canvas" }} />
-                  ) : (
-                    <div className="flex h-[140px] items-center justify-center text-[11px] font-mono text-gray-600">等待 GPU 历史数据…</div>
-                  )}
-                </div>
-                <div className="mt-5 grid grid-cols-3 gap-x-6 gap-y-5">
-                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">TEMP</span><span className="text-[16px] font-bold font-mono text-white">{temp != null ? `${temp}°C` : "—"}</span></div>
-                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">POWER</span><span className="text-[16px] font-bold font-mono text-white">{powerDraw != null ? `${powerDraw.toFixed(0)}W` : "—"}</span></div>
-                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">FAN</span><span className="text-[16px] font-bold font-mono text-white">{fan != null ? `${fan}%` : "N/A"}</span></div>
-                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">CLOCK</span><span className="text-[16px] font-bold font-mono text-white">{clockCur ?? "—"} <span className="text-[11px] text-gray-600">MHz</span></span></div>
-                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">BOOST</span><span className="text-[16px] font-bold font-mono text-white">{clockMax ?? "—"} <span className="text-[11px] text-gray-600">MHz</span></span></div>
-                    <div><span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">UTIL</span><span className="text-[16px] font-bold font-mono text-white">{util}%</span></div>
-                </div>
-                <div className="mt-5 grid grid-cols-4 gap-3">
-                  <MetricCell label="Driver" value={nvidia.driver_version ?? "—"} />
-                  <MetricCell label="CUDA" value={nvidia.cuda_version ?? "—"} />
-                  <MetricCell label="NVCC" value={nvidia.nvcc_version ?? "Not Installed"} />
-                  <MetricCell label="PCIe" value={pcieGen != null ? `Gen${pcieGen} x${pcieWidth ?? "?"}` : "—"} />
-                  <MetricCell label="Power Cap" value={powerLimit != null ? `${powerLimit} W` : "N/A"} />
-                  <MetricCell label="Encoder" value={encoderUtil != null ? `${encoderUtil}%` : "N/A"} />
-                  <MetricCell label="Decoder" value={decoderUtil != null ? `${decoderUtil}%` : "N/A"} />
-                  <MetricCell label="Video Clock" value={clockVideo != null ? `${clockVideo} MHz` : "N/A"} />
-                  <MetricCell label="SMI" value={nvidia.nvidia_smi_path ? "ready" : "—"} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* JSON toggle */}
-      <div className={cardCls + " p-4"}>
-        <div onClick={() => setShowJson(!showJson)} className="flex justify-between items-center cursor-pointer text-xs font-mono text-gray-400 hover:text-white select-none">
-          <span>{showJson ? "▾ 折叠原始 JSON" : "▸ 查看原始 JSON 数据 (Raw Snapshot)"}</span>
-        </div>
-        {showJson ? <div className="mt-4"><CodeBlock label="snapshot.json" value={prettyJson(latestStatus)} maxHeight={300} /></div> : null}
-      </div>
-    </div>
-  );
-}
-
-function HeroSignal({
-  eyebrow,
-  value,
-  note,
-  barValue,
-  accent,
-}: {
-  eyebrow: string;
-  value: string;
-  note: string;
-  barValue: number | null;
-  accent: "cyan" | "amber" | "emerald" | "violet";
-}): JSX.Element {
-  const accentCls =
-    accent === "amber"
-      ? "bg-amber-400"
-      : accent === "emerald"
-        ? "bg-emerald-400"
-        : accent === "violet"
-          ? "bg-violet-400"
-          : "bg-cyan-400";
-
-  return (
-    <div className="border border-white/[0.05] bg-black/20 px-4 py-4">
-      <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">{eyebrow}</div>
-      <div className="mt-3 text-[32px] font-bold font-mono leading-none text-white">{value}</div>
-      <div className="mt-3 text-[11px] font-mono text-gray-500">{note}</div>
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
-        <div className={`h-full rounded-full ${accentCls}`} style={{ width: `${Math.max(0, Math.min(100, barValue ?? 0))}%`, opacity: barValue == null ? 0.18 : 1 }} />
-      </div>
-    </div>
-  );
-}
-
-function InlineStat({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div className="border-t border-white/[0.05] pt-3">
-      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500">{label}</div>
-      <div className="mt-2 text-[22px] font-bold font-mono text-white">{value}</div>
-    </div>
-  );
-}
-
-function MetricCell({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div className="min-w-0 border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-      <span className="text-[9px] text-gray-500 font-mono uppercase block mb-1">{label}</span>
-      <span className="block break-all text-[13px] font-bold font-mono leading-snug text-white">{value}</span>
-    </div>
-  );
-}
-
-function InlineTag({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div className="border border-white/8 bg-white/[0.02] px-3 py-1 text-[10px] font-mono text-gray-300">
-      <span className="text-gray-500">{label}</span>
-      <span className="mx-1 text-gray-600">/</span>
-      <span className="text-white">{value}</span>
-    </div>
-  );
-}
-
-/* ═══ CONFIG TAB ═══ */
-function TabConfig({ node, editForm, updateEdit, editError, saving, handleSave }: {
-  node: NodeResponse; editForm: any; updateEdit: any; editError: string | null; saving: boolean; handleSave: () => void;
-}): JSX.Element {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className={`${cardCls} lg:col-span-1 space-y-5`}>
-        <div className="border-b border-white/5 pb-3"><span className="text-[12px] font-bold font-mono text-gray-500 uppercase">运行时后端</span></div>
-        <div className="space-y-4">
-          <div className="p-3.5 rounded-lg bg-[#050507] border border-white/5 space-y-1.5">
-            <span className="text-xs font-bold text-white block">.venv (Default Workspace)</span>
-            <span className="text-[11px] text-gray-500 font-mono block">{node.allowed_workdirs[0] ?? "—"}</span>
-            {pythonEnvInfo(node)}
-          </div>
-        </div>
-        <div className="space-y-3 pt-2">
-          <span className="text-[11px] font-mono text-gray-500 block">标签</span>
-          <div className="flex flex-wrap gap-2">
-            {node.tags.map((t) => <span key={t} className="px-2.5 py-0.5 text-[11px] font-mono bg-white/5 border border-white/5 rounded-md text-gray-400">{t}</span>)}
-            {node.tags.length === 0 ? <span className="text-[11px] text-gray-600">无标签</span> : null}
-          </div>
-        </div>
-      </div>
-
-      <div className={`${cardCls} lg:col-span-2 space-y-5`}>
-        <div className="flex justify-between items-center border-b border-white/5 pb-3">
-          <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">节点配置 (Node Configuration)</span>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5"><label className={labelCls}>显示名 (Display Name)</label><input type="text" value={editForm.display_name} onChange={(e) => updateEdit((p: any) => ({ ...p, display_name: e.target.value }))} className={inputCls} /></div>
-          <div className="space-y-1.5"><label className={labelCls}>主机名 (Hostname)</label><input type="text" value={editForm.hostname} onChange={(e) => updateEdit((p: any) => ({ ...p, hostname: e.target.value }))} className={inputCls} /></div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5"><label className={labelCls}>OS</label><select value={editForm.os_type} onChange={(e) => updateEdit((p: any) => ({ ...p, os_type: e.target.value }))} className={inputCls}><option value="windows">windows</option><option value="linux">linux</option></select></div>
-          <div className="space-y-1.5"><label className={labelCls}>心跳间隔 (秒)</label><input type="number" min={3} max={3600} value={editForm.heartbeat_interval_sec} onChange={(e) => updateEdit((p: any) => ({ ...p, heartbeat_interval_sec: Number(e.target.value || 5) }))} className={inputCls} /></div>
-        </div>
-        <div className="space-y-1.5"><label className={labelCls}>允许的工作目录</label><textarea value={editForm.allowed_workdirs} onChange={(e) => updateEdit((p: any) => ({ ...p, allowed_workdirs: e.target.value }))} className={`${inputCls} h-20 resize-none`} /></div>
-        <div className="space-y-1.5"><label className={labelCls}>标签 (逗号分隔)</label><input type="text" value={editForm.tags} onChange={(e) => updateEdit((p: any) => ({ ...p, tags: e.target.value }))} className={inputCls} /></div>
-        {editError ? <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">{editError}</div> : null}
-        <button type="button" onClick={handleSave} disabled={saving} className="w-full bg-white text-[#07080A] py-2.5 rounded-lg text-xs font-bold tracking-wide hover:bg-gray-200 transition-colors shadow-lg disabled:opacity-40">{saving ? "保存中…" : "保存配置"}</button>
-      </div>
-    </div>
-  );
-}
-
-function pythonEnvInfo(node: NodeResponse): JSX.Element | null {
-  return <span className="text-[11px] text-cyan-400 block font-mono">Python env</span>;
-}
-
-/* ═══ TASKS TAB ═══ */
-function TabTasks({ node, canDispatch, recentTasks }: { node: NodeResponse; canDispatch: boolean; recentTasks: any[] }): JSX.Element {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-2 space-y-6">
-        <div className="flex items-center gap-2 border-b border-white/5 pb-3">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-cyan-400"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
-          <span className="text-[13px] font-bold font-mono tracking-wide text-gray-400 uppercase">调度控制台 Dispatch Command</span>
-        </div>
-        {!canDispatch ? (
-          <div className="py-12 text-center text-gray-600 font-mono text-xs border border-dashed border-white/5 rounded-lg">{!node.is_enabled ? "节点已停用" : node.connection_status === "offline" ? "节点离线" : "暂不可下发"}</div>
-        ) : (
-          <TaskComposer node={node} />
-        )}
-      </div>
-
-      <div className="lg:col-span-1 space-y-4">
-        <div className="border-b border-white/5 pb-3 flex justify-between items-center">
-          <span className="text-[12px] font-bold font-mono text-gray-500 uppercase">Recent Executions</span>
-          <span className="text-[10px] text-cyan-500 cursor-pointer hover:text-white transition-colors" onClick={() => navigate({ name: "tasks" })}>View Stream</span>
-        </div>
-        <div className="space-y-2.5">
-          {recentTasks.length === 0 ? <div className="py-12 text-center text-[11px] text-gray-600 font-mono">暂无任务</div> : recentTasks.slice(0, 5).map((task) => (
-            <div key={task.task_id} onClick={() => navigate({ name: "task-detail", taskId: task.task_id })} className="p-3.5 rounded-xl bg-white/[0.01] hover:bg-white/[0.03] border border-white/5 hover:border-white/10 transition-all cursor-pointer group">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-mono text-[11px] text-gray-200 group-hover:text-cyan-400 transition-colors">{task.task_id}</span>
-                <span className={`${badgeCls} ${task.status === "succeeded" ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/30" : "bg-white/5 text-gray-400 border-white/5"}`}>{task.status}</span>
-              </div>
-              <div className="flex justify-between items-center text-[11px] text-gray-500"><span>{task.type}</span><span>{formatRelative(task.created_at)}</span></div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {tab === "monitor" ? (
+        <MonitorPanel
+          nodeId={nodeId}
+          cpu={cpu}
+          memory={memory}
+          pythonEnv={pythonEnv}
+          gpus={gpus}
+          cpuUse={cpuUse}
+          memUse={memUse}
+          latestStatus={latestStatus}
+          showJson={showJson}
+          setShowJson={setShowJson}
+        />
+      ) : null}
+      {tab === "config" ? (
+        <ConfigPanel
+          node={currentNode}
+          editForm={editForm}
+          updateEdit={updateEdit}
+          editError={editError}
+          saving={saving}
+          handleSave={handleSave}
+        />
+      ) : null}
+      {tab === "tasks" ? (
+        <TasksPanel node={currentNode} canDispatch={canDispatch} recentTasks={recentTasks} />
+      ) : null}
     </div>
   );
 }

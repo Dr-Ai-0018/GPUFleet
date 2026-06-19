@@ -4,20 +4,20 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "test-node-1") -> dict:
     """Helper to create a node and return the response."""
-    resp = client.post("/api/admin/nodes", headers=auth_headers, json={
+    resp = client.post("/api/v1/admin/nodes", headers=auth_headers, json={
         "node_id": node_id,
         "display_name": f"Test Node {node_id}",
         "node_type": "physical",
         "os_type": "linux",
         "heartbeat_interval_sec": 5,
         "allowed_workdirs": ["/tmp/work"],
+        "allow_shell": True,
     })
     assert resp.status_code in (200, 201), resp.text
     return resp.json()
@@ -27,7 +27,7 @@ def _create_task(
     client: TestClient,
     auth_headers: dict[str, str],
     node_id: str = "test-node-1",
-    task_type: str = "shell",
+    task_type: str = "health_check",
     payload: dict | None = None,
     timeout_sec: int | None = None,
 ) -> dict:
@@ -35,12 +35,12 @@ def _create_task(
     body = {
         "node_id": node_id,
         "type": task_type,
-        "payload": payload or {"command": "echo hello"},
+        "payload": payload or ({} if task_type == "health_check" else {"command": "echo hello"}),
         "workdir": "/tmp/work",
     }
     if timeout_sec is not None:
         body["timeout_sec"] = timeout_sec
-    resp = client.post("/api/admin/tasks", headers=auth_headers, json=body)
+    resp = client.post("/api/v1/admin/tasks", headers=auth_headers, json=body)
     assert resp.status_code in (200, 201), resp.text
     return resp.json()
 
@@ -50,12 +50,12 @@ class TestTaskCreate:
         _create_node(client, auth_headers)
         task = _create_task(client, auth_headers)
         assert task["status"] == "pending"
-        assert task["type"] == "shell"
+        assert task["type"] == "health_check"
         assert task["node_id"] == "test-node-1"
 
     def test_create_task_invalid_type(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         _create_node(client, auth_headers)
-        resp = client.post("/api/admin/tasks", headers=auth_headers, json={
+        resp = client.post("/api/v1/admin/tasks", headers=auth_headers, json={
             "node_id": "test-node-1",
             "type": "nonexistent_type",
             "payload": {},
@@ -63,7 +63,7 @@ class TestTaskCreate:
         assert resp.status_code == 422
 
     def test_create_task_node_not_found(self, client: TestClient, auth_headers: dict[str, str]) -> None:
-        resp = client.post("/api/admin/tasks", headers=auth_headers, json={
+        resp = client.post("/api/v1/admin/tasks", headers=auth_headers, json={
             "node_id": "nonexistent-node",
             "type": "shell",
             "payload": {"command": "echo hi"},
@@ -78,9 +78,7 @@ class TestTaskLifecycle:
         task = _create_task(client, auth_headers)
 
         # Simulate heartbeat from node
-        from app.config import get_settings
         from app.security import build_signed_headers_for_test
-        settings = get_settings()
 
         heartbeat_payload = {
             "boot_id": "boot-001",
@@ -92,14 +90,14 @@ class TestTaskLifecycle:
             node_secret=node_data["node_secret"],
             body=body,
         )
-        resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
         assert resp.status_code == 200, resp.text
         hb_data = resp.json()
         assert len(hb_data["tasks"]) == 1
         assert hb_data["tasks"][0]["task_id"] == task["task_id"]
 
         # Verify task is now claimed
-        resp = client.get(f"/api/admin/tasks/{task['task_id']}", headers=auth_headers)
+        resp = client.get(f"/api/v1/admin/tasks/{task['task_id']}", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["status"] == "claimed"
 
@@ -107,7 +105,7 @@ class TestTaskLifecycle:
         _create_node(client, auth_headers)
         task = _create_task(client, auth_headers)
 
-        resp = client.post(f"/api/admin/tasks/{task['task_id']}/cancel", headers=auth_headers)
+        resp = client.post(f"/api/v1/admin/tasks/{task['task_id']}/cancel", headers=auth_headers)
         assert resp.status_code == 200
         # Pending tasks are directly cancelled (no node ack needed)
         # Claimed/running tasks would become cancel_requested
@@ -125,7 +123,7 @@ class TestTaskLostDetection:
         body = json.dumps(heartbeat_payload).encode()
         from app.security import build_signed_headers_for_test
         headers = build_signed_headers_for_test("test-node-1", node_data["node_secret"], body)
-        resp = client.post("/api/node/heartbeat", content=body, headers=headers)
+        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
         assert resp.status_code == 200
 
         # Now simulate time passing (node hasn't heartbeated for > 3x interval)
@@ -144,13 +142,14 @@ class TestTaskLostDetection:
         _mark_lost_tasks(db)
 
         # Verify task is now lost
-        resp = client.get(f"/api/admin/tasks/{task['task_id']}", headers=auth_headers)
+        resp = client.get(f"/api/v1/admin/tasks/{task['task_id']}", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["status"] == "lost"
 
     def test_mark_timeout_when_exceeded(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Running tasks past their timeout should be marked timeout."""
-        node_data = _create_node(client, auth_headers)
+        # 副作用: 创建节点入库 (任务调度需要), 返回值未使用
+        _create_node(client, auth_headers)
 
         # Create task with short timeout
         task = _create_task(client, auth_headers, timeout_sec=10)
@@ -176,6 +175,6 @@ class TestTaskLostDetection:
         _mark_lost_tasks(db)
 
         # Verify task is now timeout
-        resp = client.get(f"/api/admin/tasks/{task['task_id']}", headers=auth_headers)
+        resp = client.get(f"/api/v1/admin/tasks/{task['task_id']}", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["status"] == "timeout"

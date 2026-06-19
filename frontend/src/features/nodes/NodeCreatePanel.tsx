@@ -1,10 +1,12 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { ApiError, api } from "../../api";
+import { api } from "../../api";
 import type { NodeCreateResponse, NodeType, OsType } from "../../types";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { useToast } from "../../ui/Toast";
+import { labelForError } from "../../lib/labels";
 import { Card } from "../../ui/Card";
 import { Button } from "../../ui/Button";
+import { Dropdown } from "../../ui/Dropdown";
 import forms from "../../ui/forms.module.css";
 import {
   buildInitialForm,
@@ -36,7 +38,10 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
 
   useEffect(() => {
     if (touchedDirs) return;
-    setForm((prev) => ({ ...prev, allowed_workdirs: defaultWorkdir(prev.node_type, prev.os_type) }));
+    setForm((prev) => ({
+      ...prev,
+      allowed_workdirs: defaultWorkdir(prev.node_type, prev.os_type),
+    }));
   }, [form.node_type, form.os_type, touchedDirs]);
 
   useEffect(() => {
@@ -59,21 +64,23 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
     setSubmitting(true);
     setError(null);
     try {
-      const response = await store.callApi((token) => api.createNode(token, {
-        node_id: form.node_id.trim(),
-        display_name: form.display_name.trim(),
-        node_type: form.node_type,
-        os_type: form.node_type === "control_plane" ? null : form.os_type,
-        heartbeat_interval_sec: form.heartbeat_interval_sec,
-        allowed_workdirs: form.allowed_workdirs
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean),
-        tags: form.tags
-          .split(/[,，]/)
-          .map((line) => line.trim())
-          .filter(Boolean),
-      }));
+      const response = await store.callApi((token) =>
+        api.createNode(token, {
+          node_id: form.node_id.trim(),
+          display_name: form.display_name.trim(),
+          node_type: form.node_type,
+          os_type: form.node_type === "control_plane" ? null : form.os_type,
+          heartbeat_interval_sec: form.heartbeat_interval_sec,
+          allowed_workdirs: form.allowed_workdirs
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean),
+          tags: form.tags
+            .split(/[,，]/)
+            .map((line) => line.trim())
+            .filter(Boolean),
+        }),
+      );
       onCreated(response);
       store.setRecentOnboarding(response);
       toast.push({
@@ -87,9 +94,7 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
       setTouchedDirs(false);
       setTouchedTags(false);
     } catch (err) {
-      const message =
-        err instanceof ApiError ? err.body || err.message : err instanceof Error ? err.message : "创建节点失败";
-      setError(message);
+      setError(labelForError(err, "创建节点失败"));
     } finally {
       setSubmitting(false);
     }
@@ -128,30 +133,32 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
         </div>
 
         <div className={forms.row}>
-          <label className={forms.field}>
+          <div className={forms.field}>
             <span className={forms.label}>角色</span>
-            <select
-              className={forms.select}
+            <Dropdown
               value={form.node_type}
-              onChange={(event) => update("node_type", event.target.value as NodeType)}
-            >
-              <option value="physical">physical</option>
-              <option value="modal_runner">modal_runner</option>
-              <option value="control_plane">control_plane</option>
-            </select>
-          </label>
-          <label className={forms.field}>
+              onChange={(v) => update("node_type", v as NodeType)}
+              options={[
+                { value: "physical", label: "physical" },
+                { value: "modal_runner", label: "modal_runner" },
+                { value: "control_plane", label: "control_plane" },
+              ]}
+              mono
+            />
+          </div>
+          <div className={forms.field}>
             <span className={forms.label}>OS</span>
-            <select
-              className={forms.select}
+            <Dropdown
               value={form.os_type}
-              onChange={(event) => update("os_type", event.target.value as OsType)}
+              onChange={(v) => update("os_type", v as OsType)}
+              options={[
+                { value: "windows", label: "windows" },
+                { value: "linux", label: "linux" },
+              ]}
               disabled={form.node_type === "modal_runner"}
-            >
-              <option value="windows">windows</option>
-              <option value="linux">linux</option>
-            </select>
-          </label>
+              mono
+            />
+          </div>
         </div>
 
         <div className={forms.row}>
@@ -163,7 +170,9 @@ export function NodeCreatePanel({ onCreated }: Props): JSX.Element {
               min={3}
               max={3600}
               value={form.heartbeat_interval_sec}
-              onChange={(event) => update("heartbeat_interval_sec", Number(event.target.value || 5))}
+              onChange={(event) =>
+                update("heartbeat_interval_sec", Number(event.target.value || 5))
+              }
             />
           </label>
           <label className={forms.field}>

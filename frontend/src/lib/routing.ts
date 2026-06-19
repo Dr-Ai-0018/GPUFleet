@@ -19,33 +19,54 @@ export type Route =
   | { name: "security" };
 
 const DEFAULT_HASH = "#/onboarding";
+const FALLBACK_ROUTE: Route = { name: "overview" };
+type StaticRouteName = Exclude<RouteName, "node-detail" | "task-detail">;
+const STATIC_ROUTES = new Set<StaticRouteName>(["overview", "onboarding", "fleet", "tasks", "security"]);
 
-function parseHash(raw: string): Route {
+function safeDecode(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const decoded = decodeURIComponent(value);
+    return decoded.trim() ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function isStaticRouteName(value: string | undefined): value is StaticRouteName {
+  return Boolean(value && STATIC_ROUTES.has(value as StaticRouteName));
+}
+
+export function parseHash(raw: string): Route {
   const trimmed = raw.replace(/^#\/?/, "").trim();
   const parts = trimmed.split("/").filter(Boolean);
-  const [head, second] = parts;
-  switch (head) {
-    case undefined:
-    case "":
-    case "overview":
-      return { name: "overview" };
-    case "onboarding":
-      return { name: "onboarding" };
-    case "fleet":
-      return { name: "fleet" };
-    case "nodes":
-      return second
-        ? { name: "node-detail", nodeId: decodeURIComponent(second) }
-        : { name: "fleet" };
-    case "tasks":
-      return second
-        ? { name: "task-detail", taskId: decodeURIComponent(second) }
-        : { name: "tasks" };
-    case "security":
-      return { name: "security" };
-    default:
-      return { name: "overview" };
+  const [head, second, ...rest] = parts;
+  if (!head) {
+    return FALLBACK_ROUTE;
   }
+  if (rest.length > 0) {
+    return FALLBACK_ROUTE;
+  }
+  if (head === "nodes") {
+    const nodeId = safeDecode(second);
+    return nodeId ? { name: "node-detail", nodeId } : { name: "fleet" };
+  }
+  if (head === "tasks") {
+    if (!second) {
+      return { name: "tasks" };
+    }
+    const taskId = safeDecode(second);
+    return taskId ? { name: "task-detail", taskId } : { name: "tasks" };
+  }
+  if (second) {
+    return FALLBACK_ROUTE;
+  }
+  if (isStaticRouteName(head)) {
+    return { name: head };
+  }
+  return FALLBACK_ROUTE;
 }
 
 export function buildHash(route: Route): string {

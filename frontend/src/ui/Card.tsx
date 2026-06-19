@@ -23,15 +23,21 @@ export function Card({
   return (
     <section className={`${styles.card}${className ? ` ${className}` : ""}`}>
       {hasHeader ? (
-        <header className={styles.head}>
+        <header className={styles["card__head"]}>
           <div>
             {title ? <h2>{title}</h2> : null}
-            {subtitle ? <p className={styles.sub}>{subtitle}</p> : null}
+            {subtitle ? <p className={styles["card__sub"]}>{subtitle}</p> : null}
           </div>
-          {actions ? <div className={styles.actions}>{actions}</div> : null}
+          {actions ? <div className={styles["card__actions"]}>{actions}</div> : null}
         </header>
       ) : null}
-      <div className={bodyFlush ? `${styles.body} ${styles.bodyFlush}` : styles.body}>
+      <div
+        className={
+          bodyFlush
+            ? `${styles["card__body"]} ${styles["card__body--flush"]}`
+            : styles["card__body"]
+        }
+      >
         {children}
       </div>
     </section>
@@ -39,7 +45,7 @@ export function Card({
 }
 
 export function FieldGrid({ children }: { children: ReactNode }): JSX.Element {
-  return <div className={styles.fieldGrid}>{children}</div>;
+  return <div className={styles["card__field-grid"]}>{children}</div>;
 }
 
 export function Field({
@@ -54,18 +60,24 @@ export function Field({
   mono?: boolean;
 }): JSX.Element {
   return (
-    <div className={styles.field}>
-      <span className={styles.fieldLabel}>{label}</span>
-      <span className={mono ? `${styles.fieldValue} ${styles.fieldValueMono}` : styles.fieldValue}>
+    <div className={styles["card__field"]}>
+      <span className={styles["card__field-label"]}>{label}</span>
+      <span
+        className={
+          mono
+            ? `${styles["card__field-value"]} ${styles["card__field-value--mono"]}`
+            : styles["card__field-value"]
+        }
+      >
         {value === null || value === undefined || value === "" ? "—" : value}
       </span>
-      {hint ? <span className={styles.fieldHint}>{hint}</span> : null}
+      {hint ? <span className={styles["card__field-hint"]}>{hint}</span> : null}
     </div>
   );
 }
 
 export const cardClasses = {
-  titleRow: styles.titleRow,
-  titleTag: styles.titleTag,
-  actionsRow: styles.actionsRow,
+  titleRow: styles["card__title-row"],
+  titleTag: styles["card__title-tag"],
+  actionsRow: styles["card__actions-row"],
 };

@@ -10,7 +10,7 @@ from app.db import Database, utc_now_iso
 from app.deps import get_current_admin, get_db
 from app.schemas import DashboardNodeCard, DashboardOverview, DashboardTaskSummary, NodeStatusPreview
 
-router = APIRouter(prefix="/api/admin/dashboard", tags=["admin-dashboard"])
+router = APIRouter(prefix="/api/v1/admin/dashboard", tags=["admin-dashboard"])
 
 
 def _decode_gpu_snapshot(raw_gpu_json: str) -> tuple[list[dict[str, object]], dict[str, object]]:
@@ -110,7 +110,7 @@ def get_overview(
                 """
                 SELECT reported_at, cpu_json, memory_json, disk_json, gpu_json, python_env_json, task_runtime_json, raw_payload_json
                 FROM node_status_snapshots
-                WHERE node_id = ?
+                WHERE node_id = ? AND cpu_json IS NOT NULL
                 ORDER BY reported_at DESC, id DESC
                 LIMIT 1
                 """,

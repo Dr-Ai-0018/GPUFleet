@@ -1,35 +1,39 @@
 /* =========================================================
  * GPUFleet · Base reset
+ * 必须包在 @layer base 里, 否则全局 button/input reset 会"未分层"
+ * 优先级高过 Tailwind @layer utilities, 导致 px-4 等工具类被吃掉.
  * ========================================================= */
 
-*, *::before, *::after { box-sizing: border-box; }
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
 
-html, body, #root { height: 100%; }
+  html, body, #root { height: 100%; }
 
-html {
-  background: var(--bg-app);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  html {
+    background: var(--bg-app);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg-app);
+  }
+
+  #root { isolation: isolate; }
+
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 0; background: transparent; padding: 0; }
+  a { color: inherit; text-decoration: none; }
+  code, pre, kbd { font-family: var(--font-mono); }
+  h1, h2, h3, h4, h5, h6 { margin: 0; font-weight: 600; color: var(--text); }
+  p { margin: 0; }
 }
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--bg-app);
-}
-
-#root { isolation: isolate; }
-
-button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; border: 0; background: transparent; padding: 0; }
-a { color: inherit; text-decoration: none; }
-code, pre, kbd { font-family: var(--font-mono); }
-h1, h2, h3, h4, h5, h6 { margin: 0; font-weight: 600; color: var(--text); }
-p { margin: 0; }
 
 ::selection { background: rgba(107, 158, 255, 0.20); color: var(--text); }
 

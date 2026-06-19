@@ -20,18 +20,24 @@
   width: 100%;
   height: 34px;
   padding: 0 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--bg-input);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background-color: rgba(0, 0, 0, 0.25);
   color: var(--text);
   outline: none;
   font-size: var(--fs-13);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 
 .input::placeholder, .textarea::placeholder { color: var(--text-faint); }
-.input:hover, .textarea:hover, .select:hover { border-color: var(--border-strong); }
-.input:focus, .textarea:focus, .select:focus { border-color: var(--accent); }
+.input:hover, .textarea:hover, .select:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(0, 0, 0, 0.32);
+}
+.input:focus, .textarea:focus, .select:focus {
+  border-color: rgba(6, 182, 212, 0.40);
+  background-color: rgba(0, 0, 0, 0.30);
+}
 .input:disabled, .textarea:disabled, .select:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .select {

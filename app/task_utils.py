@@ -4,9 +4,32 @@ from pathlib import PurePath
 from typing import Any
 
 
-TERMINAL_TASK_STATUSES = {"succeeded", "failed", "timeout", "cancelled", "lost"}
 ACTIVE_TASK_STATUSES = {"claimed", "running", "cancel_requested"}
 RESULT_ACCEPTING_TASK_STATUSES = {"claimed", "running", "cancel_requested"}
+
+# --- §1.5 任务类型三级分类 ---
+TASK_TYPE_LEVEL_L0 = {"health_check"}
+
+TASK_TYPE_LEVEL_L1 = {
+    "file_mkdir", "file_write", "file_patch_text",
+    "file_move", "file_delete", "file_extract", "file_preview",
+    "download_file", "upload_and_unpack",
+    "git_pull", "pip_install",
+}
+
+TASK_TYPE_LEVEL_L2 = {"shell", "python_script", "modal_command"}
+
+DEFAULT_ALLOWED_TASK_TYPES = TASK_TYPE_LEVEL_L0 | TASK_TYPE_LEVEL_L1
+
+SHELL_TASK_TYPES = {"shell", "python_script"}
+MODAL_TASK_TYPES = {"modal_command"}
+
+REVIEW_STATUSES = {"reviewing"}
+
+TERMINAL_TASK_STATUSES = {
+    "succeeded", "failed", "timeout", "cancelled", "lost",
+    "rejected", "review_expired",
+}
 TASK_EVENT_TRANSITIONS = {
     "claimed": {"claimed"},
     "running": {"claimed", "running"},

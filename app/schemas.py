@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -56,6 +57,8 @@ class NodeCreateRequest(BaseModel):
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
     allowed_workdirs: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    allow_shell: bool = False
+    allow_modal: bool = False
 
 
 class NodeUpdateRequest(BaseModel):
@@ -66,6 +69,8 @@ class NodeUpdateRequest(BaseModel):
     allowed_workdirs: list[str] | None = None
     tags: list[str] | None = None
     is_enabled: bool | None = None
+    allow_shell: bool | None = None
+    allow_modal: bool | None = None
 
 
 class NodeResponse(BaseModel):
@@ -82,6 +87,8 @@ class NodeResponse(BaseModel):
     last_seen_at: str | None
     connection_status: Literal["online", "offline", "disabled", "never_seen"]
     onboarding_status: Literal["awaiting_first_heartbeat", "connected", "disabled"]
+    allow_shell: bool
+    allow_modal: bool
     created_at: str
     updated_at: str
 
@@ -95,77 +102,85 @@ class NodeOnboardingPackage(BaseModel):
 
 class NodeCreateResponse(NodeResponse):
     node_secret: str
-    signing_hint: str = "Agent should locally derive sha256(node_secret) and use it as the HMAC signing key."
+    signing_hint: str = "Agent should locally derive sha256(node_secret) and use it as the HMAC signing key; the server stores only an encrypted form."
     onboarding: NodeOnboardingPackage
 
 
+class NodeOnboardingLifecycleResponse(BaseModel):
+    token: str | None = Field(default=None, description="Plain onboarding node secret while the node is still awaiting first heartbeat.")
+    token_expires_at: str | None = None
+    token_status: Literal["active", "expired", "consumed"]
+    install_snippet: str
+    env_template: str
+
+
 class HeartbeatCpu(BaseModel):
-    model: str | None = None
-    logical_cores: int | None = None
-    physical_cores: int | None = None
-    usage_percent: float | None = None
-    current_clock_mhz: int | None = None
-    max_clock_mhz: int | None = None
-    per_core_percent: list[float] = Field(default_factory=list)
+    model: str | None = Field(default=None, description="CPU model name reported by the node.")
+    logical_cores: int | None = Field(default=None, description="Visible logical CPU core count.")
+    physical_cores: int | None = Field(default=None, description="Physical CPU core count when detectable.")
+    usage_percent: float | None = Field(default=None, description="Overall CPU utilization percentage.")
+    current_clock_mhz: int | None = Field(default=None, description="Current effective CPU clock in MHz.")
+    max_clock_mhz: int | None = Field(default=None, description="Observed CPU max clock in MHz.")
+    per_core_percent: list[float] = Field(default_factory=list, description="Per-core utilization percentages.")
 
 
 class HeartbeatMemory(BaseModel):
-    total_bytes: int | None = None
-    used_bytes: int | None = None
-    usage_percent: float | None = None
-    available_bytes: int | None = None
-    cached_bytes: int | None = None
-    commit_used_bytes: int | None = None
-    commit_limit_bytes: int | None = None
-    paged_pool_bytes: int | None = None
-    nonpaged_pool_bytes: int | None = None
-    speed_mtps: int | None = None
-    slots_used: int | None = None
-    slots_total: int | None = None
-    form_factor: str | None = None
-    memory_type: str | None = None
-    installed_bytes: int | None = None
-    hardware_reserved_bytes: int | None = None
+    total_bytes: int | None = Field(default=None, description="Total system memory in bytes.")
+    used_bytes: int | None = Field(default=None, description="Used system memory in bytes.")
+    usage_percent: float | None = Field(default=None, description="Overall memory utilization percentage.")
+    available_bytes: int | None = Field(default=None, description="Memory immediately available to new processes.")
+    cached_bytes: int | None = Field(default=None, description="Cached memory in bytes when available.")
+    commit_used_bytes: int | None = Field(default=None, description="Committed memory currently in use.")
+    commit_limit_bytes: int | None = Field(default=None, description="Commit limit in bytes.")
+    paged_pool_bytes: int | None = Field(default=None, description="Paged kernel pool bytes on Windows hosts.")
+    nonpaged_pool_bytes: int | None = Field(default=None, description="Non-paged kernel pool bytes on Windows hosts.")
+    speed_mtps: int | None = Field(default=None, description="Memory speed in MT/s when detectable.")
+    slots_used: int | None = Field(default=None, description="Number of populated memory slots.")
+    slots_total: int | None = Field(default=None, description="Total motherboard memory slots.")
+    form_factor: str | None = Field(default=None, description="Memory module form factor.")
+    memory_type: str | None = Field(default=None, description="Memory technology such as DDR5.")
+    installed_bytes: int | None = Field(default=None, description="Installed physical memory in bytes.")
+    hardware_reserved_bytes: int | None = Field(default=None, description="Hardware-reserved memory in bytes.")
 
 
 class HeartbeatDisk(BaseModel):
-    mount: str
-    total_bytes: int | None = None
-    free_bytes: int | None = None
-    usage_percent: float | None = None
+    mount: str = Field(description="Mount point or drive letter.")
+    total_bytes: int | None = Field(default=None, description="Total disk capacity in bytes.")
+    free_bytes: int | None = Field(default=None, description="Free disk space in bytes.")
+    usage_percent: float | None = Field(default=None, description="Disk utilization percentage.")
 
 
 class HeartbeatGpu(BaseModel):
-    index: int
-    model: str | None = None
-    total_vram_mb: int | None = None
-    used_vram_mb: int | None = None
-    utilization_percent: float | None = None
-    encoder_utilization_percent: float | None = None
-    decoder_utilization_percent: float | None = None
-    temperature_c: float | None = None
-    power_draw_w: float | None = None
-    power_limit_w: float | None = None
-    clock_graphics_mhz: int | None = None
-    clock_max_graphics_mhz: int | None = None
-    clock_video_mhz: int | None = None
-    fan_speed_percent: int | None = None
-    pcie_gen: int | None = None
-    pcie_width: int | None = None
-    encoder_sessions: int | None = None
-    decoder_sessions: int | None = None
+    index: int = Field(description="Zero-based GPU index on the node.")
+    model: str | None = Field(default=None, description="GPU model name.")
+    total_vram_mb: int | None = Field(default=None, description="Total VRAM in MiB.")
+    used_vram_mb: int | None = Field(default=None, description="Used VRAM in MiB.")
+    utilization_percent: float | None = Field(default=None, description="Core utilization percentage.")
+    encoder_utilization_percent: float | None = Field(default=None, description="NVENC utilization percentage.")
+    decoder_utilization_percent: float | None = Field(default=None, description="NVDEC utilization percentage.")
+    temperature_c: float | None = Field(default=None, description="Current GPU temperature in Celsius.")
+    power_draw_w: float | None = Field(default=None, description="Current GPU power draw in watts.")
+    power_limit_w: float | None = Field(default=None, description="Configured GPU power limit in watts.")
+    clock_graphics_mhz: int | None = Field(default=None, description="Current graphics clock in MHz.")
+    clock_max_graphics_mhz: int | None = Field(default=None, description="Maximum graphics clock in MHz.")
+    clock_video_mhz: int | None = Field(default=None, description="Current video clock in MHz.")
+    fan_speed_percent: int | None = Field(default=None, description="Fan speed percentage when available.")
+    pcie_gen: int | None = Field(default=None, description="Current PCIe generation.")
+    pcie_width: int | None = Field(default=None, description="Current PCIe lane width.")
+    encoder_sessions: int | None = Field(default=None, description="Active encoder session count.")
+    decoder_sessions: int | None = Field(default=None, description="Active decoder session count.")
 
 
 class HeartbeatNvidia(BaseModel):
-    driver_version: str | None = None
-    cuda_version: str | None = None
-    nvcc_version: str | None = None
-    nvidia_smi_path: str | None = None
+    driver_version: str | None = Field(default=None, description="Installed NVIDIA driver version.")
+    cuda_version: str | None = Field(default=None, description="CUDA runtime version.")
+    nvcc_version: str | None = Field(default=None, description="nvcc compiler version when installed.")
+    nvidia_smi_path: str | None = Field(default=None, description="Resolved nvidia-smi executable path.")
 
 
 class HeartbeatPythonEnv(BaseModel):
-    python_executable: str | None = None
-    venv_path: str | None = None
+    python_executable: str | None = Field(default=None, description="Resolved Python executable path.")
+    venv_path: str | None = Field(default=None, description="Virtual environment path if active.")
     pip_available: bool = False
     python_version: str | None = None
     python_resolution_error: str | None = None
@@ -180,13 +195,47 @@ class HeartbeatPythonEnv(BaseModel):
     conda_executable: str | None = None
     micromamba_available: bool = False
     micromamba_executable: str | None = None
-    supported_backends: list[str] = Field(default_factory=list)
+    supported_backends: list[str] = Field(default_factory=list, description="Execution backends available on this node.")
 
 
 class HeartbeatTaskRuntime(BaseModel):
-    active_task_id: str | None = None
-    active_pid: int | None = None
-    started_at: str | None = None
+    active_task_id: str | None = Field(default=None, description="Task id currently executing on the node.")
+    active_pid: int | None = Field(default=None, description="Worker PID for the active task.")
+    started_at: str | None = Field(default=None, description="UTC timestamp when the active task started.")
+
+
+class HeartbeatSampleGpu(BaseModel):
+    """高密 sample 内单卡的瞬时指标."""
+
+    idx: int = Field(ge=0, description="GPU device index (与节点上 CUDA device 顺序一致).")
+    util: float | None = Field(default=None, description="GPU 利用率百分比 (0-100).")
+    temp_c: float | None = Field(default=None, description="GPU 温度 (摄氏度).")
+    vram_used_bytes: int | None = Field(default=None, description="GPU 已用显存 (字节).")
+    power_w: float | None = Field(default=None, description="GPU 当前功耗 (瓦特).")
+
+
+class HeartbeatSample(BaseModel):
+    """节点本地高密采样的单个时间点 (默认 1s/次)."""
+
+    ts: datetime = Field(description="采样时刻 (节点本地系统时钟, UTC ISO8601 含毫秒).")
+    cpu_percent: float | None = Field(default=None, description="该时刻 CPU 使用率 (0-100).")
+    per_core_percent: list[float] = Field(default_factory=list, description="该时刻每个逻辑 CPU 核心的使用率 (0-100).")
+    cpu_current_clock_mhz: int | None = Field(default=None, description="该时刻 CPU 当前频率 (MHz).")
+    memory_percent: float | None = Field(default=None, description="该时刻内存使用率 (0-100).")
+    memory_used_bytes: int | None = Field(default=None, description="该时刻已用内存字节数.")
+    memory_available_bytes: int | None = Field(default=None, description="该时刻可用内存字节数.")
+    gpus: list[HeartbeatSampleGpu] = Field(
+        default_factory=list,
+        description="该时刻所有 GPU 卡的瞬时指标 (覆盖多卡场景).",
+    )
+    upload_bps: float | None = Field(
+        default=None,
+        description="自上次采样以来的上行字节速率 (bytes/sec). 首次采样为 None.",
+    )
+    download_bps: float | None = Field(
+        default=None,
+        description="自上次采样以来的下行字节速率 (bytes/sec). 首次采样为 None.",
+    )
 
 
 class HeartbeatRequest(BaseModel):
@@ -194,6 +243,12 @@ class HeartbeatRequest(BaseModel):
     agent_version: str | None = None
     hostname: str | None = None
     heartbeat_interval_sec: int = Field(default=5, ge=3, le=3600)
+    sample_interval_sec: int | None = Field(
+        default=None,
+        ge=1,
+        le=60,
+        description="高密采样间隔 (秒). 节点支持高密采样时填写, 否则保留为 None.",
+    )
     cpu: HeartbeatCpu = Field(default_factory=HeartbeatCpu)
     memory: HeartbeatMemory = Field(default_factory=HeartbeatMemory)
     disks: list[HeartbeatDisk] = Field(default_factory=list)
@@ -202,6 +257,11 @@ class HeartbeatRequest(BaseModel):
     python_env: HeartbeatPythonEnv = Field(default_factory=HeartbeatPythonEnv)
     task_runtime: HeartbeatTaskRuntime = Field(default_factory=HeartbeatTaskRuntime)
     extra: dict[str, Any] = Field(default_factory=dict)
+    samples: list[HeartbeatSample] = Field(
+        default_factory=list,
+        description="本次心跳累积的高密采样数组, 单次心跳长度 = heartbeat_interval / sample_interval. "
+        "缺失或为空时退化为单点心跳, 兼容旧 agent.",
+    )
 
 
 class TaskEnvelope(BaseModel):
@@ -222,6 +282,43 @@ class TaskControlCommand(BaseModel):
     task_id: str
     action: Literal["cancel"]
     kill_grace_sec: int = 15
+
+
+class ReviewResult(BaseModel):
+    """AI 审核结果摘要"""
+    stage: int
+    decision: str
+    risk_score: float | None = None
+    risk_factors: list[dict[str, Any]] = Field(default_factory=list)
+    reasoning: str | None = None
+
+
+class ReviewEscalateRequest(BaseModel):
+    note: str | None = None
+
+
+class ReviewApproveRequest(BaseModel):
+    note: str | None = None
+
+
+class ReviewRejectRequest(BaseModel):
+    note: str | None = None
+
+
+class AlertMessageView(BaseModel):
+    id: int
+    alert_type: str
+    severity: str
+    title: str
+    summary: str | None
+    detail: dict[str, Any] = Field(default_factory=dict)
+    target_type: str | None
+    target_id: str | None
+    status: str
+    actioned_by: int | None
+    actioned_at: str | None
+    expires_at: str | None
+    created_at: str
 
 
 class AdminTaskCreateRequest(BaseModel):
@@ -255,11 +352,19 @@ class AdminTaskListItem(BaseModel):
     finished_at: str | None
 
 
+class AdminTaskListPage(BaseModel):
+    items: list[AdminTaskListItem]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
+
+
 class AdminTaskLogView(BaseModel):
     stream: Literal["stdout", "stderr"]
     last_offset: int
     preview_text: str
     center_log_path: str | None
+    is_truncated: bool = False
+    truncated_notice: str | None = None
     updated_at: str
 
 
@@ -287,6 +392,8 @@ class AdminTaskDetail(AdminTaskListItem):
     logs: list[AdminTaskLogView] = Field(default_factory=list)
     artifacts: list[AdminTaskArtifactView] = Field(default_factory=list)
     result: AdminTaskResultSummary | None = None
+    review_stage: int | None = None
+    review_decision: str | None = None
 
 
 class HeartbeatResponse(BaseModel):
@@ -295,18 +402,22 @@ class HeartbeatResponse(BaseModel):
     node_id: str
     tasks: list[TaskEnvelope] = Field(default_factory=list)
     task_controls: list[TaskControlCommand] = Field(default_factory=list)
+    refresh_fingerprint: bool = Field(
+        default=False,
+        description="若为 true, 节点收到后应异步重采完整指纹 (CPU 型号 / GPU 详情 / 虚拟化 / 网络 / Python 环境等), 下次心跳带新指纹.",
+    )
 
 
 class NodeStatusPreview(BaseModel):
-    reported_at: str
-    cpu: dict[str, Any]
-    memory: dict[str, Any]
-    disks: list[dict[str, Any]]
-    gpus: list[dict[str, Any]]
-    nvidia: dict[str, Any] = Field(default_factory=dict)
-    python_env: dict[str, Any]
-    task_runtime: dict[str, Any]
-    extra: dict[str, Any] = Field(default_factory=dict)
+    reported_at: str = Field(description="UTC timestamp when the status snapshot was reported.")
+    cpu: HeartbeatCpu = Field(default_factory=HeartbeatCpu, description="Structured CPU snapshot for the node.")
+    memory: HeartbeatMemory = Field(default_factory=HeartbeatMemory, description="Structured memory snapshot for the node.")
+    disks: list[HeartbeatDisk] = Field(default_factory=list, description="Disk snapshots reported by the node.")
+    gpus: list[HeartbeatGpu] = Field(default_factory=list, description="GPU snapshots reported by the node.")
+    nvidia: HeartbeatNvidia = Field(default_factory=HeartbeatNvidia, description="NVIDIA runtime metadata.")
+    python_env: HeartbeatPythonEnv = Field(default_factory=HeartbeatPythonEnv, description="Python environment snapshot.")
+    task_runtime: HeartbeatTaskRuntime = Field(default_factory=HeartbeatTaskRuntime, description="Current active task runtime snapshot.")
+    extra: dict[str, Any] = Field(default_factory=dict, description="Additional agent-provided status data.")
 
 
 class DashboardNodeCard(BaseModel):
@@ -358,6 +469,12 @@ class AuditEventView(BaseModel):
     created_at: str
 
 
+class AuditEventPage(BaseModel):
+    items: list[AuditEventView]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
+
+
 class SecurityWarningView(BaseModel):
     id: int
     source_type: str
@@ -366,6 +483,12 @@ class SecurityWarningView(BaseModel):
     command_excerpt: str | None
     detail: dict[str, Any]
     created_at: str
+
+
+class SecurityWarningPage(BaseModel):
+    items: list[SecurityWarningView]
+    next_cursor: str | None = None
+    total_estimate: int | None = None
 
 
 class NodeTaskEventRequest(BaseModel):

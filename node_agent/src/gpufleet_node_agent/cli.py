@@ -5,12 +5,12 @@ import json
 import logging
 import os
 import signal
-import sys
 import time
 from threading import Event
 
 from gpufleet_node_agent.config import AgentSettings
 from gpufleet_node_agent.heartbeat import send_heartbeat
+from gpufleet_node_agent.sampler import Sampler
 from gpufleet_node_agent.state import load_json, save_json
 from gpufleet_node_agent.task_runner import (
     ACTIVE_PROCESSES,
@@ -112,9 +112,26 @@ def run_loop(settings: AgentSettings) -> None:
     if settings.tls_skip_verify:
         logger.warning("TLS verification is DISABLED (GPUFLEET_AGENT_TLS_SKIP_VERIFY=true). Not recommended for production.")
 
+    # 启动时一次性采集完整画像并缓存 (~10-15s, 接受这一次性投资).
+    # 此后心跳 payload 顶层 cpu/memory/gpus 等直接从缓存读 (微秒级), 不再每次启 PowerShell.
+    from gpufleet_node_agent import fingerprint
+    fingerprint.get_cached(settings)
+    fingerprint.start_refresh_worker(settings, _shutdown_event)
+
+    # 启动高密采样器: 后台线程每 sample_interval_sec 采一次, 心跳侧 drain ring buffer.
+    sampler = Sampler(
+        sample_interval_sec=settings.sample_interval_sec,
+        sample_buffer_size=settings.sample_buffer_size,
+        stop_event=_shutdown_event,
+    ).start()
+
     while not _shutdown_event.is_set():
         try:
-            result = send_heartbeat(settings)
+            result = send_heartbeat(settings, sample_buffer=sampler)
+            # 服务端指示刷新指纹 → 触发后台 refresh worker (异步, 不阻塞本次心跳)
+            if result.get("refresh_fingerprint"):
+                logger.info("server_requested_fingerprint_refresh")
+                fingerprint.mark_dirty()
             try:
                 recover_orphaned_task(settings)
             except Exception as exc:
@@ -130,7 +147,8 @@ def run_loop(settings: AgentSettings) -> None:
         # Use event wait instead of time.sleep for responsive shutdown
         _shutdown_event.wait(timeout=settings.heartbeat_interval_sec)
 
-    # Graceful shutdown
+    # Graceful shutdown: sampler thread 是 daemon, _shutdown_event 已 set 后自己退出.
+    sampler.shutdown()
     logger.info("Shutting down agent...")
     _terminate_active_processes(grace_sec=30)
     _finalize_shutdown_task(settings)
@@ -149,8 +167,13 @@ def main() -> None:
 
     settings = AgentSettings()
     settings.ensure_dirs()
+    settings.get_node_secret()
 
     if args.command == "heartbeat-once":
         run_once(settings)
     else:
         run_loop(settings)
+
+
+if __name__ == "__main__":
+    main()

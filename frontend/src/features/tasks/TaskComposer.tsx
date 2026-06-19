@@ -1,9 +1,11 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { ApiError, api } from "../../api";
+import { api } from "../../api";
 import { navigate } from "../../lib/routing";
+import { labelForError } from "../../lib/labels";
 import { useConsoleStore } from "../../state/ConsoleStore";
 import { useToast } from "../../ui/Toast";
 import { Button } from "../../ui/Button";
+import { Dropdown } from "../../ui/Dropdown";
 import forms from "../../ui/forms.module.css";
 import type { NodeResponse } from "../../types";
 import {
@@ -35,7 +37,9 @@ export function TaskComposer({ node }: Props): JSX.Element {
   const [executionBackend, setExecutionBackend] = useState("default");
   const [executionTarget, setExecutionTarget] = useState("");
   const [executionPython, setExecutionPython] = useState("");
-  const [payloadText, setPayloadText] = useState<string>(() => defaultPayloadText(types[0] ?? "shell"));
+  const [payloadText, setPayloadText] = useState<string>(() =>
+    defaultPayloadText(types[0] ?? "shell"),
+  );
   const [envText, setEnvText] = useState<string>("{}");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,20 +99,22 @@ export function TaskComposer({ node }: Props): JSX.Element {
         setFieldErrors({ requestedGpuIds: "requested_gpu_ids 必须是逗号分隔的非负整数列表" });
         return;
       }
-      const created = await store.callApi((token) => api.createTask(token, {
-        node_id: node.node_id,
-        type: taskType,
-        payload,
-        task_id: taskId.trim() || null,
-        revision: Number(revision) || 1,
-        idempotency_key: idempotencyKey.trim() || null,
-        workdir: workdir || null,
-        env,
-        requested_gpu_ids: gpuIds,
-        timeout_sec: Number(timeoutSec) || null,
-        kill_grace_sec: Number(killGraceSec) || 15,
-        danger_level: dangerLevel,
-      }));
+      const created = await store.callApi((token) =>
+        api.createTask(token, {
+          node_id: node.node_id,
+          type: taskType,
+          payload,
+          task_id: taskId.trim() || null,
+          revision: Number(revision) || 1,
+          idempotency_key: idempotencyKey.trim() || null,
+          workdir: workdir || null,
+          env,
+          requested_gpu_ids: gpuIds,
+          timeout_sec: Number(timeoutSec) || null,
+          kill_grace_sec: Number(killGraceSec) || 15,
+          danger_level: dangerLevel,
+        }),
+      );
       toast.push({
         tone: "success",
         title: "任务已创建",
@@ -125,13 +131,7 @@ export function TaskComposer({ node }: Props): JSX.Element {
       setExecutionTarget("");
       setExecutionPython("");
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.body || err.message
-          : err instanceof Error
-            ? err.message
-            : "任务创建失败";
-      setError(message);
+      setError(labelForError(err, "任务创建失败"));
     } finally {
       setSubmitting(false);
     }
@@ -152,36 +152,29 @@ export function TaskComposer({ node }: Props): JSX.Element {
   return (
     <form className={forms.stack} onSubmit={onSubmit}>
       <div className={forms.row}>
-        <label className={forms.field}>
+        <div className={forms.field}>
           <span className={forms.label}>任务类型</span>
-          <select
-            className={forms.select}
+          <Dropdown
             value={taskType}
-            onChange={(event) => onTaskTypeChange(event.target.value)}
-          >
-            {types.map((kind) => (
-              <option key={kind} value={kind}>
-                {taskTypeMeta(kind).label}
-              </option>
-            ))}
-          </select>
+            onChange={onTaskTypeChange}
+            options={types.map((kind) => ({ value: kind, label: taskTypeMeta(kind).label }))}
+          />
           <span className={forms.hint}>{meta.description}</span>
-        </label>
-        <label className={forms.field}>
+        </div>
+        <div className={forms.field}>
           <span className={forms.label}>工作目录</span>
-          <select
-            className={`${forms.select} ${forms.mono}`}
+          <Dropdown
             value={workdir}
-            onChange={(event) => setWorkdir(event.target.value)}
-          >
-            {node.allowed_workdirs.length === 0 ? <option value="">未配置</option> : null}
-            {node.allowed_workdirs.map((dir) => (
-              <option key={dir} value={dir}>
-                {dir}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={setWorkdir}
+            options={
+              node.allowed_workdirs.length === 0
+                ? [{ value: "", label: "未配置", disabled: true }]
+                : node.allowed_workdirs.map((dir) => ({ value: dir, label: dir }))
+            }
+            mono
+            placeholder="未配置"
+          />
+        </div>
         <label className={forms.field}>
           <span className={forms.label}>超时（秒）</span>
           <input
@@ -236,7 +229,9 @@ export function TaskComposer({ node }: Props): JSX.Element {
             placeholder="如 0,1"
           />
           <span className={forms.hint}>为空表示不限制 GPU。多 GPU 机器可显式选择。</span>
-          {fieldErrors.requestedGpuIds ? <span className={forms.errorText}>{fieldErrors.requestedGpuIds}</span> : null}
+          {fieldErrors.requestedGpuIds ? (
+            <span className={forms.errorText}>{fieldErrors.requestedGpuIds}</span>
+          ) : null}
         </label>
         <label className={forms.field}>
           <span className={forms.label}>kill_grace_sec</span>
@@ -249,41 +244,43 @@ export function TaskComposer({ node }: Props): JSX.Element {
             onChange={(event) => setKillGraceSec(Number(event.target.value || 15))}
           />
         </label>
-        <label className={forms.field}>
+        <div className={forms.field}>
           <span className={forms.label}>danger_level</span>
-          <select
-            className={forms.select}
+          <Dropdown
             value={dangerLevel}
-            onChange={(event) => setDangerLevel(event.target.value)}
-          >
-            <option value="normal">normal</option>
-            <option value="warning">warning</option>
-            <option value="dangerous">dangerous</option>
-          </select>
-        </label>
+            onChange={setDangerLevel}
+            options={[
+              { value: "normal", label: "normal" },
+              { value: "warning", label: "warning" },
+              { value: "dangerous", label: "dangerous" },
+            ]}
+            mono
+          />
+        </div>
       </div>
 
       {showExecutionOverrides ? (
         <div className={forms.row}>
-          <label className={forms.field}>
+          <div className={forms.field}>
             <span className={forms.label}>执行环境</span>
-            <select
-              className={forms.select}
+            <Dropdown
               value={executionBackend}
-              onChange={(event) => setExecutionBackend(event.target.value)}
-            >
-              <option value="default">default</option>
-              <option value="system_python">system_python</option>
-              <option value="venv_path">venv_path</option>
-              <option value="uv_project">uv_project</option>
-              <option value="conda_name">conda_name</option>
-              <option value="conda_prefix">conda_prefix</option>
-              <option value="micromamba_prefix">micromamba_prefix</option>
-            </select>
+              onChange={setExecutionBackend}
+              options={[
+                { value: "default", label: "default" },
+                { value: "system_python", label: "system_python" },
+                { value: "venv_path", label: "venv_path" },
+                { value: "uv_project", label: "uv_project" },
+                { value: "conda_name", label: "conda_name" },
+                { value: "conda_prefix", label: "conda_prefix" },
+                { value: "micromamba_prefix", label: "micromamba_prefix" },
+              ]}
+              mono
+            />
             <span className={forms.hint}>
               `shell / python_script / pip_install` 可直接切换到指定 venv、uv、conda、micromamba。
             </span>
-          </label>
+          </div>
           <label className={forms.field}>
             <span className={forms.label}>环境目标</span>
             <input
@@ -305,7 +302,8 @@ export function TaskComposer({ node }: Props): JSX.Element {
               placeholder="默认 python"
             />
             <span className={forms.hint}>
-              仅在 `system_python / uv_project / conda / micromamba` 下有意义，可改成 `python3.12` 等。
+              仅在 `system_python / uv_project / conda / micromamba` 下有意义，可改成 `python3.12`
+              等。
             </span>
           </label>
         </div>

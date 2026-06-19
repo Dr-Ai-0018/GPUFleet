@@ -1,179 +1,683 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../../api";
 import { navigate } from "../../lib/routing";
 import { useConsoleStore } from "../../state/ConsoleStore";
-import { StatusPill } from "../../ui/StatusPill";
-import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
+import { labelForError, taskStatusLabel } from "../../lib/labels";
 import { formatRelative, formatTime } from "../../lib/format";
-import { RingGauge } from "../../ui/RingGauge";
+import { mergeFirstPage } from "../../lib/listMerge";
+import { TIME_WINDOWS, type TimeWindow, windowSince } from "../../lib/timeWindow";
 import { MiniSparkline } from "../../ui/MiniSparkline";
+import { KpiTile } from "../../ui/KpiTile";
+import { Dropdown } from "../../ui/Dropdown";
+import type { AdminTaskListItem } from "../../types";
 
-const cardCls = "rounded-xl transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
-const inputCls = "bg-[rgba(5,5,7,0.8)] border border-white/5 rounded-md px-3 py-1.5 text-xs text-gray-300 outline-none focus:border-cyan-500/30 transition-all";
+// ─── 单状态查询(后端 status 是单值字符串) ───
+type StatusFilter =
+  | ""
+  | "pending"
+  | "claimed"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "timeout"
+  | "cancelled"
+  | "lost";
 
-const STATUS_GROUPS = [
-  { value: "all", label: "全部" },
-  { value: "active", label: "进行中" },
-  { value: "succeeded", label: "成功" },
-  { value: "failed", label: "失败" },
-] as const;
+const STATUS_TONE: Record<string, { dot: string; text: string }> = {
+  pending: { dot: "bg-gray-500", text: "text-gray-300" },
+  claimed: { dot: "bg-cyan-400", text: "text-cyan-300" },
+  running: { dot: "bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.55)]", text: "text-cyan-300" },
+  succeeded: { dot: "bg-emerald-400", text: "text-emerald-300" },
+  failed: { dot: "bg-red-400", text: "text-red-300" },
+  timeout: { dot: "bg-red-400", text: "text-red-300" },
+  cancel_requested: { dot: "bg-amber-400", text: "text-amber-300" },
+  cancelled: { dot: "bg-gray-500", text: "text-gray-400" },
+  lost: { dot: "bg-red-400", text: "text-red-300" },
+};
 
-type StatusFilter = (typeof STATUS_GROUPS)[number]["value"];
-const ACTIVE_SET = new Set(["pending", "claimed", "running", "cancel_requested"]);
-const FAIL_SET = new Set(["failed", "timeout", "lost"]);
+const PAGE_SIZE = 50;
 
 export function TasksView(): JSX.Element {
   const store = useConsoleStore();
-  const [filter, setFilter] = useState<StatusFilter>("all");
-  const [nodeFilter, setNodeFilter] = useState("all");
-  const [query, setQuery] = useState("");
-  const taskCounts = store.overview?.task_counts ?? {} as Record<string, number>;
+  const taskCounts = (store.overview?.task_counts ?? {}) as Record<string, number>;
+  const throughput = store.overview?.task_throughput_24h ?? Array(24).fill(0);
 
-  const connectedNodes = store.nodes.filter((n) => n.is_enabled && n.connection_status === "online" && n.onboarding_status === "connected");
-  const totalTasks = store.tasks.length;
-  const runningCount = store.tasks.filter((task) => ACTIVE_SET.has(task.status)).length;
-  const successCount = store.tasks.filter((task) => task.status === "succeeded").length;
-  const failCount = store.tasks.filter((task) => FAIL_SET.has(task.status)).length;
-  const successRate = totalTasks > 0 ? Math.round((successCount / totalTasks) * 100) : 0;
-  const pulseSeries = store.overview?.task_throughput_24h ?? Object.values(taskCounts).slice(0, 24);
+  // ─── 全局聚合数字(来自 overview) ───
+  const totalTasks = Object.values(taskCounts).reduce((a, b) => a + b, 0);
+  const runningCount = (taskCounts.running ?? 0) + (taskCounts.claimed ?? 0);
+  const succeededCount = taskCounts.succeeded ?? 0;
+  const failedCount = (taskCounts.failed ?? 0) + (taskCounts.timeout ?? 0);
 
-  const filtered = useMemo(() => {
+  // ─── 筛选状态 ───
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [nodeFilter, setNodeFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>("");
+  const [query, setQuery] = useState<string>("");
+
+  // ─── 服务端分页状态 ───
+  const [items, setItems] = useState<AdminTaskListItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [totalEstimate, setTotalEstimate] = useState<number | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 用于 race-condition 防护(快速切筛选条件时丢弃过期响应)
+  const requestSeqRef = useRef(0);
+  // 跟 loading 镜像的 ref, 给后台轮询用 (避免 polling effect deps 里塞 loading 造成 interval 重建)
+  const loadingRef = useRef(false);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  type FetchMode = "reset" | "append" | "refresh";
+
+  const fetchPage = useCallback(
+    async (cursorArg: string | null, mode: FetchMode) => {
+      if (!store.token) return;
+      const seq = ++requestSeqRef.current;
+      // refresh 是后台静默, 不显示加载态; reset/append 是用户交互, 显示
+      if (mode !== "refresh") setLoading(true);
+      setError(null);
+      try {
+        const page = await api.listTasks(store.token, {
+          limit: PAGE_SIZE,
+          cursor: cursorArg ?? undefined,
+          node_id: nodeFilter || undefined,
+          status: statusFilter || undefined,
+          type: typeFilter || undefined,
+          since: windowSince(timeWindow),
+        });
+        if (seq !== requestSeqRef.current) return; // 过期响应,丢弃
+        setItems((prev) => {
+          if (mode === "reset") return page.items;
+          if (mode === "append") return [...prev, ...page.items];
+          // refresh: 把首页"最新"按 task_id 合并进现有列表, 新出现的插到最前, 已存在的就地更新状态
+          return mergeFirstPage(prev, page.items, (t) => t.task_id);
+        });
+        // refresh 不动 cursor (用户已经翻到的页面要保留), 只 reset/append 才更新
+        if (mode !== "refresh") setCursor(page.next_cursor ?? null);
+        setTotalEstimate(page.total_estimate ?? null);
+      } catch (err) {
+        if (seq !== requestSeqRef.current) return;
+        // 后台轮询失败静默处理, 别打扰用户; 用户交互失败才显示
+        if (mode !== "refresh") {
+          setError(labelForError(err, "加载失败"));
+        }
+      } finally {
+        if (seq === requestSeqRef.current && mode !== "refresh") setLoading(false);
+      }
+    },
+    [store.token, nodeFilter, statusFilter, typeFilter, timeWindow],
+  );
+
+  // 筛选条件变化 → 重置
+  useEffect(() => {
+    setItems([]);
+    setCursor(null);
+    setTotalEstimate(null);
+    void fetchPage(null, "reset");
+  }, [fetchPage]);
+
+  // 5s 后台轮询: 拉首页 merge 进现有列表, 让新任务自动冒上来 + 已有任务状态原地更新
+  // visibility-aware: tab 隐藏时暂停, 切回前台立刻拉一次
+  useEffect(() => {
+    if (!store.token) return;
+
+    const tick = () => {
+      if (document.hidden) return;
+      if (loadingRef.current) return; // 用户交互 fetch 在飞, 让一让
+      void fetchPage(null, "refresh");
+    };
+
+    const timer = window.setInterval(tick, 5000);
+
+    function onVisibilityChange() {
+      if (!document.hidden) tick();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [store.token, fetchPage]);
+
+  // ─── 客户端二次过滤(只对 query 串做本地包含匹配,不发请求) ───
+  const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return store.tasks.filter((task) => {
-      if (nodeFilter !== "all" && task.node_id !== nodeFilter) return false;
-      if (filter === "active" && !ACTIVE_SET.has(task.status)) return false;
-      if (filter === "succeeded" && task.status !== "succeeded") return false;
-      if (filter === "failed" && !FAIL_SET.has(task.status)) return false;
-      if (!q) return true;
-      return [task.task_id, task.node_id, task.type].join(" ").toLowerCase().includes(q);
-    });
-  }, [store.tasks, nodeFilter, filter, query]);
+    if (!q) return items;
+    return items.filter((t) => [t.task_id, t.node_id, t.type].join(" ").toLowerCase().includes(q));
+  }, [items, query]);
+
+  // ─── IntersectionObserver: 滚到底自动加载下一页 ───
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!cursor || loading) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void fetchPage(cursor, "append");
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [cursor, loading, fetchPage]);
+
+  // ─── 可下发节点(右栏用) ───
+  const connectedNodes = useMemo(
+    () =>
+      store.nodes.filter(
+        (n) =>
+          n.is_enabled && n.connection_status === "online" && n.onboarding_status === "connected",
+      ),
+    [store.nodes],
+  );
+
+  const hasAnyFilter =
+    !!statusFilter || !!nodeFilter || !!typeFilter || !!timeWindow || !!query.trim();
 
   return (
-    <div className="max-w-[1300px] mx-auto space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold tracking-tight text-white font-mono">任务管理</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] text-emerald-400 flex items-center gap-1.5 font-mono"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />{connectedNodes.length} 可下发</span>
+    <div className="py-2">
+      {/* ───── Page header ───── */}
+      <header className="mb-8 flex items-baseline justify-between gap-6 border-b border-white/[0.045] pb-6">
+        <div>
+          <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-white">任务管理</h2>
+          <p className="mt-1.5 text-[13px] leading-6 text-gray-500">
+            Fleet 全局任务流 — 服务端游标分页 + 实时筛选,支持节点 / 状态 / 类型 / 时间窗组合查询。
+          </p>
         </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="flex items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/[0.06] px-2.5 py-1 text-[11.5px] text-emerald-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.55)]" />
+            {connectedNodes.length} 可下发
+          </span>
+        </div>
+      </header>
+
+      {/* ───── KPI strip = 状态筛选器 (KpiTile v3) ───── */}
+      <div className="-mx-4 mb-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0 sm:pb-0">
+        <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
+          label="全部"
+          value={totalTasks}
+          sublabel="task 总数"
+          tone="neutral"
+          icon={<IconList />}
+          active={statusFilter === ""}
+          onClick={() => setStatusFilter("")}
+        />
+        <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
+          label="进行中"
+          value={runningCount}
+          sublabel="running + claimed"
+          tone="running"
+          icon={<IconLoader />}
+          active={statusFilter === "running"}
+          onClick={() => setStatusFilter(statusFilter === "running" ? "" : "running")}
+        />
+        <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
+          label="成功"
+          value={succeededCount}
+          sublabel={
+            totalTasks > 0 ? `${Math.round((succeededCount / totalTasks) * 100)}% 成功率` : "—"
+          }
+          tone="online"
+          icon={<IconCheckCircle />}
+          active={statusFilter === "succeeded"}
+          onClick={() => setStatusFilter(statusFilter === "succeeded" ? "" : "succeeded")}
+        />
+        <KpiTile
+          className="min-w-[180px] snap-start sm:min-w-0"
+          label="失败"
+          value={failedCount}
+          sublabel="failed + timeout"
+          tone="danger"
+          icon={<IconAlert />}
+          active={statusFilter === "failed"}
+          onClick={() => setStatusFilter(statusFilter === "failed" ? "" : "failed")}
+        />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr_1fr]">
-        <div className={`${cardCls} px-5 py-5`}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Task Stream</div>
-              <div className="mt-2 text-4xl font-bold font-mono text-white">{totalTasks}</div>
-              <div className="mt-1 text-[12px] text-gray-500">tracked jobs in task ledger</div>
+      {/* ───── Filter bar ───── */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-white/[0.045] pb-3">
+        <FilterSelect
+          value={nodeFilter}
+          onChange={setNodeFilter}
+          placeholder="全部节点"
+          options={store.nodes.map((n) => ({ value: n.node_id, label: n.display_name }))}
+        />
+        <FilterSelect
+          value={typeFilter}
+          onChange={setTypeFilter}
+          placeholder="全部类型"
+          options={[
+            { value: "shell", label: "shell" },
+            { value: "python_script", label: "python_script" },
+            { value: "pip_install", label: "pip_install" },
+            { value: "uv_install", label: "uv_install" },
+            { value: "noop", label: "noop" },
+          ]}
+        />
+        <FilterSelect
+          value={timeWindow}
+          onChange={(v) => setTimeWindow(v as TimeWindow)}
+          placeholder=""
+          options={TIME_WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
+        />
+        <div className="relative ml-2 max-w-md flex-1">
+          <svg
+            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-600"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            placeholder="本页内搜索 task_id / type / node…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-md border border-white/[0.07] bg-[#0a0d12] py-1.5 pr-3 pl-9 text-[12.5px] text-white transition-colors outline-none placeholder:text-gray-600 focus:border-cyan-400/40 focus:bg-[#0c1017]"
+          />
+        </div>
+        {hasAnyFilter ? (
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter("");
+              setNodeFilter("");
+              setTypeFilter("");
+              setTimeWindow("");
+              setQuery("");
+            }}
+            className="rounded-md border border-white/[0.07] bg-white/[0.02] px-2.5 py-1.5 text-[11.5px] text-gray-400 transition-colors hover:border-white/[0.12] hover:text-white"
+          >
+            清空筛选
+          </button>
+        ) : null}
+      </div>
+
+      {/* ───── Main + Sidebar ───── */}
+      <div className="grid grid-cols-1 gap-x-10 gap-y-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+        {/* ===== Main: task list ===== */}
+        <div className="min-w-0">
+          {/* 结果计数 / 错误条 */}
+          <div className="mb-2 flex items-baseline justify-between gap-3 text-[11.5px]">
+            <span className="text-gray-500">
+              {error ? (
+                <span className="text-red-300">{error}</span>
+              ) : items.length === 0 && loading ? (
+                "加载中…"
+              ) : (
+                <>
+                  已加载 <span className="font-mono text-gray-300">{items.length}</span>
+                  {totalEstimate != null && totalEstimate > items.length ? (
+                    <>
+                      {" "}
+                      / 共约 <span className="font-mono text-gray-300">{totalEstimate}</span>
+                    </>
+                  ) : null}
+                  {query.trim() ? (
+                    <>
+                      {" "}
+                      · 本页过滤{" "}
+                      <span className="font-mono text-cyan-300">{visibleItems.length}</span>
+                    </>
+                  ) : null}
+                </>
+              )}
+            </span>
+            {cursor && !loading ? (
+              <button
+                type="button"
+                onClick={() => void fetchPage(cursor, "append")}
+                className="text-[11.5px] text-cyan-300 transition-colors hover:text-cyan-200"
+              >
+                加载下一页 →
+              </button>
+            ) : null}
+          </div>
+
+          {/* 列表 */}
+          {items.length === 0 && !loading ? (
+            <div className="rounded-md border border-dashed border-white/[0.06] bg-[#0a0d12] px-6 py-16 text-center">
+              <div className="text-[13px] font-medium text-gray-300">
+                {hasAnyFilter ? "无匹配任务" : "暂无任务记录"}
+              </div>
+              <div className="mt-1.5 text-[12px] text-gray-500">
+                {hasAnyFilter ? "尝试清空筛选或切换条件" : "下发第一个任务后这里会出现记录"}
+              </div>
             </div>
-            <RingGauge value={successRate} size={90} label={String(successRate)} sublabel="PASS" />
-          </div>
-          <div className="mt-5 grid grid-cols-3 gap-3">
-            <StatChip label="Running" value={runningCount} tone="cyan" />
-            <StatChip label="Succeeded" value={successCount} tone="emerald" />
-            <StatChip label="Failed" value={failCount} tone="red" />
-          </div>
+          ) : (
+            <div className="overflow-x-auto overflow-y-hidden rounded-md border border-white/[0.05]">
+              <table className="w-full text-left text-[12.5px]">
+                <thead>
+                  <tr className="border-b border-white/[0.05] bg-white/[0.015] text-[11px] text-gray-500">
+                    <th className="px-4 py-2.5 font-normal">任务</th>
+                    <th className="px-4 py-2.5 font-normal">节点</th>
+                    <th className="px-4 py-2.5 font-normal">类型</th>
+                    <th className="px-4 py-2.5 font-normal">状态</th>
+                    <th className="px-4 py-2.5 font-normal">创建</th>
+                    <th className="px-4 py-2.5 text-right font-normal">完成</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleItems.map((task) => {
+                    const tone = STATUS_TONE[task.status] ?? {
+                      dot: "bg-gray-500",
+                      text: "text-gray-400",
+                    };
+                    return (
+                      <tr
+                        key={task.task_id}
+                        onClick={() => navigate({ name: "task-detail", taskId: task.task_id })}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            navigate({ name: "task-detail", taskId: task.task_id });
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`打开任务 ${task.task_id}`}
+                        className="group cursor-pointer border-b border-white/[0.03] transition-colors last:border-0 hover:bg-white/[0.02]"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`h-2 w-2 shrink-0 rounded-full ${tone.dot}`} />
+                            <span className="truncate font-mono text-[12px] text-cyan-300 transition-colors group-hover:text-cyan-200">
+                              {task.task_id}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[11.5px] text-gray-400">
+                          {task.node_id}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[12px] text-gray-300">
+                          {task.type}
+                        </td>
+                        <td className={`px-4 py-3 text-[12px] ${tone.text}`}>
+                          {taskStatusLabel[task.status] ?? task.status}
+                        </td>
+                        <td
+                          className="px-4 py-3 text-[11.5px] text-gray-500"
+                          title={formatTime(task.created_at)}
+                        >
+                          {formatRelative(task.created_at)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[11.5px] text-gray-500">
+                          {task.finished_at ? (
+                            formatRelative(task.finished_at)
+                          ) : (
+                            <span className="text-gray-700">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {/* 滚到底自动加载哨兵 */}
+              <div ref={sentinelRef} />
+              {cursor && loading ? (
+                <div className="px-4 py-3 text-center text-[11.5px] text-gray-500">加载下一页…</div>
+              ) : null}
+              {!cursor && items.length > 0 && !loading ? (
+                <div className="border-t border-white/[0.04] px-4 py-3 text-center text-[11px] text-gray-600">
+                  已到底部 · 共 {items.length} 条
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
 
-        <div className={`${cardCls} px-5 py-5`}>
-          <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Dispatch Pool</div>
-          <div className="mt-2 text-3xl font-bold font-mono text-white">{connectedNodes.length}</div>
-          <div className="mt-1 text-[12px] text-gray-500">ready nodes for execution</div>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {connectedNodes.slice(0, 5).map((node) => (
-              <span key={node.node_id} className="rounded-full border border-white/8 bg-white/[0.02] px-3 py-1 text-[11px] font-mono text-gray-300">
-                {node.display_name}
-              </span>
-            ))}
-            {connectedNodes.length === 0 ? <span className="text-[11px] font-mono text-gray-600">暂无可调度节点</span> : null}
+        {/* ===== Right sidebar ===== */}
+        <aside className="space-y-5 xl:sticky xl:top-2 xl:self-start">
+          {/* 吞吐节拍 */}
+          <div className="rounded-md border border-white/[0.05] bg-[#0b0e13] px-4 py-3.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[11.5px] text-gray-500">吞吐节拍</span>
+              <span className="text-[10.5px] text-gray-600">past 24h</span>
+            </div>
+            <div className="mt-1.5 text-[26px] font-semibold tracking-tight text-cyan-300">
+              {throughput.reduce((a: number, b: number) => a + b, 0)}
+            </div>
+            <div className="mt-1 text-[11px] text-gray-500">24h 完成总数</div>
+            <div className="mt-3">
+              <MiniSparkline
+                data={throughput}
+                width={280}
+                height={42}
+                color="#06b6d4"
+                fillOpacity={0.12}
+                className="w-full"
+              />
+            </div>
           </div>
-        </div>
 
-        <div className={`${cardCls} px-5 py-5`}>
-          <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-gray-500">Execution Pulse</div>
-          <div className="mt-4">
-            <MiniSparkline data={pulseSeries.length >= 2 ? pulseSeries : [0, 0]} width={280} height={58} className="w-full" />
+          {/* 可下发节点 */}
+          <div>
+            <div className="mb-2.5 flex items-baseline justify-between border-b border-white/[0.045] pb-2">
+              <h3 className="text-[12.5px] font-semibold text-white">可下发节点</h3>
+              <span className="text-[10.5px] text-gray-600">{connectedNodes.length} 在线</span>
+            </div>
+            {connectedNodes.length === 0 ? (
+              <div className="rounded-md border border-dashed border-white/[0.06] bg-[#0a0d12] px-3 py-6 text-center text-[12px] text-gray-600">
+                暂无在线节点
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {connectedNodes.map((node) => {
+                  const isFiltered = nodeFilter === node.node_id;
+                  return (
+                    <li key={node.node_id}>
+                      <button
+                        type="button"
+                        onClick={() => setNodeFilter(isFiltered ? "" : node.node_id)}
+                        onDoubleClick={() =>
+                          navigate({ name: "node-detail", nodeId: node.node_id })
+                        }
+                        className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
+                          isFiltered
+                            ? "border-cyan-400/40 bg-cyan-500/[0.08]"
+                            : "border-white/[0.05] bg-[#0b0e13] hover:border-white/[0.1] hover:bg-[#0d1119]"
+                        }`}
+                        title="单击筛选 / 双击进入节点详情"
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className={`truncate text-[12px] ${isFiltered ? "text-white" : "text-gray-300"}`}
+                          >
+                            {node.display_name}
+                          </div>
+                          <div className="truncate font-mono text-[10px] text-gray-600">
+                            {node.node_type}
+                          </div>
+                        </div>
+                        {isFiltered ? (
+                          <span className="font-mono text-[9.5px] tracking-wider text-cyan-300 uppercase">
+                            on
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
-          <div className="mt-4 text-[11px] font-mono text-gray-500">基于 overview 吞吐快照的轻量趋势预览</div>
-        </div>
+
+          {/* 任务状态分布(简化) */}
+          <div>
+            <div className="mb-2.5 flex items-baseline justify-between border-b border-white/[0.045] pb-2">
+              <h3 className="text-[12.5px] font-semibold text-white">状态分布</h3>
+              <span className="text-[10.5px] text-gray-600">total {totalTasks}</span>
+            </div>
+            {Object.keys(taskCounts).length === 0 ? (
+              <div className="py-6 text-center text-[12px] text-gray-600">暂无数据</div>
+            ) : (
+              <ul className="space-y-1.5">
+                {Object.entries(taskCounts)
+                  .filter(([, v]) => v > 0)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([key, count]) => {
+                    const tone = STATUS_TONE[key] ?? { dot: "bg-gray-500", text: "text-gray-400" };
+                    const pct = totalTasks > 0 ? (count / totalTasks) * 100 : 0;
+                    const isFiltered = statusFilter === key;
+                    return (
+                      <li key={key} className="px-1 py-1">
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter(isFiltered ? "" : (key as StatusFilter))}
+                          className="block w-full text-left"
+                        >
+                          <div className="flex items-center justify-between gap-3 text-[12px]">
+                            <span className="flex items-center gap-2">
+                              <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+                              <span className={isFiltered ? "text-white" : "text-gray-300"}>
+                                {taskStatusLabel[key] ?? key}
+                              </span>
+                            </span>
+                            <span className="font-mono text-gray-200">{count}</span>
+                          </div>
+                          <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/[0.04]">
+                            <div
+                              className={`h-full rounded-full ${tone.dot}`}
+                              style={{ width: `${pct}%`, opacity: isFiltered ? 0.9 : 0.6 }}
+                            />
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ul>
+            )}
+          </div>
+        </aside>
       </div>
-
-      {/* Dispatch nodes strip */}
-      {connectedNodes.length > 0 ? (
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {connectedNodes.map((node) => (
-            <button key={node.node_id} type="button" onClick={() => navigate({ name: "node-detail", nodeId: node.node_id })} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/5 hover:border-white/10 hover:bg-white/[0.04] transition-all text-xs shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="font-medium text-white">{node.display_name}</span>
-              <span className="text-gray-500 font-mono">{node.node_type}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {/* Filter bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1 bg-[#090A0D] border border-white/5 p-1 rounded-lg">
-          {STATUS_GROUPS.map((g) => (
-            <button key={g.value} type="button" onClick={() => setFilter(g.value)} className={`px-3 py-1.5 text-xs font-bold font-mono rounded-md transition-all ${filter === g.value ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"}`}>{g.label}</button>
-          ))}
-        </div>
-        <select value={nodeFilter} onChange={(e) => setNodeFilter(e.target.value)} className={`${inputCls} w-auto`}>
-          <option value="all">全部节点</option>
-          {store.nodes.map((n) => <option key={n.node_id} value={n.node_id}>{n.display_name}</option>)}
-        </select>
-        <div className="relative flex-1 max-w-xs">
-          <svg className="absolute left-3 top-2 text-gray-600" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input type="text" placeholder="搜索 task_id / type / node…" value={query} onChange={(e) => setQuery(e.target.value)} className={`${inputCls} w-full pl-9`} />
-        </div>
-        <span className="text-[11px] text-gray-500 font-mono ml-auto">{filtered.length} / {store.tasks.length}</span>
-      </div>
-
-      {/* Table */}
-      {filtered.length === 0 ? (
-        <div className={`${cardCls} p-12 text-center text-xs text-gray-600 font-mono`}>无匹配任务</div>
-      ) : (
-        <div className={`${cardCls} p-0 overflow-hidden`}>
-          <table className="w-full text-left text-xs">
-            <thead className="text-gray-500 font-mono uppercase tracking-wider border-b border-white/5 bg-[#090A0D]/20">
-              <tr>
-                <th className="px-5 py-3 font-medium">任务 ID</th>
-                <th className="px-5 py-3 font-medium">节点</th>
-                <th className="px-5 py-3 font-medium">类型</th>
-                <th className="px-5 py-3 font-medium">状态</th>
-                <th className="px-5 py-3 font-medium">创建时间</th>
-                <th className="px-5 py-3 font-medium text-right">完成时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((task) => (
-                <tr key={task.task_id} className="hover:bg-white/[0.02] transition-colors cursor-pointer border-b border-white/[0.03] last:border-0" onClick={() => navigate({ name: "task-detail", taskId: task.task_id })}>
-                  <td className="px-5 py-3.5 font-mono text-cyan-500">{task.task_id}</td>
-                  <td className="px-5 py-3.5 font-mono text-gray-400">{task.node_id}</td>
-                  <td className="px-5 py-3.5 font-mono text-gray-300">{task.type}</td>
-                  <td className="px-5 py-3.5"><StatusPill tone={taskStatusTone[task.status] ?? "muted"} label={taskStatusLabel[task.status] ?? task.status} pulse={task.status === "running"} /></td>
-                  <td className="px-5 py-3.5 text-gray-500" title={formatTime(task.created_at)}>{formatRelative(task.created_at)}</td>
-                  <td className="px-5 py-3.5 text-right text-gray-500">{task.finished_at ? formatRelative(task.finished_at) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
 
-function StatChip({ label, value, tone }: { label: string; value: number; tone: "cyan" | "emerald" | "red" }): JSX.Element {
-  const cls = tone === "emerald"
-    ? "border-emerald-400/15 bg-emerald-400/8 text-emerald-300"
-    : tone === "red"
-      ? "border-red-400/15 bg-red-400/8 text-red-300"
-      : "border-cyan-400/15 bg-cyan-400/8 text-cyan-300";
+// ─────────────────────── 内部子组件 ───────────────────────
 
+// ─── KPI icon — 16px mono SVG, 颜色继承父级 ───
+
+function IconList(): JSX.Element {
   return (
-    <div className={`rounded-xl border px-3 py-3 ${cls}`}>
-      <div className="text-[10px] font-mono uppercase tracking-[0.14em]">{label}</div>
-      <div className="mt-1 text-[18px] font-bold font-mono text-white">{value}</div>
-    </div>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="8" y1="6" x2="20" y2="6" />
+      <line x1="8" y1="12" x2="20" y2="12" />
+      <line x1="8" y1="18" x2="20" y2="18" />
+      <circle cx="4" cy="6" r="1" fill="currentColor" />
+      <circle cx="4" cy="12" r="1" fill="currentColor" />
+      <circle cx="4" cy="18" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconLoader(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 2v4" />
+      <path d="M12 18v4" />
+      <path d="M4.93 4.93l2.83 2.83" />
+      <path d="M16.24 16.24l2.83 2.83" />
+      <path d="M2 12h4" />
+      <path d="M18 12h4" />
+      <path d="M4.93 19.07l2.83-2.83" />
+      <path d="M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
+function IconCheckCircle(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="9 12 11.5 14.5 16 10" />
+    </svg>
+  );
+}
+
+function IconAlert(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3 L22 19 H 2 Z" />
+      <line x1="12" y1="10" x2="12" y2="14" />
+      <circle cx="12" cy="17" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  options: Array<{ value: string; label: string }>;
+}): JSX.Element {
+  // 注入 placeholder 作为可选"清空"项 (空 value)
+  const allOptions = placeholder ? [{ value: "", label: placeholder }, ...options] : options;
+  return (
+    <Dropdown
+      value={value}
+      onChange={onChange}
+      options={allOptions}
+      placeholder={placeholder}
+      size="sm"
+      className="min-w-[140px]"
+    />
   );
 }

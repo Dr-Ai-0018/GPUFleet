@@ -61,3 +61,6 @@ node_agent/src/*.egg-info/
 references/
 
 .claude/
+
+# 文档仅本地保留，不进版本控制
+docs/

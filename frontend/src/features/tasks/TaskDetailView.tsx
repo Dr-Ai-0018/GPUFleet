@@ -9,21 +9,26 @@ import { EmptyState } from "../../ui/EmptyState";
 import { StatusPill } from "../../ui/StatusPill";
 import { Button } from "../../ui/Button";
 import { useToast } from "../../ui/Toast";
-import { taskStatusLabel, taskStatusTone } from "../../lib/labels";
+import { labelForError, taskStatusLabel, taskStatusTone } from "../../lib/labels";
 import { bytesToReadable, formatRelative, formatTime, prettyJson } from "../../lib/format";
 
-const cardCls = "rounded-xl p-5 transition-all duration-300 bg-[linear-gradient(180deg,rgba(16,18,23,0.95)_0%,rgba(10,11,14,0.98)_100%)] border border-white/[0.04] shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]";
+const cardCls =
+  "rounded-xl p-5 transition-all duration-300 bg-[var(--surface-card)] border border-[var(--card-border)] shadow-[var(--shadow-card-lite)]";
 const ACTIVE_STATUSES = new Set(["pending", "claimed", "running", "cancel_requested"]);
 
 type Props = { taskId: string };
+type TaskResultSummary = { execution?: { backend?: unknown } };
 
 export function TaskDetailView({ taskId }: Props): JSX.Element {
   const store = useConsoleStore();
+  const { callApi } = store;
   const toast = useToast();
   const [detail, setDetail] = useState<AdminTaskDetail | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewBusy, setReviewBusy] = useState<"" | "approve" | "reject" | "escalate">("");
 
   useEffect(() => {
     let cancelled = false;
@@ -31,18 +36,27 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
       if (!store.token) return;
       if (!silent) setLoadState("loading");
       try {
-        const next = await store.callApi((t) => api.getTaskDetail(t, taskId));
-        if (!cancelled) { setDetail(next); setLoadState("ready"); }
+        const next = await callApi((t) => api.getTaskDetail(t, taskId));
+        if (!cancelled) {
+          setDetail(next);
+          setLoadState("ready");
+        }
       } catch (err) {
         if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) { setLoadState("missing"); return; }
+        if (err instanceof ApiError && err.status === 404) {
+          setLoadState("missing");
+          return;
+        }
         setLoadState("error");
       }
     }
     void load();
     const id = window.setInterval(() => void load(true), 4000);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [store.token, taskId, store.callApi]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [store.token, taskId, callApi]);
 
   async function handleCancel() {
     if (!detail) return;
@@ -52,92 +66,337 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
       setDetail(updated);
       toast.push({ tone: "warning", title: "已请求取消" });
       void store.refresh({ silent: true });
-    } catch (err) { toast.push({ tone: "error", title: "取消失败", description: err instanceof Error ? err.message : "" }); }
-    finally { setBusy(false); }
+    } catch (err) {
+      toast.push({ tone: "error", title: "取消失败", description: labelForError(err, "") });
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (loadState === "missing") return <div className="max-w-[1000px] mx-auto py-20"><EmptyState title="未找到任务" description={`任务 ${taskId} 不存在。`} action={<Button variant="accent" onClick={() => navigate({ name: "tasks" })}>返回任务中心</Button>} /></div>;
-  if (loadState === "loading" && !detail) return <div className="max-w-[1000px] mx-auto py-20 text-center text-gray-500 font-mono text-xs">加载中…</div>;
-  if (loadState === "error" && !detail) return <div className="max-w-[1000px] mx-auto py-20"><EmptyState title="加载失败" /></div>;
+  async function handleReview(action: "approve" | "reject" | "escalate") {
+    if (!detail) return;
+    setReviewBusy(action);
+    try {
+      const note = reviewNote.trim() || undefined;
+      const updated = await store.callApi((t) => {
+        if (action === "approve") return api.approveReview(t, detail.task_id, note);
+        if (action === "reject") return api.rejectReview(t, detail.task_id, note);
+        return api.escalateReview(t, detail.task_id, note);
+      });
+      setDetail(updated);
+      setReviewNote("");
+      toast.push({
+        tone: action === "reject" ? "warning" : "success",
+        title: action === "approve" ? "已通过" : action === "reject" ? "已拒绝" : "已升级人审",
+      });
+      void store.refresh({ silent: true });
+    } catch (err) {
+      toast.push({ tone: "error", title: "审核操作失败", description: labelForError(err, "") });
+    } finally {
+      setReviewBusy("");
+    }
+  }
+
+  if (loadState === "missing")
+    return (
+      <div className="mx-auto max-w-[1000px] py-20">
+        <EmptyState
+          title="未找到任务"
+          description={`任务 ${taskId} 不存在。`}
+          action={
+            <Button variant="accent" onClick={() => navigate({ name: "tasks" })}>
+              返回任务中心
+            </Button>
+          }
+        />
+      </div>
+    );
+  if (loadState === "loading" && !detail)
+    return (
+      <div className="mx-auto max-w-[1000px] py-20 text-center font-mono text-xs text-gray-500">
+        加载中…
+      </div>
+    );
+  if (loadState === "error" && !detail)
+    return (
+      <div className="mx-auto max-w-[1000px] py-20">
+        <EmptyState title="加载失败" />
+      </div>
+    );
   if (!detail) return <div />;
 
   const isActive = ACTIVE_STATUSES.has(detail.status);
+  const resultSummary = detail.result?.summary as TaskResultSummary | undefined;
+  const resultBackend =
+    typeof resultSummary?.execution?.backend === "string"
+      ? resultSummary.execution.backend
+      : "default";
 
   return (
-    <div className="max-w-[1300px] mx-auto space-y-6">
-      <ConfirmDialog open={confirmCancel} title="取消任务" message={`确定取消 ${detail.task_id}？`} confirmLabel="取消任务" cancelLabel="返回" variant="danger" onConfirm={() => { setConfirmCancel(false); void handleCancel(); }} onCancel={() => setConfirmCancel(false)} />
+    <div className="mx-auto max-w-[1300px] space-y-6">
+      <ConfirmDialog
+        open={confirmCancel}
+        title="取消任务"
+        message={`确定取消 ${detail.task_id}？`}
+        confirmLabel="取消任务"
+        cancelLabel="返回"
+        variant="danger"
+        onConfirm={() => {
+          setConfirmCancel(false);
+          void handleCancel();
+        }}
+        onCancel={() => setConfirmCancel(false)}
+      />
 
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex items-start justify-between">
         <div>
-          <div className="text-[11px] text-gray-500 font-mono mb-1">{detail.task_id}</div>
-          <h1 className="text-xl font-bold text-white font-mono">{detail.type}</h1>
-          <div className="flex items-center gap-3 mt-2">
-            <StatusPill tone={taskStatusTone[detail.status] ?? "muted"} label={taskStatusLabel[detail.status] ?? detail.status} pulse={isActive} />
-            <button type="button" onClick={() => navigate({ name: "node-detail", nodeId: detail.node_id })} className="text-xs text-cyan-400 hover:text-white font-mono transition-colors">{detail.node_id}</button>
+          <div className="mb-1 font-mono text-[11px] text-gray-500">{detail.task_id}</div>
+          <h1 className="font-mono text-xl font-bold text-white">{detail.type}</h1>
+          <div className="mt-2 flex items-center gap-3">
+            <StatusPill
+              tone={taskStatusTone[detail.status] ?? "muted"}
+              label={taskStatusLabel[detail.status] ?? detail.status}
+              pulse={isActive}
+            />
+            <button
+              type="button"
+              onClick={() => navigate({ name: "node-detail", nodeId: detail.node_id })}
+              className="font-mono text-xs text-cyan-400 transition-colors hover:text-white"
+            >
+              {detail.node_id}
+            </button>
           </div>
         </div>
-        {isActive ? <button type="button" onClick={() => setConfirmCancel(true)} disabled={busy} className="px-3.5 py-1.5 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 text-[11px] font-bold rounded-lg transition-all font-mono disabled:opacity-40">请求取消</button> : null}
+        {isActive ? (
+          <button
+            type="button"
+            onClick={() => setConfirmCancel(true)}
+            disabled={busy}
+            className="rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 py-1.5 font-mono text-[11px] font-bold text-red-400 transition-all hover:bg-red-500/20 disabled:opacity-40"
+          >
+            请求取消
+          </button>
+        ) : null}
       </div>
 
       {/* Timeline */}
       <div className={cardCls}>
-        <div className="text-[12px] font-bold font-mono text-gray-500 uppercase mb-4">时间线</div>
+        <div className="mb-4 font-mono text-[12px] font-bold text-gray-500 uppercase">时间线</div>
         <div className="grid grid-cols-4 gap-4">
-          <div><span className="text-[10px] text-gray-500 font-mono block">创建</span><span className="text-xs text-white font-mono">{formatTime(detail.created_at)}</span><span className="text-[10px] text-gray-600 block">{formatRelative(detail.created_at)}</span></div>
-          <div><span className="text-[10px] text-gray-500 font-mono block">领取</span><span className="text-xs text-white font-mono">{detail.claimed_at ? formatTime(detail.claimed_at) : "—"}</span></div>
-          <div><span className="text-[10px] text-gray-500 font-mono block">开始</span><span className="text-xs text-white font-mono">{detail.started_at ? formatTime(detail.started_at) : "—"}</span></div>
-          <div><span className="text-[10px] text-gray-500 font-mono block">结束</span><span className="text-xs text-white font-mono">{detail.finished_at ? formatTime(detail.finished_at) : "—"}</span></div>
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">创建</span>
+            <span className="font-mono text-xs text-white">{formatTime(detail.created_at)}</span>
+            <span className="block text-[10px] text-gray-600">
+              {formatRelative(detail.created_at)}
+            </span>
+          </div>
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">领取</span>
+            <span className="font-mono text-xs text-white">
+              {detail.claimed_at ? formatTime(detail.claimed_at) : "—"}
+            </span>
+          </div>
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">开始</span>
+            <span className="font-mono text-xs text-white">
+              {detail.started_at ? formatTime(detail.started_at) : "—"}
+            </span>
+          </div>
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">结束</span>
+            <span className="font-mono text-xs text-white">
+              {detail.finished_at ? formatTime(detail.finished_at) : "—"}
+            </span>
+          </div>
         </div>
-        <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-white/5">
-          <div><span className="text-[10px] text-gray-500 font-mono block">工作目录</span><span className="text-xs text-white font-mono">{detail.workdir ?? "默认"}</span></div>
-          <div><span className="text-[10px] text-gray-500 font-mono block">超时</span><span className="text-xs text-white font-mono">{detail.timeout_sec}s</span></div>
-          <div><span className="text-[10px] text-gray-500 font-mono block">kill_grace</span><span className="text-xs text-white font-mono">{detail.kill_grace_sec}s</span></div>
-          <div><span className="text-[10px] text-gray-500 font-mono block">幂等键</span><span className="text-xs text-white font-mono truncate">{detail.idempotency_key}</span></div>
+        <div className="mt-4 grid grid-cols-4 gap-4 border-t border-white/5 pt-4">
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">工作目录</span>
+            <span className="font-mono text-xs text-white">{detail.workdir ?? "默认"}</span>
+          </div>
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">超时</span>
+            <span className="font-mono text-xs text-white">{detail.timeout_sec}s</span>
+          </div>
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">kill_grace</span>
+            <span className="font-mono text-xs text-white">{detail.kill_grace_sec}s</span>
+          </div>
+          <div>
+            <span className="block font-mono text-[10px] text-gray-500">幂等键</span>
+            <span className="truncate font-mono text-xs text-white">{detail.idempotency_key}</span>
+          </div>
         </div>
       </div>
 
       {/* Payload + Env */}
       <div className="grid grid-cols-2 gap-6">
-        <div className={cardCls}><div className="text-[12px] font-bold font-mono text-gray-500 uppercase mb-3">payload</div><CodeBlock value={prettyJson(detail.payload)} maxHeight={280} /></div>
-        <div className={cardCls}><div className="text-[12px] font-bold font-mono text-gray-500 uppercase mb-3">环境变量</div><CodeBlock value={prettyJson(detail.env)} maxHeight={280} /></div>
+        <div className={cardCls}>
+          <div className="mb-3 font-mono text-[12px] font-bold text-gray-500 uppercase">
+            payload
+          </div>
+          <CodeBlock value={prettyJson(detail.payload)} maxHeight={280} />
+        </div>
+        <div className={cardCls}>
+          <div className="mb-3 font-mono text-[12px] font-bold text-gray-500 uppercase">
+            环境变量
+          </div>
+          <CodeBlock value={prettyJson(detail.env)} maxHeight={280} />
+        </div>
       </div>
+
+      {/* Review (§1.5 Phase B 安全审核工作流) */}
+      {detail.review_stage != null ? (
+        <div className={cardCls}>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="font-mono text-[12px] font-bold text-gray-500 uppercase">安全审核</div>
+            <ReviewStatusBadge
+              stage={detail.review_stage}
+              decision={detail.review_decision ?? null}
+              status={detail.status}
+            />
+          </div>
+          {detail.status === "reviewing" ? (
+            <div className="space-y-3">
+              <textarea
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+                placeholder="审核备注（可选）"
+                className="h-20 w-full rounded-lg border border-[var(--card-border)] bg-[var(--surface-card)] px-3 py-2 font-mono text-xs text-white placeholder-gray-600 outline-none focus:border-cyan-500/40"
+                disabled={reviewBusy !== ""}
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="accent"
+                  onClick={() => void handleReview("approve")}
+                  disabled={reviewBusy !== ""}
+                >
+                  {reviewBusy === "approve" ? "处理中…" : "通过"}
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => void handleReview("reject")}
+                  disabled={reviewBusy !== ""}
+                >
+                  {reviewBusy === "reject" ? "处理中…" : "拒绝"}
+                </Button>
+                {detail.review_stage !== 3 ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => void handleReview("escalate")}
+                    disabled={reviewBusy !== ""}
+                  >
+                    {reviewBusy === "escalate" ? "处理中…" : "升级人审"}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="font-mono text-xs text-gray-500">审核已结束</div>
+          )}
+        </div>
+      ) : null}
 
       {/* Result */}
       <div className={cardCls}>
-        <div className="text-[12px] font-bold font-mono text-gray-500 uppercase mb-4">执行结果</div>
+        <div className="mb-4 font-mono text-[12px] font-bold text-gray-500 uppercase">执行结果</div>
         {detail.result ? (
           <>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div><span className="text-[10px] text-gray-500 font-mono block">退出码</span><span className="text-sm font-bold text-white font-mono">{String(detail.result.exit_code ?? "—")}</span></div>
-              <div><span className="text-[10px] text-gray-500 font-mono block">完成时间</span><span className="text-xs text-white font-mono">{detail.result.finished_at ? formatTime(detail.result.finished_at) : "—"}</span></div>
-              <div><span className="text-[10px] text-gray-500 font-mono block">后端</span><span className="text-xs text-white font-mono">{typeof (detail.result.summary as any)?.execution?.backend === "string" ? (detail.result.summary as any).execution.backend : "default"}</span></div>
+            <div className="mb-4 grid grid-cols-3 gap-4">
+              <div>
+                <span className="block font-mono text-[10px] text-gray-500">退出码</span>
+                <span className="font-mono text-sm font-bold text-white">
+                  {String(detail.result.exit_code ?? "—")}
+                </span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] text-gray-500">完成时间</span>
+                <span className="font-mono text-xs text-white">
+                  {detail.result.finished_at ? formatTime(detail.result.finished_at) : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] text-gray-500">后端</span>
+                <span className="font-mono text-xs text-white">{resultBackend}</span>
+              </div>
             </div>
-            <CodeBlock label="result.summary" value={prettyJson(detail.result.summary)} maxHeight={240} />
+            <CodeBlock
+              label="result.summary"
+              value={prettyJson(detail.result.summary)}
+              maxHeight={240}
+            />
           </>
-        ) : <div className="text-xs text-gray-600 font-mono text-center py-8">尚无结果</div>}
+        ) : (
+          <div className="py-8 text-center font-mono text-xs text-gray-600">尚无结果</div>
+        )}
       </div>
 
       {/* Logs */}
       <div className={cardCls}>
-        <div className="text-[12px] font-bold font-mono text-gray-500 uppercase mb-4">日志预览</div>
-        {detail.logs.length === 0 ? <div className="text-xs text-gray-600 font-mono text-center py-8">尚无日志</div> : (
-          <div className="space-y-3">{detail.logs.map((log) => <CodeBlock key={log.stream} label={`${log.stream} · ${log.last_offset} bytes`} value={log.preview_text || "(empty)"} maxHeight={280} />)}</div>
+        <div className="mb-4 font-mono text-[12px] font-bold text-gray-500 uppercase">日志预览</div>
+        {detail.logs.length === 0 ? (
+          <div className="py-8 text-center font-mono text-xs text-gray-600">尚无日志</div>
+        ) : (
+          <div className="space-y-3">
+            {detail.logs.map((log) => (
+              <CodeBlock
+                key={log.stream}
+                label={`${log.stream} · ${log.last_offset} bytes`}
+                value={log.preview_text || "(empty)"}
+                maxHeight={280}
+              />
+            ))}
+          </div>
         )}
       </div>
 
       {/* Artifacts */}
       {detail.artifacts.length > 0 ? (
         <div className={`${cardCls} p-0`}>
-          <div className="px-5 py-4 border-b border-white/5 text-[12px] font-bold font-mono text-gray-500 uppercase">产物</div>
+          <div className="border-b border-white/5 px-5 py-4 font-mono text-[12px] font-bold text-gray-500 uppercase">
+            产物
+          </div>
           {detail.artifacts.map((a) => (
-            <div key={a.storage_path} className="px-5 py-3 border-b border-white/[0.03] last:border-0 flex justify-between items-center">
-              <div><div className="text-xs text-white font-medium">{a.artifact_name}</div><div className="text-[11px] text-gray-500 font-mono">{a.storage_path}</div></div>
-              <div className="text-[11px] text-gray-500 font-mono text-right"><span>{a.artifact_type}</span> · <span>{bytesToReadable(a.size_bytes)}</span></div>
+            <div
+              key={a.storage_path}
+              className="flex items-center justify-between border-b border-white/[0.03] px-5 py-3 last:border-0"
+            >
+              <div>
+                <div className="text-xs font-medium text-white">{a.artifact_name}</div>
+                <div className="font-mono text-[11px] text-gray-500">{a.storage_path}</div>
+              </div>
+              <div className="text-right font-mono text-[11px] text-gray-500">
+                <span>{a.artifact_type}</span> · <span>{bytesToReadable(a.size_bytes)}</span>
+              </div>
             </div>
           ))}
         </div>
       ) : null}
     </div>
   );
+}
+
+/**
+ * Review 状态徽章 - 把 review_stage (1=LLM / 3=human) 和 review_decision
+ * 翻译为可读的 StatusPill. 表展示由 task_state.py / admin_tasks_service.py 流转规则推导.
+ */
+function ReviewStatusBadge({
+  stage,
+  decision,
+  status,
+}: {
+  stage: number;
+  decision: string | null;
+  status: string;
+}): JSX.Element {
+  if (status === "reviewing") {
+    if (stage === 3) return <StatusPill tone="waiting" label="等待人审" />;
+    return <StatusPill tone="running" label="LLM 审核中" pulse />;
+  }
+  if (decision === "approve") return <StatusPill tone="online" label="审核通过" />;
+  if (decision === "reject") return <StatusPill tone="danger" label="审核拒绝" />;
+  if (decision === "escalate") return <StatusPill tone="waiting" label="已升级人审" />;
+  if (decision === "expired") return <StatusPill tone="muted" label="审核超时" />;
+  return <StatusPill tone="muted" label={`stage ${stage}`} />;
 }
