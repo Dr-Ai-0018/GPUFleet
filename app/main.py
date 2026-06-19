@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 from contextlib import asynccontextmanager
 
 import time
@@ -201,7 +202,10 @@ class MetricsAuthMiddleware:
         headers = {key.decode("latin1").lower(): value.decode("latin1") for key, value in scope.get("headers", [])}
         if token:
             auth_header = headers.get("authorization", "")
-            if not auth_header.startswith("Bearer ") or auth_header[7:] != token:
+            if not auth_header.startswith("Bearer "):
+                await PlainTextResponse("unauthorized", status_code=401)(scope, receive, send)
+                return
+            if not hmac.compare_digest(auth_header[7:].encode("utf-8"), token.encode("utf-8")):
                 await PlainTextResponse("unauthorized", status_code=401)(scope, receive, send)
                 return
         else:
