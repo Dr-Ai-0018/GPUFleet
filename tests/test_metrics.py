@@ -20,6 +20,7 @@ D3_METRIC_NAMES = (
     "gpufleet_node_heartbeat_seconds",
     "gpufleet_node_heartbeat_total",
     "gpufleet_node_online_seconds",
+    "gpufleet_node_key_v1_legacy_fallback_total",
     "gpufleet_tasks_by_status",
     "gpufleet_task_created_total",
     "gpufleet_task_completed_total",
@@ -265,66 +266,87 @@ def test_artifact_upload_metrics_record_success_and_reject_size(
     assert "gpufleet_artifact_upload_bytes_total" in text
 
 
-def test_http_metrics_middleware_overhead_within_five_percent(
+def test_http_metrics_hot_path_absolute_ceiling(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """HTTP metrics hot-path 绝对上限守门 — 防 catastrophic 回归.
+
+    旧版用 baseline (noop) vs instrumented (真 prom client) 比较, 但 prom client
+    本身固有 6-10x 开销, 5% 容差不现实, 10x 容差又松到 catch 不到中等回归 (3-5x).
+    增量 review (W5) 建议拆成两个性质分离的守门:
+    - 本测试: 绝对上限 (200ms / 10k ops = 20μs/op), 守 catastrophic
+    - test_http_metrics_cache_avoids_repeat_labels_call: 缓存契约, 守 cache 行为
+    """
+    from app import main as app_main
+
+    # smoke 请求暖 route template + child cache
+    resp = client.get("/api/v1/admin/dashboard/overview", headers=auth_headers)
+    assert resp.status_code == 200
+
+    started = time.perf_counter()
+    for _ in range(10_000):
+        app_main._http_total_child("GET", "/api/v1/admin/dashboard/overview", "200").inc()
+        app_main._http_duration_child("GET", "/api/v1/admin/dashboard/overview").observe(0.001)
+    elapsed = time.perf_counter() - started
+
+    # 200ms / 10k ops = 20μs/op. 当前实测 ~8μs/op, 留 2.5x 余量挡 catastrophic
+    # (e.g. .labels() 每次查表 = 100x 慢; 缓存被禁 = 这条挂; 但 3-5x 中等回归会
+    # 漏到 cache 契约测试去 catch).
+    assert elapsed <= 0.2, f"hot-path 10k ops 超 200ms 绝对上限: {elapsed:.3f}s"
+
+
+def test_http_metrics_cache_avoids_repeat_labels_call(
     client: TestClient,
     auth_headers: dict[str, str],
     monkeypatch,
 ) -> None:
-    """Compare cached Prometheus hot-path ops with no-op collectors.
-
-    The request-level benchmark was dominated by TestClient / SQLite jitter on
-    Windows. This keeps the original regression guard focused on the middleware
-    work itself: resolving cached metric children and recording inc/observe.
+    """W5: child 缓存契约 — 同 (method, path_template, status) 第二次调用必须命中缓存,
+    不能再触 .labels() 查表. 这是 a364570 引入缓存的核心契约, 性能容差测试 catch
+    不到的"半失效"回归 (其中一条路径绕过缓存) 由此测试守门.
     """
     from app import metrics as gm
     from app import main as app_main
 
-    class _NoopChild:
-        def inc(self) -> None:
-            return None
+    total_labels_calls: list[dict[str, str]] = []
+    duration_labels_calls: list[dict[str, str]] = []
+    original_total_labels = gm.HTTP_REQUESTS_TOTAL.labels
+    original_duration_labels = gm.HTTP_REQUEST_DURATION_SECONDS.labels
 
-        def observe(self, _value: float) -> None:
-            return None
+    def spy_total_labels(**kwargs):
+        total_labels_calls.append(kwargs)
+        return original_total_labels(**kwargs)
 
-    class _NoopMetric:
-        def labels(self, **_labels: str) -> _NoopChild:
-            return _NoopChild()
+    def spy_duration_labels(**kwargs):
+        duration_labels_calls.append(kwargs)
+        return original_duration_labels(**kwargs)
 
-    # Keep a smoke request so this test still covers the route used by the
-    # original request-level benchmark and warms the template cache.
-    resp = client.get("/api/v1/admin/dashboard/overview", headers=auth_headers)
-    assert resp.status_code == 200
+    app_main._HTTP_TOTAL_CHILDREN.clear()
+    app_main._HTTP_DURATION_CHILDREN.clear()
+    monkeypatch.setattr(gm.HTTP_REQUESTS_TOTAL, "labels", spy_total_labels)
+    monkeypatch.setattr(gm.HTTP_REQUEST_DURATION_SECONDS, "labels", spy_duration_labels)
 
-    def run_metric_hot_path() -> float:
-        started = time.perf_counter()
-        for _ in range(10_000):
-            app_main._http_total_child("GET", "/api/v1/admin/dashboard/overview", "200").inc()
-            app_main._http_duration_child("GET", "/api/v1/admin/dashboard/overview").observe(0.001)
-        return time.perf_counter() - started
+    # 暖 cache: 第一次调用每个 key 应该触 .labels()
+    app_main._http_total_child("GET", "/api/v1/admin/dashboard/overview", "200").inc()
+    app_main._http_duration_child("GET", "/api/v1/admin/dashboard/overview").observe(0.001)
 
-    original_total = gm.HTTP_REQUESTS_TOTAL
-    original_duration = gm.HTTP_REQUEST_DURATION_SECONDS
-    try:
-        app_main._HTTP_TOTAL_CHILDREN.clear()
-        app_main._HTTP_DURATION_CHILDREN.clear()
-        monkeypatch.setattr(gm, "HTTP_REQUESTS_TOTAL", _NoopMetric())
-        monkeypatch.setattr(gm, "HTTP_REQUEST_DURATION_SECONDS", _NoopMetric())
-        baseline = run_metric_hot_path()
-    finally:
-        monkeypatch.setattr(gm, "HTTP_REQUESTS_TOTAL", original_total)
-        monkeypatch.setattr(gm, "HTTP_REQUEST_DURATION_SECONDS", original_duration)
-        app_main._HTTP_TOTAL_CHILDREN.clear()
-        app_main._HTTP_DURATION_CHILDREN.clear()
+    total_after_warm = len(total_labels_calls)
+    duration_after_warm = len(duration_labels_calls)
+    assert total_after_warm == 1, f"warm-up 应触一次 total.labels, 实际 {total_after_warm}"
+    assert duration_after_warm == 1, f"warm-up 应触一次 duration.labels, 实际 {duration_after_warm}"
 
-    instrumented = run_metric_hot_path()
-    # baseline 是 no-op child (~1μs/op), instrumented 是真 prometheus Counter.inc +
-    # Histogram.observe (~7-10μs/op, 含锁 + HashMap + 原子加). 真实 prom_client 开销
-    # 固有比 noop 慢 6-10 倍, 5% 容差不现实. 这里用 10x baseline + 100ms 兜底, 仍能
-    # 挡住 child 缓存失效 (会变成每次 .labels() 查表 → 100x 慢) 这种真回归.
-    allowed = baseline * 10 + 0.1
+    # 100 次相同 key 重复调用必须全命中缓存, .labels() 调用数不增
+    for _ in range(100):
+        app_main._http_total_child("GET", "/api/v1/admin/dashboard/overview", "200").inc()
+        app_main._http_duration_child("GET", "/api/v1/admin/dashboard/overview").observe(0.001)
 
-    assert instrumented <= allowed, {
-        "baseline": baseline,
-        "instrumented": instrumented,
-        "allowed": allowed,
-    }
+    assert len(total_labels_calls) == total_after_warm, (
+        f"缓存契约破: total.labels 被多调 {len(total_labels_calls) - total_after_warm} 次"
+    )
+    assert len(duration_labels_calls) == duration_after_warm, (
+        f"缓存契约破: duration.labels 被多调 {len(duration_labels_calls) - duration_after_warm} 次"
+    )
+
+    # 反向: 不同 status 应该触新的 .labels() — 证明缓存 key 区分 status
+    app_main._http_total_child("GET", "/api/v1/admin/dashboard/overview", "500").inc()
+    assert len(total_labels_calls) == total_after_warm + 1, "不同 status 应该独立缓存条目"
