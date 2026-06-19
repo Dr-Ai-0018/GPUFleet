@@ -141,6 +141,25 @@ def test_metrics_scrape_contains_full_d3_metric_table(
     assert f'gpufleet_node_heartbeat_total{{node_id="{node["node_id"]}",result="ok"}}' in text
 
 
+def test_tasks_by_status_uses_succeeded_not_completed(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """守卫 metrics 与 DB 实际枚举一致 — 历史上 metrics.py 用 'completed' 而 DB 用 'succeeded'
+    导致 gpufleet_tasks_by_status{status="succeeded"} 永远为 0, 成功任务数静默漏报.
+    """
+    from app import metrics as gm
+
+    token = _enable_metrics_token(monkeypatch)
+    gm.update_tasks_by_status({"succeeded": 7, "running": 2})
+    text = _scrape(client, token)
+
+    assert 'gpufleet_tasks_by_status{status="succeeded"} 7.0' in text
+    assert 'gpufleet_tasks_by_status{status="running"} 2.0' in text
+    # 不应再有 completed 这个无效 label, 否则说明回归
+    assert 'gpufleet_tasks_by_status{status="completed"}' not in text
+
+
 def test_http_middleware_uses_path_template_not_raw_path(
     client: TestClient,
     auth_headers: dict[str, str],
