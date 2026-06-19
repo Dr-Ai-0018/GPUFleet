@@ -25,6 +25,7 @@ from typing import Any
 
 import httpx
 
+from app import metrics as gm
 from app.config import Settings
 from app.logging_config import get_logger
 
@@ -104,6 +105,7 @@ class WebhookEmitter:
 
         try:
             self._queue.put_nowait(envelope)
+            gm.WEBHOOK_QUEUE_DEPTH.set(self._queue.qsize())
         except asyncio.QueueFull:
             # 容量满 -> 丢最旧, 让新事件进
             try:
@@ -112,7 +114,11 @@ class WebhookEmitter:
                 pass
             try:
                 self._queue.put_nowait(envelope)
+                gm.WEBHOOK_SEND_TOTAL.labels(event=event, result="dropped").inc()
+                gm.WEBHOOK_QUEUE_DEPTH.set(self._queue.qsize())
             except asyncio.QueueFull:
+                gm.WEBHOOK_SEND_TOTAL.labels(event=event, result="dropped").inc()
+                gm.WEBHOOK_QUEUE_DEPTH.set(self._queue.qsize())
                 logger.warning("webhook_queue_drop_on_overflow", webhook_event=event)
 
     def start(self) -> None:
@@ -162,6 +168,7 @@ class WebhookEmitter:
                 logger.exception("webhook_worker_unexpected_error", webhook_event=envelope.get("event"))
             finally:
                 self._queue.task_done()
+                gm.WEBHOOK_QUEUE_DEPTH.set(self._queue.qsize())
 
     async def _deliver(self, envelope: dict[str, Any]) -> None:
         assert self._client is not None
@@ -177,12 +184,14 @@ class WebhookEmitter:
             if delay > 0:
                 await asyncio.sleep(delay)
             try:
-                response = await self._client.post(
-                    self._settings.webhook_url,
-                    content=body,
-                    headers=headers,
-                )
+                with gm.WEBHOOK_SEND_DURATION_SECONDS.time():
+                    response = await self._client.post(
+                        self._settings.webhook_url,
+                        content=body,
+                        headers=headers,
+                    )
                 if 200 <= response.status_code < 300:
+                    gm.WEBHOOK_SEND_TOTAL.labels(event=str(envelope.get("event")), result="ok").inc()
                     return  # 投递成功
                 last_error = RuntimeError(f"HTTP {response.status_code}: {response.text[:200]}")
             except httpx.HTTPError as exc:
@@ -195,6 +204,7 @@ class WebhookEmitter:
                 error=str(last_error)[:300],
             )
 
+        gm.WEBHOOK_SEND_TOTAL.labels(event=str(envelope.get("event")), result="fail").inc()
         logger.error(
             "webhook_delivery_dropped_after_retries",
             webhook_event=envelope.get("event"),

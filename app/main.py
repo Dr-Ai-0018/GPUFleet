@@ -8,15 +8,16 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.responses import RedirectResponse
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from prometheus_client import make_asgi_app
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import metrics as gm
 from app.background import lost_task_scanner
 from app.config import get_settings
 from app.db import Database, utc_now_iso
-from app.errors import ApiError, install_error_handlers
+from app.errors import install_error_handlers
 from app.routers import admin_alerts, admin_auth, admin_dashboard, admin_nodes, admin_observability, admin_tasks, node_api
 from app.security import hash_password
 
@@ -173,6 +174,41 @@ app.include_router(admin_alerts.router)
 app.include_router(node_api.router)
 
 
+_LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+class MetricsAuthMiddleware:
+    """独立保护 /metrics: 配 token 走 Bearer, 未配 token 仅允许 localhost."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        settings = get_settings()
+        token = settings.metrics_token.get_secret_value() if settings.metrics_token else ""
+        headers = {key.decode("latin1").lower(): value.decode("latin1") for key, value in scope.get("headers", [])}
+        if token:
+            auth_header = headers.get("authorization", "")
+            if not auth_header.startswith("Bearer ") or auth_header[7:] != token:
+                await PlainTextResponse("unauthorized", status_code=401)(scope, receive, send)
+                return
+        else:
+            client = scope.get("client")
+            client_host = client[0] if client else ""
+            if client_host not in _LOCALHOST_HOSTS:
+                await PlainTextResponse("forbidden", status_code=403)(scope, receive, send)
+                return
+
+        await self.app(scope, receive, send)
+
+
+app.mount("/metrics", MetricsAuthMiddleware(make_asgi_app()))
+
+
 @app.get("/")
 def root():
     if (get_settings().frontend_dist_path / "index.html").exists():
@@ -204,39 +240,6 @@ def readyz() -> dict[str, str]:
             content={"status": "not_ready", "detail": str(exc)},
         )
     return {"status": "ready"}
-
-
-_LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
-
-
-@app.get("/metrics", include_in_schema=False)
-def metrics(request: Request) -> Response:
-    """Prometheus scrape 端点.
-
-    保护策略:
-    - 配 GPUFLEET_METRICS_TOKEN: 请求必须带 Authorization: Bearer <token>, 否则 401.
-    - 未配 token: 仅允许 localhost (127.0.0.1 / ::1) 直接抓取, 远程一律 401.
-    """
-    settings = get_settings()
-    token = settings.metrics_token
-    if token:
-        auth_header = request.headers.get("authorization", "")
-        if not auth_header.startswith("Bearer ") or auth_header[7:] != token:
-            raise ApiError(
-                code="ERR_AUTH_INVALID_TOKEN",
-                message="Invalid metrics token",
-                status_code=401,
-            )
-    else:
-        client_host = request.client.host if request.client else ""
-        if client_host not in _LOCALHOST_HOSTS:
-            raise ApiError(
-                code="ERR_AUTH_INVALID_TOKEN",
-                message="Metrics endpoint requires GPUFLEET_METRICS_TOKEN when accessed remotely",
-                status_code=401,
-                details={"client_host": client_host},
-            )
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/console")

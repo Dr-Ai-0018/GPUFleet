@@ -348,11 +348,12 @@ def _refresh_status_gauges(db: Database) -> None:
     """刷新节点/任务/审核 gauge + detect 新失联节点发 webhook. 每轮 scanner tick 调一次."""
     global _scanner_first_tick
     try:
+        settings = get_settings()
         with db.connect() as conn:
             # 拉每个节点 + 状态, 用于 gauge 聚合 + offline 单点 detect
             rows = conn.execute(
                 """
-                SELECT node_id,
+                SELECT node_id, last_seen_at,
                        CASE
                            WHEN is_enabled = 0 THEN 'disabled'
                            WHEN last_seen_at IS NULL THEN 'never_seen'
@@ -368,6 +369,12 @@ def _refresh_status_gauges(db: Database) -> None:
                 node_counts[row["status"]] = node_counts.get(row["status"], 0) + 1
                 if row["status"] == "offline":
                     current_offline.add(row["node_id"])
+                if row["last_seen_at"]:
+                    last_seen = _parse_utc_or_none(row["last_seen_at"])
+                    if last_seen:
+                        gm.NODE_ONLINE_SECONDS.labels(node_id=row["node_id"]).set(
+                            max(0.0, (datetime.now(UTC) - last_seen).total_seconds())
+                        )
             gm.update_nodes_by_status(node_counts)
 
             task_counts = {
@@ -378,6 +385,8 @@ def _refresh_status_gauges(db: Database) -> None:
             }
             gm.update_tasks_by_status(task_counts)
             gm.REVIEW_PENDING.set(task_counts.get("reviewing", 0))
+
+        gm.update_storage_bytes(settings.storage_path)
 
         # 首次 tick 只填缓存, 不发 webhook (避免冷启动时把存量 offline 节点全发一遍噪音风暴)
         if not _scanner_first_tick:

@@ -6,6 +6,7 @@ Uses an OpenAI-compatible streaming chat completion API to review risky tasks.
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import httpx
@@ -81,6 +82,7 @@ class LLMReviewer:
         return bool(self.api_key)
 
     async def review(self, context: ReviewContext) -> ReviewDecision:
+        started = time.perf_counter()
         try:
             response_text = await self._stream_chat_completion(context)
             return self._parse_response(response_text)
@@ -98,6 +100,13 @@ class LLMReviewer:
                 risk_score=0.5,
                 reasoning="AI 审核异常，自动升级到人工审核",
             )
+        finally:
+            try:
+                from app import metrics as gm
+
+                gm.REVIEW_LLM_DURATION_SECONDS.observe(time.perf_counter() - started)
+            except Exception:
+                pass
 
     async def _stream_chat_completion(self, context: ReviewContext) -> str:
         url = f"{self.base_url}/chat/completions"

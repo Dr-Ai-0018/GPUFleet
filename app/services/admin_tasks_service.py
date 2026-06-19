@@ -183,6 +183,23 @@ def insert_review_audit(
             created_at,
         ),
     )
+    try:
+        from app import metrics as gm
+
+        stage_label = "human" if reviewer_type == "human" or stage == 3 else "llm"
+        decision_label = {
+            "approve": "approve",
+            "reject": "reject",
+            "uncertain": "escalate",
+            "skipped": "escalate",
+            "pending_human": "escalate",
+            "human_approved": "approve",
+            "human_rejected": "reject",
+            "expired": "expired",
+        }.get(decision, "escalate")
+        gm.REVIEW_DECISION_TOTAL.labels(stage=stage_label, decision=decision_label).inc()
+    except Exception:
+        pass
 
 
 def create_review_alert(
@@ -454,6 +471,12 @@ async def create_task(
 
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        try:
+            from app import metrics as gm
+
+            gm.TASK_CREATED_TOTAL.labels(type=payload.type).inc()
+        except Exception:
+            pass
         return task_row_to_detail(conn, row, include_logs=False, include_artifacts=False, include_result=False)
 
 

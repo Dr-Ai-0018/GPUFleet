@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 import sys
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     review_llm_timeout_sec: int = 30
     review_llm_max_tokens: int = 1024
     review_llm_temperature: float = 0.1
-    metrics_token: str = Field(
-        default="",
+    metrics_token: SecretStr | None = Field(
+        default=None,
         description="Bearer token 保护 /metrics 端点. 空则只允许 localhost (127.0.0.1 / ::1) 抓取.",
     )
     public_base_url: str = Field(

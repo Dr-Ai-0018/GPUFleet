@@ -1,175 +1,160 @@
-"""Prometheus 指标接入验收: /metrics 端点鉴权 + HTTP middleware + 心跳计数.
+"""Prometheus metrics minimum viable integration tests.
 
 设计来源: docs/D3_Observability_Design.md 任务 A
 """
 
 from __future__ import annotations
 
+import base64
 import json
+import time
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
 from app.security import build_signed_headers_for_test
 
 
-# -----------------------------------------------------------------------------
-# /metrics 端点鉴权
-# -----------------------------------------------------------------------------
+D3_METRIC_NAMES = (
+    "gpufleet_nodes_total",
+    "gpufleet_node_heartbeat_seconds",
+    "gpufleet_node_heartbeat_total",
+    "gpufleet_node_online_seconds",
+    "gpufleet_tasks_by_status",
+    "gpufleet_task_created_total",
+    "gpufleet_task_completed_total",
+    "gpufleet_task_duration_seconds",
+    "gpufleet_task_claim_latency_seconds",
+    "gpufleet_review_pending",
+    "gpufleet_review_decision_total",
+    "gpufleet_review_llm_duration_seconds",
+    "gpufleet_http_requests_total",
+    "gpufleet_http_request_duration_seconds",
+    "gpufleet_db_busy_total",
+    "gpufleet_db_query_duration_seconds",
+    "gpufleet_storage_bytes",
+    "gpufleet_log_truncated_total",
+    "gpufleet_artifact_upload_total",
+    "gpufleet_artifact_upload_bytes_total",
+    "gpufleet_background_job_duration_seconds",
+    "gpufleet_background_job_errors_total",
+    "gpufleet_webhook_queue_depth",
+    "gpufleet_webhook_send_total",
+    "gpufleet_webhook_send_duration_seconds",
+)
 
 
-def test_metrics_endpoint_local_access_allowed_when_no_token(client: TestClient) -> None:
-    """未配 GPUFLEET_METRICS_TOKEN: TestClient 默认 client host='testclient' 不算 localhost, 应 401."""
-    resp = client.get("/metrics")
-    # TestClient 的 client.host = 'testclient' (固定值), 既无 token 又非 127.0.0.1 -> 401
-    assert resp.status_code == 401
-    assert resp.json()["code"] == "ERR_AUTH_INVALID_TOKEN"
-
-
-def test_metrics_endpoint_token_required_when_configured(
-    client: TestClient,
-    monkeypatch,
-) -> None:
-    """配了 metrics_token: 必须带正确 Bearer 才能 200, 错误 token 401."""
+def _enable_metrics_token(monkeypatch, token: str = "metrics-token") -> str:
     from app.config import get_settings
 
-    monkeypatch.setenv("GPUFLEET_METRICS_TOKEN", "secret-metrics-token")
+    monkeypatch.setenv("GPUFLEET_METRICS_TOKEN", token)
     get_settings.cache_clear()
-
-    try:
-        # 1) 无 Authorization -> 401
-        resp = client.get("/metrics")
-        assert resp.status_code == 401
-
-        # 2) 错误 token -> 401
-        resp = client.get("/metrics", headers={"Authorization": "Bearer wrong-token"})
-        assert resp.status_code == 401
-
-        # 3) 正确 token -> 200 + Prometheus 文本格式
-        resp = client.get("/metrics", headers={"Authorization": "Bearer secret-metrics-token"})
-        assert resp.status_code == 200
-        assert resp.headers["content-type"].startswith("text/plain")
-        body = resp.text
-        # 关键指标存在 (即使值为 0)
-        assert "gpufleet_http_requests_total" in body
-        assert "gpufleet_node_heartbeat_duration_seconds" in body
-        assert "gpufleet_tasks_by_status" in body
-        assert "gpufleet_background_job_duration_seconds" in body
-    finally:
-        monkeypatch.delenv("GPUFLEET_METRICS_TOKEN", raising=False)
-        get_settings.cache_clear()
+    return token
 
 
-# -----------------------------------------------------------------------------
-# HTTP middleware 采集
-# -----------------------------------------------------------------------------
+def _scrape(client: TestClient, token: str = "metrics-token") -> str:
+    resp = client.get("/metrics", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/plain")
+    return resp.text
 
 
-def test_http_middleware_counts_requests_by_path_template(
-    client: TestClient,
-    auth_headers: dict[str, str],
-    monkeypatch,
-) -> None:
-    """请求 /api/v1/admin/nodes 与 /api/v1/admin/nodes/{id} 应在不同 path_template 标签下计数, 不爆 cardinality."""
-    from app.config import get_settings
-
-    monkeypatch.setenv("GPUFLEET_METRICS_TOKEN", "test-token")
-    get_settings.cache_clear()
-
-    try:
-        # 触发若干请求
-        resp = client.post(
-            "/api/v1/admin/nodes",
-            headers=auth_headers,
-            json={
-                "node_id": "metrics-test-node",
-                "display_name": "Metrics Node",
-                "node_type": "physical",
-                "os_type": "linux",
-                "heartbeat_interval_sec": 5,
-                "allowed_workdirs": ["/tmp/work"],
-                "tags": [],
-            },
-        )
-        assert resp.status_code == 201
-        client.get("/api/v1/admin/nodes", headers=auth_headers)
-        client.get("/api/v1/admin/nodes/metrics-test-node", headers=auth_headers)
-
-        # 抓 metrics
-        metrics_resp = client.get("/metrics", headers={"Authorization": "Bearer test-token"})
-        assert metrics_resp.status_code == 200
-        text = metrics_resp.text
-
-        # path_template 应保留 {node_id} 占位符, 不展开成具体 node_id
-        # (避免 cardinality 爆炸)
-        assert 'path_template="/api/v1/admin/nodes/{node_id}"' in text
-        # 普通 list 端点 path_template 是 "/api/v1/admin/nodes"
-        assert 'path_template="/api/v1/admin/nodes"' in text
-    finally:
-        monkeypatch.delenv("GPUFLEET_METRICS_TOKEN", raising=False)
-        get_settings.cache_clear()
-
-
-# -----------------------------------------------------------------------------
-# 心跳指标
-# -----------------------------------------------------------------------------
-
-
-def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str) -> dict:
+def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "metrics-node") -> dict:
     resp = client.post(
         "/api/v1/admin/nodes",
         headers=auth_headers,
         json={
             "node_id": node_id,
-            "display_name": "HB Metric Node",
+            "display_name": "Metrics Node",
             "node_type": "physical",
             "os_type": "linux",
             "heartbeat_interval_sec": 5,
             "allowed_workdirs": ["/tmp/work"],
             "tags": [],
+            "allow_shell": True,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
-def test_heartbeat_metrics_count_ok_and_record_duration(
+def _create_task(client: TestClient, auth_headers: dict[str, str], node_id: str) -> dict:
+    resp = client.post(
+        "/api/v1/admin/tasks",
+        headers=auth_headers,
+        json={
+            "node_id": node_id,
+            "type": "health_check",
+            "payload": {},
+            "workdir": "/tmp/work",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _heartbeat(client: TestClient, node_id: str, node_secret: str, boot_id: str = "boot-metrics") -> None:
+    payload = {
+        "boot_id": boot_id,
+        "heartbeat_interval_sec": 5,
+        "cpu": {"usage_percent": 30.0},
+        "memory": {"usage_percent": 40.0},
+        "gpus": [],
+    }
+    body = json.dumps(payload).encode("utf-8")
+    headers = build_signed_headers_for_test(node_id, node_secret, body)
+    resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
+    assert resp.status_code == 200, resp.text
+
+
+def test_metrics_endpoint_auth_token_and_localhost_rules(client: TestClient, monkeypatch) -> None:
+    """token configured -> 401 without/with wrong token; no token from non-local TestClient -> 403."""
+    token = _enable_metrics_token(monkeypatch, "secret-metrics-token")
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"Authorization": "Bearer wrong-token"}).status_code == 401
+    assert client.get("/metrics", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+    from app.config import get_settings
+
+    monkeypatch.delenv("GPUFLEET_METRICS_TOKEN", raising=False)
+    get_settings.cache_clear()
+    assert client.get("/metrics").status_code == 403
+
+
+def test_metrics_scrape_contains_full_d3_metric_table(
     client: TestClient,
     auth_headers: dict[str, str],
     monkeypatch,
 ) -> None:
-    """有效心跳: gpufleet_node_heartbeat_total{result='ok'} 应递增, duration histogram 也应记录."""
-    from app.config import get_settings
+    """After login/node/task/heartbeat activity, /metrics exposes every frozen D3 §2.3 metric name."""
+    token = _enable_metrics_token(monkeypatch)
+    node = _create_node(client, auth_headers, "metrics-full-table")
+    _create_task(client, auth_headers, node["node_id"])
+    _heartbeat(client, node["node_id"], node["node_secret"])
+    client.get("/api/v1/admin/dashboard/overview", headers=auth_headers)
 
-    monkeypatch.setenv("GPUFLEET_METRICS_TOKEN", "tk")
-    get_settings.cache_clear()
+    text = _scrape(client, token)
 
-    try:
-        node = _create_node(client, auth_headers, "metrics-hb-ok")
-        payload = {
-            "boot_id": "boot-metrics-001",
-            "heartbeat_interval_sec": 5,
-            "cpu": {"usage_percent": 30.0},
-            "memory": {"usage_percent": 40.0},
-            "gpus": [],
-        }
-        body = json.dumps(payload).encode("utf-8")
-        headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
-        # 一次心跳即可验证 counter 递增 (重复发会撞 last_request_ts 单调校验, 测试反而失败)
-        hb = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
-        assert hb.status_code == 200
+    for metric_name in D3_METRIC_NAMES:
+        assert metric_name in text, f"missing metric {metric_name}"
+    assert 'path_template="/api/v1/admin/dashboard/overview"' in text
+    assert f'gpufleet_node_heartbeat_total{{node_id="{node["node_id"]}",result="ok"}}' in text
 
-        text = client.get("/metrics", headers={"Authorization": "Bearer tk"}).text
-        # ok counter >= 1; 用 process-wide registry 累积, 其他测试也可能 +1, 不强求 == 1
-        import re
-        match = re.search(r'gpufleet_node_heartbeat_total\{result="ok"\}\s+(\d+\.\d+)', text)
-        assert match is not None, f"missing ok counter line, full text:\n{text[:2000]}"
-        assert float(match.group(1)) >= 1.0
 
-        # duration histogram 应至少有一个 _count 或 _sum 大于 0
-        assert "gpufleet_node_heartbeat_duration_seconds_count" in text
-    finally:
-        monkeypatch.delenv("GPUFLEET_METRICS_TOKEN", raising=False)
-        get_settings.cache_clear()
+def test_http_middleware_uses_path_template_not_raw_path(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    token = _enable_metrics_token(monkeypatch)
+    node = _create_node(client, auth_headers, "metrics-template-node")
+    client.get("/api/v1/admin/nodes", headers=auth_headers)
+    client.get(f"/api/v1/admin/nodes/{node['node_id']}", headers=auth_headers)
+
+    text = _scrape(client, token)
+
+    assert 'path_template="/api/v1/admin/nodes/{node_id}"' in text
+    assert 'path_template="/api/v1/admin/nodes/metrics-template-node"' not in text
 
 
 def test_heartbeat_metrics_count_reject_on_bad_payload(
@@ -177,37 +162,112 @@ def test_heartbeat_metrics_count_reject_on_bad_payload(
     auth_headers: dict[str, str],
     monkeypatch,
 ) -> None:
-    """坏 payload (校验失败 422): result='reject' 应递增."""
+    token = _enable_metrics_token(monkeypatch)
+    node = _create_node(client, auth_headers, "metrics-hb-reject")
+    body = json.dumps(
+        {
+            "boot_id": "boot-bad",
+            "heartbeat_interval_sec": 5,
+            "samples": [{"ts": "2026-06-12T17:00:00Z", "gpus": [{"idx": -1}]}],
+        }
+    ).encode("utf-8")
+    headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
+    resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
+    assert resp.status_code == 422
+
+    text = _scrape(client, token)
+
+    assert f'gpufleet_node_heartbeat_total{{node_id="{node["node_id"]}",result="reject"}}' in text
+
+
+def test_artifact_upload_metrics_record_success_and_reject_size(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    token = _enable_metrics_token(monkeypatch)
+    node = _create_node(client, auth_headers, "metrics-artifact-node")
+    task = _create_task(client, auth_headers, node["node_id"])
+    content = b"hello artifact"
+    payload = {
+        "task_id": task["task_id"],
+        "artifact_name": "output.txt",
+        "artifact_type": "file",
+        "content_base64": base64.b64encode(content).decode("ascii"),
+        "content_type": "text/plain",
+        "preview": {},
+    }
+    body = json.dumps(payload).encode("utf-8")
+    headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
+    resp = client.post("/api/v1/node/artifact-upload", content=body, headers=headers)
+    assert resp.status_code == 200, resp.text
+
     from app.config import get_settings
 
-    monkeypatch.setenv("GPUFLEET_METRICS_TOKEN", "tk")
-    get_settings.cache_clear()
-
+    settings = get_settings()
+    original_max = settings.max_artifact_bytes
+    settings.max_artifact_bytes = 1
     try:
-        node = _create_node(client, auth_headers, "metrics-hb-reject")
-        # 故意发坏 payload (sample idx 负数 触发 422)
-        body = json.dumps(
-            {
-                "boot_id": "boot-bad",
-                "heartbeat_interval_sec": 5,
-                "cpu": {"usage_percent": 30.0},
-                "memory": {"usage_percent": 40.0},
-                "gpus": [],
-                "samples": [
-                    {"ts": "2026-06-12T17:00:00Z", "cpu_percent": 50, "memory_percent": 50,
-                     "gpus": [{"idx": -1}]},
-                ],
-            }
-        ).encode("utf-8")
-        headers = build_signed_headers_for_test(node["node_id"], node["node_secret"], body)
-        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
-        assert resp.status_code == 422
-
-        text = client.get("/metrics", headers={"Authorization": "Bearer tk"}).text
-        import re
-        match = re.search(r'gpufleet_node_heartbeat_total\{result="reject"\}\s+(\d+\.\d+)', text)
-        assert match is not None
-        assert float(match.group(1)) >= 1.0
+        reject_body = json.dumps({**payload, "artifact_name": "too-big.txt"}).encode("utf-8")
+        reject_headers = build_signed_headers_for_test(
+            node["node_id"],
+            node["node_secret"],
+            reject_body,
+            timestamp=(datetime.now(UTC) + timedelta(seconds=1)).replace(microsecond=0).isoformat(),
+        )
+        reject = client.post("/api/v1/node/artifact-upload", content=reject_body, headers=reject_headers)
+        assert reject.status_code == 413
     finally:
-        monkeypatch.delenv("GPUFLEET_METRICS_TOKEN", raising=False)
-        get_settings.cache_clear()
+        settings.max_artifact_bytes = original_max
+
+    text = _scrape(client, token)
+
+    assert 'gpufleet_artifact_upload_total{result="ok"}' in text
+    assert 'gpufleet_artifact_upload_total{result="reject_size"}' in text
+    assert "gpufleet_artifact_upload_bytes_total" in text
+
+
+def test_http_metrics_middleware_overhead_within_five_percent(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    """Compare 100 overview requests with Prometheus label ops no-op vs real collectors."""
+    from app import metrics as gm
+
+    class _NoopChild:
+        def inc(self) -> None:
+            return None
+
+        def observe(self, _value: float) -> None:
+            return None
+
+    class _NoopMetric:
+        def labels(self, **_labels: str) -> _NoopChild:
+            return _NoopChild()
+
+    def run_100() -> float:
+        started = time.perf_counter()
+        for _ in range(100):
+            resp = client.get("/api/v1/admin/dashboard/overview", headers=auth_headers)
+            assert resp.status_code == 200
+        return time.perf_counter() - started
+
+    original_total = gm.HTTP_REQUESTS_TOTAL
+    original_duration = gm.HTTP_REQUEST_DURATION_SECONDS
+    try:
+        monkeypatch.setattr(gm, "HTTP_REQUESTS_TOTAL", _NoopMetric())
+        monkeypatch.setattr(gm, "HTTP_REQUEST_DURATION_SECONDS", _NoopMetric())
+        baseline = run_100()
+    finally:
+        monkeypatch.setattr(gm, "HTTP_REQUESTS_TOTAL", original_total)
+        monkeypatch.setattr(gm, "HTTP_REQUEST_DURATION_SECONDS", original_duration)
+
+    instrumented = run_100()
+    allowed = baseline * 1.05 + 0.02
+
+    assert instrumented <= allowed, {
+        "baseline": baseline,
+        "instrumented": instrumented,
+        "allowed": allowed,
+    }

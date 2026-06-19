@@ -2,8 +2,49 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 
 from app.task_utils import ACTIVE_TASK_STATUSES, RESULT_ACCEPTING_TASK_STATUSES, TASK_EVENT_TRANSITIONS, TERMINAL_TASK_STATUSES
+
+
+def _seconds_between(start: str | None, end: str | None) -> float | None:
+    if not start or not end:
+        return None
+    try:
+        return max(0.0, (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds())
+    except ValueError:
+        return None
+
+
+def _terminal_result(status: str) -> str:
+    return {
+        "completed": "success",
+        "succeeded": "success",
+        "failed": "fail",
+        "timeout": "timeout",
+        "lost": "lost",
+        "cancelled": "cancelled",
+        "rejected": "fail",
+        "review_expired": "timeout",
+    }.get(status, "fail")
+
+
+def _record_task_transition_metrics(row: sqlite3.Row, target_status: str, *, observed_at: str) -> None:
+    try:
+        from app import metrics as gm
+
+        if target_status == "claimed":
+            latency = _seconds_between(row["created_at"], observed_at)
+            if latency is not None:
+                gm.TASK_CLAIM_LATENCY_SECONDS.observe(latency)
+        if target_status in TERMINAL_TASK_STATUSES:
+            result = _terminal_result(target_status)
+            gm.TASK_COMPLETED_TOTAL.labels(result=result).inc()
+            duration = _seconds_between(row["claimed_at"], observed_at)
+            if duration is not None:
+                gm.TASK_DURATION_SECONDS.labels(result=result).observe(duration)
+    except Exception:
+        pass
 
 
 @dataclass
@@ -52,6 +93,7 @@ def transition_task(
             """,
             (target_status, effective_started_at, effective_finished_at, task_id),
         )
+        _record_task_transition_metrics(row, target_status, observed_at=effective_finished_at or now_iso)
         return get_task_row(conn, task_id)
 
     if event == "cancel":
@@ -63,9 +105,10 @@ def transition_task(
                 UPDATE tasks
                 SET status = ?, finished_at = ?
                 WHERE task_id = ?
-                """,
+            """,
                 ("cancelled", finished_at or now_iso, task_id),
             )
+            _record_task_transition_metrics(row, "cancelled", observed_at=finished_at or now_iso)
             return get_task_row(conn, task_id)
         if row["status"] in ACTIVE_TASK_STATUSES:
             conn.execute(
@@ -125,6 +168,7 @@ def transition_task(
             """,
             (review_admin_id, now_iso, task_id),
         )
+        _record_task_transition_metrics(row, "rejected", observed_at=now_iso)
         return get_task_row(conn, task_id)
 
     if event == "review_expire":
@@ -138,6 +182,7 @@ def transition_task(
             """,
             (now_iso, task_id),
         )
+        _record_task_transition_metrics(row, "review_expired", observed_at=now_iso)
         return get_task_row(conn, task_id)
 
     if event in {"background_timeout", "background_lost"}:
@@ -150,6 +195,7 @@ def transition_task(
             """,
             (target_status, finished_at or now_iso, task_id),
         )
+        _record_task_transition_metrics(row, target_status, observed_at=finished_at or now_iso)
         return get_task_row(conn, task_id)
 
     raise TaskStateError(f"Unsupported task transition event: {event}")
@@ -183,4 +229,5 @@ def finalize_task_result(
         if row["status"] in TERMINAL_TASK_STATUSES:
             return row, True
         raise TaskStateError(f"Task in status {row['status']} cannot accept final result yet")
+    _record_task_transition_metrics(row, final_status, observed_at=finished_at)
     return get_task_row(conn, task_id), False

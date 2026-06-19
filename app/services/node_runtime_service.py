@@ -468,12 +468,13 @@ async def heartbeat(request: Request, db: Database, settings: Settings) -> Heart
     import time as _time
 
     started = _time.perf_counter()
+    metric_node_id = request.headers.get("x-node-id", "unknown")
     try:
         response = await _heartbeat_impl(request, db, settings)
-        gm.NODE_HEARTBEAT_TOTAL.labels(result="ok").inc()
+        gm.NODE_HEARTBEAT_TOTAL.labels(node_id=metric_node_id, result="ok").inc()
         return response
     except Exception:
-        gm.NODE_HEARTBEAT_TOTAL.labels(result="reject").inc()
+        gm.NODE_HEARTBEAT_TOTAL.labels(node_id=metric_node_id, result="reject").inc()
         raise
     finally:
         gm.NODE_HEARTBEAT_DURATION_SECONDS.observe(_time.perf_counter() - started)
@@ -834,11 +835,17 @@ async def task_result(request: Request, db: Database, settings: Settings) -> dic
 
 
 async def artifact_upload(request: Request, db: Database, settings: Settings) -> dict[str, object]:
+    from app import metrics as gm
+
+    def reject(result: str) -> None:
+        gm.ARTIFACT_UPLOAD_TOTAL.labels(result=result).inc()
+
     content_length = request.headers.get("Content-Length")
     if content_length is not None:
         try:
             request_size = int(content_length)
         except ValueError as exc:
+            reject("reject_invalid")
             raise ApiError(
                 code="ERR_ARTIFACT_INVALID_CONTENT_LENGTH",
                 message="Invalid Content-Length header",
@@ -847,6 +854,7 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
             ) from exc
         max_encoded_bytes = (settings.max_artifact_bytes * 4 // 3) + 4096
         if request_size > max_encoded_bytes:
+            reject("reject_size")
             raise ApiError(
                 code="ERR_PAYLOAD_TOO_LARGE",
                 message=f"Artifact request exceeds size limit ({settings.max_artifact_bytes} bytes decoded)",
@@ -859,6 +867,7 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
     try:
         payload = NodeArtifactUploadRequest.model_validate_json(body)
     except Exception as exc:
+        reject("reject_invalid")
         raise ApiError(
             code="ERR_VALIDATION_INVALID_PAYLOAD",
             message="Invalid artifact upload payload",
@@ -870,6 +879,7 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
 
     estimated_decoded_size = len(payload.content_base64) * 3 // 4
     if estimated_decoded_size > settings.max_artifact_bytes:
+        reject("reject_size")
         raise ApiError(
             code="ERR_PAYLOAD_TOO_LARGE",
             message=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
@@ -880,6 +890,7 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
     try:
         content = b64decode(payload.content_base64.encode("utf-8"), validate=True)
     except Exception as exc:
+        reject("reject_invalid")
         raise ApiError(
             code="ERR_ARTIFACT_INVALID_BASE64",
             message="Invalid base64 artifact content",
@@ -888,6 +899,7 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
         ) from exc
 
     if len(content) > settings.max_artifact_bytes:
+        reject("reject_size")
         raise ApiError(
             code="ERR_PAYLOAD_TOO_LARGE",
             message=f"Artifact exceeds size limit ({settings.max_artifact_bytes} bytes)",
@@ -898,7 +910,11 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
     now_iso = utc_now_iso()
     artifact_dir = settings.storage_path / "artifacts" / payload.task_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    artifact_name = sanitize_artifact_name(payload.artifact_name)
+    try:
+        artifact_name = sanitize_artifact_name(payload.artifact_name)
+    except ApiError:
+        reject("reject_invalid")
+        raise
     artifact_path = artifact_dir / artifact_name
     artifact_path.write_bytes(content)
 
@@ -946,6 +962,8 @@ async def artifact_upload(request: Request, db: Database, settings: Settings) ->
                     existing["id"],
                 ),
             )
+    gm.ARTIFACT_UPLOAD_TOTAL.labels(result="ok").inc()
+    gm.ARTIFACT_UPLOAD_BYTES_TOTAL.inc(len(content))
     return {
         "ok": True,
         "task_id": payload.task_id,
