@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -79,9 +78,7 @@ class TestTaskLifecycle:
         task = _create_task(client, auth_headers)
 
         # Simulate heartbeat from node
-        from app.config import get_settings
         from app.security import build_signed_headers_for_test
-        settings = get_settings()
 
         heartbeat_payload = {
             "boot_id": "boot-001",
@@ -151,7 +148,8 @@ class TestTaskLostDetection:
 
     def test_mark_timeout_when_exceeded(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Running tasks past their timeout should be marked timeout."""
-        node_data = _create_node(client, auth_headers)
+        # 副作用: 创建节点入库 (任务调度需要), 返回值未使用
+        _create_node(client, auth_headers)
 
         # Create task with short timeout
         task = _create_task(client, auth_headers, timeout_sec=10)
