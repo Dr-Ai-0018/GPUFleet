@@ -8,6 +8,7 @@ import hmac
 import json
 import sqlite3
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
@@ -92,6 +93,80 @@ class TestNodeSigningKeyStorage:
         encrypted = _legacy_v1_encrypt(settings.jwt_secret, signing_key)
 
         assert decrypt_node_signing_key(settings, encrypted) == signing_key
+
+    def test_legacy_v1_jwt_fallback_disabled_rejects_ciphertext(self) -> None:
+        settings = get_settings()
+        original = settings.node_key_v1_fallback_enabled
+        settings.node_key_v1_fallback_enabled = False
+        signing_key = derive_node_signing_key("legacy-jwt-disabled-secret")
+        encrypted = _legacy_v1_encrypt(settings.jwt_secret, signing_key)
+        try:
+            with pytest.raises(ValueError, match="Encrypted signing key authentication failed"):
+                decrypt_node_signing_key(settings, encrypted)
+        finally:
+            settings.node_key_v1_fallback_enabled = original
+
+    def test_legacy_v1_jwt_fallback_migrates_row_to_primary_key(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        node_data = _create_node(client, auth_headers, node_id="legacy-jwt-migrate-node")
+        settings = get_settings()
+        signing_key = derive_node_signing_key(node_data["node_secret"])
+        legacy_encrypted = _legacy_v1_encrypt(settings.jwt_secret, signing_key)
+
+        with sqlite3.connect(settings.database_path) as conn:
+            conn.execute(
+                "UPDATE nodes SET encrypted_signing_key = ? WHERE node_id = ?",
+                (legacy_encrypted, node_data["node_id"]),
+            )
+
+        payload = {"boot_id": "boot-legacy-migrate", "heartbeat_interval_sec": 5}
+        body = json.dumps(payload).encode("utf-8")
+        headers = build_signed_headers_for_test(node_data["node_id"], node_data["node_secret"], body)
+        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
+
+        assert resp.status_code == 200, resp.text
+        with sqlite3.connect(settings.database_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT encrypted_signing_key FROM nodes WHERE node_id = ?",
+                (node_data["node_id"],),
+            ).fetchone()
+
+        assert row is not None
+        assert row["encrypted_signing_key"] != legacy_encrypted
+        assert row["encrypted_signing_key"].startswith("v2:")
+        assert decrypt_node_signing_key(settings, row["encrypted_signing_key"]) == signing_key
+
+    def test_legacy_v1_jwt_fallback_increments_metric(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        from app import metrics as gm
+
+        node_data = _create_node(client, auth_headers, node_id="legacy-jwt-metric-node")
+        settings = get_settings()
+        signing_key = derive_node_signing_key(node_data["node_secret"])
+        legacy_encrypted = _legacy_v1_encrypt(settings.jwt_secret, signing_key)
+        child = gm.NODE_KEY_V1_LEGACY_FALLBACK_TOTAL.labels(source="jwt_secret")
+        before = child._value.get()
+
+        with sqlite3.connect(settings.database_path) as conn:
+            conn.execute(
+                "UPDATE nodes SET encrypted_signing_key = ? WHERE node_id = ?",
+                (legacy_encrypted, node_data["node_id"]),
+            )
+
+        payload = {"boot_id": "boot-legacy-metric", "heartbeat_interval_sec": 5}
+        body = json.dumps(payload).encode("utf-8")
+        headers = build_signed_headers_for_test(node_data["node_id"], node_data["node_secret"], body)
+        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
+
+        assert resp.status_code == 200, resp.text
+        assert child._value.get() == before + 1
 
     def test_heartbeat_still_works_with_returned_secret(
         self,

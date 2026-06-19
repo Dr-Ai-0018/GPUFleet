@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -14,6 +15,12 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from app.config import Settings
 
 password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
+
+@dataclass(frozen=True)
+class DecryptedNodeSigningKey:
+    signing_key: str
+    source: str
 
 
 def hash_password(password: str) -> str:
@@ -97,7 +104,7 @@ def encrypt_node_signing_key(settings: Settings, signing_key: str) -> str:
     return "v2:" + base64.urlsafe_b64encode(envelope).decode("ascii")
 
 
-def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> str:
+def decrypt_node_signing_key_with_metadata(settings: Settings, encrypted_signing_key: str) -> DecryptedNodeSigningKey:
     if encrypted_signing_key.startswith("v2:"):
         raw = base64.urlsafe_b64decode(encrypted_signing_key[3:].encode("ascii"))
         if len(raw) < 28:
@@ -106,7 +113,7 @@ def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> 
         ciphertext = raw[12:]
         key = _node_encryption_key(settings)
         plaintext = AESGCM(key).decrypt(nonce, ciphertext, b"gpufleet-node-key-v2")
-        return plaintext.decode("utf-8")
+        return DecryptedNodeSigningKey(plaintext.decode("utf-8"), "node_key_encryption_secret")
 
     if not encrypted_signing_key.startswith("v1:"):
         raise ValueError("Unsupported encrypted signing key format")
@@ -116,18 +123,22 @@ def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> 
     nonce = raw[:16]
     tag = raw[-32:]
     ciphertext = raw[16:-32]
-    secrets_to_try = [settings.node_key_encryption_secret]
-    if settings.jwt_secret not in secrets_to_try:
-        secrets_to_try.append(settings.jwt_secret)
-    for secret in secrets_to_try:
+    secrets_to_try = [("node_key_encryption_secret", settings.node_key_encryption_secret)]
+    if settings.node_key_v1_fallback_enabled and settings.jwt_secret != settings.node_key_encryption_secret:
+        secrets_to_try.append(("jwt_secret", settings.jwt_secret))
+    for source, secret in secrets_to_try:
         if not secret or secret == "__NOT_SET__":
             continue
         key = _derive_encryption_key(secret)
         expected_tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
         if hmac.compare_digest(expected_tag, tag):
             plaintext = _xor_with_keystream(ciphertext, key, nonce)
-            return plaintext.decode("utf-8")
+            return DecryptedNodeSigningKey(plaintext.decode("utf-8"), source)
     raise ValueError("Encrypted signing key authentication failed")
+
+
+def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> str:
+    return decrypt_node_signing_key_with_metadata(settings, encrypted_signing_key).signing_key
 
 
 def encrypt_node_onboarding_token(settings: Settings, node_secret: str) -> str:

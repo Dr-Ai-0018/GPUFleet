@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = 60 * 24 * 7
     node_key_encryption_secret: str = _SENTINEL
+    node_key_v1_fallback_enabled: bool = Field(
+        default=True,
+        description="允许 v1 节点 signing key 使用历史 JWT_SECRET fallback 解密; 命中后会自动迁移到主密钥.",
+    )
 
     default_admin_username: str = "admin"
     default_admin_password: str = _SENTINEL

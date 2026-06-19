@@ -23,7 +23,7 @@ from app.schemas import (
     TaskControlCommand,
     TaskEnvelope,
 )
-from app.security import decrypt_node_signing_key, hash_request_body, verify_node_request_signature
+from app.security import decrypt_node_signing_key_with_metadata, encrypt_node_signing_key, hash_request_body, verify_node_request_signature
 from app.services.task_state import TaskStateError, finalize_task_result, transition_task
 
 logger = get_logger(__name__)
@@ -93,7 +93,21 @@ def authenticate_node(
         encrypted_signing_key = node["encrypted_signing_key"] or ""
         if encrypted_signing_key:
             try:
-                stored_signing_key = decrypt_node_signing_key(settings, encrypted_signing_key)
+                decrypted_key = decrypt_node_signing_key_with_metadata(settings, encrypted_signing_key)
+                stored_signing_key = decrypted_key.signing_key
+                if decrypted_key.source == "jwt_secret":
+                    from app import metrics as gm
+
+                    gm.NODE_KEY_V1_LEGACY_FALLBACK_TOTAL.labels(source="jwt_secret").inc()
+                    logger.warning(
+                        "node_key_v1_legacy_secret_used",
+                        node_id=node_id,
+                        source="jwt_secret",
+                    )
+                    conn.execute(
+                        "UPDATE nodes SET encrypted_signing_key = ?, updated_at = ? WHERE id = ?",
+                        (encrypt_node_signing_key(settings, stored_signing_key), now_iso, node["id"]),
+                    )
             except ValueError as exc:
                 raise ApiError(
                     code="ERR_AUTH_SIGNING_KEY_UNAVAILABLE",

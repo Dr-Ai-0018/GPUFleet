@@ -43,6 +43,12 @@ NODE_ONLINE_SECONDS = Gauge(
     labelnames=("node_id",),
 )
 
+NODE_KEY_V1_LEGACY_FALLBACK_TOTAL = Counter(
+    "gpufleet_node_key_v1_legacy_fallback_total",
+    "Total v1 node signing keys decrypted with legacy fallback secret.",
+    labelnames=("source",),
+)
+
 
 # ---------------------------------------------------------------------------
 # 任务
@@ -254,6 +260,7 @@ def init_static_labelsets() -> None:
     """预注册 D3 冻结标签集合, 保证 /metrics 在 0 值时也输出可发现的时间序列."""
     for status in ("online", "offline", "disabled", "never_seen"):
         NODES_TOTAL.labels(status=status).set(0)
+    NODE_KEY_V1_LEGACY_FALLBACK_TOTAL.labels(source="jwt_secret").inc(0)
     for status in (
         "pending",
         "claimed",
