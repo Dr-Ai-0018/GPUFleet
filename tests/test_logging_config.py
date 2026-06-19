@@ -9,7 +9,6 @@ import json
 import logging
 
 import pytest
-import structlog
 from fastapi.testclient import TestClient
 
 from app.logging_config import (
@@ -40,6 +39,7 @@ def test_json_mode_emits_parseable_json_with_required_fields(capsys: pytest.Capt
     assert parsed["event"] == "user_login_succeeded"
     assert parsed["level"] == "info"
     assert "timestamp" in parsed
+    assert parsed["logger"] == "test.json"
     # 业务扩展字段
     assert parsed["user_id"] == 42
     assert parsed["ip"] == "127.0.0.1"
@@ -80,6 +80,10 @@ def test_console_mode_outputs_readable_text(capsys: pytest.CaptureFixture[str]) 
     # console 模式不是 JSON, 但应能在输出中看到 event 名和字段
     assert "event_one" in captured.out
     assert "abc-123" in captured.out
+    # console 模式输出应是人类可读文本, 不是 JSON 单行
+    # (ConsoleRenderer 的 ANSI 色码在非 TTY 环境下会被 structlog 自动剥离, 不可靠断言)
+    assert not captured.out.strip().startswith("{")
+    assert "[info" in captured.out  # level 用方括号样式呈现, 而非 JSON "level":"info"
 
 
 # -----------------------------------------------------------------------------
@@ -138,6 +142,25 @@ def test_http_request_gets_x_request_id_header(client: TestClient) -> None:
     request_id = resp.headers.get("x-request-id") or resp.headers.get("X-Request-Id")
     assert request_id is not None
     assert len(request_id) >= 8  # UUID hex 至少 8 字符
+
+
+def test_http_request_log_contains_request_id(
+    client: TestClient,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """任意请求触发的结构化日志应含同一个 request_id 字段."""
+    configure_logging("json", level=logging.INFO)
+
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    request_id = resp.headers["X-Request-Id"]
+
+    captured = capsys.readouterr()
+    lines = [json.loads(line) for line in captured.out.strip().splitlines() if line.strip().startswith("{")]
+    request_logs = [line for line in lines if line.get("event") == "http_request_completed"]
+    assert request_logs
+    assert request_logs[-1]["request_id"] == request_id
+    assert request_logs[-1]["logger"] == "app.http"
 
 
 def test_http_respects_inbound_x_request_id_header(client: TestClient) -> None:

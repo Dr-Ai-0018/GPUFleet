@@ -108,13 +108,21 @@ async def _bind_request_id(
     request_id 也回写到响应头 X-Request-Id, 便于客户端排查 / 日志关联.
     """
     import uuid
-    from app.logging_config import bind_request_context, clear_request_context
+    from app.logging_config import bind_request_context, clear_request_context, get_logger
 
     request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
     bind_request_context(request_id=request_id)
+    started_at = time.perf_counter()
     try:
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
+        get_logger("app.http").info(
+            "http_request_completed",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
         return response
     finally:
         clear_request_context()

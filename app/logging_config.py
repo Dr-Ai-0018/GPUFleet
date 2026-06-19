@@ -33,7 +33,6 @@ def _common_processors() -> list[Any]:
     """共享 processor 链: 加时间戳/level 名/logger 名, 合并 contextvar (含 request_id)."""
     return [
         merge_contextvars,
-        structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.stdlib.add_logger_name,
@@ -55,7 +54,7 @@ def configure_logging(log_format: LogFormat = "console", level: int = logging.IN
         renderer: Any = structlog.processors.JSONRenderer()
     else:
         # 开发: 彩色可读, 时间戳缩短
-        renderer = structlog.dev.ConsoleRenderer(colors=False)  # colors=False 避免在非 TTY 环境留 ANSI 序列
+        renderer = structlog.dev.ConsoleRenderer(colors=True)
 
     # structlog 端: 自家 logger 的 processor 链
     structlog.configure(
