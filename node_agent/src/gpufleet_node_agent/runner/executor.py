@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,12 @@ from gpufleet_node_agent.runner.log_pump import upload_log_text
 from gpufleet_node_agent.state import save_json
 
 ACTIVE_PROCESSES: dict[str, subprocess.Popen[str]] = {}
+
+
+def process_group_popen_kwargs() -> dict[str, Any]:
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
 
 
 def _compat_attr(name: str, default: Any) -> Any:
@@ -148,18 +155,24 @@ def build_command(settings: AgentSettings, task: dict[str, Any], run_dir: str | 
 
 def terminate_process_tree(process: subprocess.Popen[str], grace_sec: int) -> None:
     if os.name == "nt":
-        process.terminate()
+        subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, text=True, check=False)
         try:
-            process.wait(timeout=max(grace_sec, 1))
-        except subprocess.TimeoutExpired:
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, text=True, check=False)
             process.wait(timeout=10)
+        except (subprocess.TimeoutExpired, ChildProcessError):
+            process.kill()
         return
-    process.terminate()
+    try:
+        pgid = os.getpgid(process.pid)
+    except ProcessLookupError:
+        return
+    os.killpg(pgid, signal.SIGTERM)
     try:
         process.wait(timeout=max(grace_sec, 1))
     except subprocess.TimeoutExpired:
-        process.kill()
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
         process.wait(timeout=10)
 
 
@@ -211,7 +224,7 @@ def execute_task(settings: AgentSettings, task: dict[str, Any]) -> dict[str, Any
         metadata = {"task_id": task_id, "type": task["type"], "started_at": started_at, "run_dir": str(run_dir), "workdir": str(workdir), "command": command, "inline_script_path": inline_script_path, "execution": execution_summary, "modal_context": modal_context}
         save_json(run_dir / "task_metadata.json", metadata)
         send_task_event(settings, {"task_id": task_id, "event": "running", "boot_id": boot_id, "detail": {"run_dir": str(run_dir), "workdir": str(workdir)}})
-        process = subprocess.Popen(command, cwd=str(workdir), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        process = subprocess.Popen(command, cwd=str(workdir), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", **process_group_popen_kwargs())
         save_json(settings.state_dir / "current_task.json", {"task_id": task_id, "pid": process.pid, "started_at": started_at, "run_dir": str(run_dir)})
         stdout_text, stderr_text = process.communicate(timeout=task.get("timeout_sec", 3600))
         exit_code = process.returncode

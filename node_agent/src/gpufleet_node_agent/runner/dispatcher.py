@@ -16,7 +16,7 @@ from gpufleet_node_agent.collect import get_boot_id
 from gpufleet_node_agent.config import AgentSettings
 from gpufleet_node_agent.modal_support import build_modal_env_overrides
 from gpufleet_node_agent.runner.artifact import build_result_summary, now_iso, prepare_run_dir, resolve_workdir
-from gpufleet_node_agent.runner.executor import ACTIVE_PROCESSES, build_command, build_env, pid_exists, terminate_process_tree
+from gpufleet_node_agent.runner.executor import ACTIVE_PROCESSES, build_command, build_env, pid_exists, process_group_popen_kwargs, terminate_process_tree
 from gpufleet_node_agent.runner.log_pump import clear_log_offsets, init_log_offsets, upload_incremental_logs
 from gpufleet_node_agent.state import load_json, save_json
 
@@ -64,7 +64,7 @@ def start_background_task(settings: AgentSettings, task: dict[str, Any]) -> dict
     stdout_handle = stdout_path.open("w", encoding="utf-8", errors="replace")
     stderr_handle = stderr_path.open("w", encoding="utf-8", errors="replace")
     try:
-        process = subprocess.Popen(command, cwd=str(workdir), env=env, stdout=stdout_handle, stderr=stderr_handle, text=True, encoding="utf-8", errors="replace", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0)
+        process = subprocess.Popen(command, cwd=str(workdir), env=env, stdout=stdout_handle, stderr=stderr_handle, text=True, encoding="utf-8", errors="replace", **process_group_popen_kwargs())
     finally:
         stdout_handle.close()
         stderr_handle.close()
