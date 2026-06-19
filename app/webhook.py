@@ -137,9 +137,29 @@ class WebhookEmitter:
         self._worker_task = asyncio.create_task(self._run_worker(), name="gpufleet-webhook-worker")
 
     async def aclose(self) -> None:
-        """关停: 取消 worker, 关 HTTP client. lifespan 退出时调用."""
+        """关停: 取消 worker, 关 HTTP client. lifespan 退出时调用.
+
+        drain 超时后给 in-flight deliver 一段额外 grace 再 cancel — 防慢接收方
+        + shutdown 场景下当次投递被 cancel 砍掉静默丢事件 (W4). grace 长度跟
+        webhook_timeout_sec 对齐, 不引入持久化 spool 路径.
+        """
         if self._worker_task is not None:
-            await self.drain(max_wait_sec=5.0)
+            drained = await self.drain(max_wait_sec=5.0)
+            if not drained:
+                # drain 超时 → 给当前 in-flight 一次完整 deliver timeout 的机会
+                grace_sec = float(self._settings.webhook_timeout_sec)
+                logger.warning(
+                    "webhook_drain_extended_grace",
+                    queue_depth=self._queue.qsize(),
+                    grace_sec=grace_sec,
+                )
+                try:
+                    await asyncio.wait_for(self._queue.join(), timeout=grace_sec)
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "webhook_drain_grace_timeout_dropping_inflight",
+                        queue_depth=self._queue.qsize(),
+                    )
             self._worker_task.cancel()
             try:
                 await self._worker_task
@@ -150,12 +170,14 @@ class WebhookEmitter:
             await self._client.aclose()
             self._client = None
 
-    async def drain(self, max_wait_sec: float = 5.0) -> None:
-        """等队列发完, 最多等 max_wait_sec 秒."""
+    async def drain(self, max_wait_sec: float = 5.0) -> bool:
+        """等队列发完, 最多等 max_wait_sec 秒. 返回 True = 排空, False = 超时."""
         try:
             await asyncio.wait_for(self._queue.join(), timeout=max_wait_sec)
+            return True
         except asyncio.TimeoutError:
             logger.warning("webhook_drain_timeout", queue_depth=self._queue.qsize(), timeout_sec=max_wait_sec)
+            return False
 
     # -- 内部 --
 

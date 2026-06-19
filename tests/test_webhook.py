@@ -151,6 +151,46 @@ async def test_aclose_drains_queued_events_before_cancelling_worker() -> None:
     assert json.loads(received[0])["payload"] == {"task_id": "t-shutdown"}
 
 
+@pytest.mark.asyncio
+async def test_drain_returns_false_on_timeout() -> None:
+    """W4 守卫: drain 接口契约 — 排空返 True, 超时返 False (aclose 用此判断进 grace)."""
+    settings = _make_settings()
+    emitter = WebhookEmitter(settings)
+    # 直接塞队列模拟未排空 (没启 worker, queue 不会被 drain 出)
+    emitter.emit("task.failed", {"task_id": "stuck"})
+    drained = await emitter.drain(max_wait_sec=0.1)
+    assert drained is False
+
+
+@pytest.mark.asyncio
+async def test_aclose_grace_window_lets_slow_inflight_complete() -> None:
+    """W4: drain 5s 超时后, in-flight deliver 仍能在 grace (= webhook_timeout_sec)
+    内完成, 不被 worker_task.cancel() 砍掉静默丢事件.
+    """
+    received: list[bytes] = []
+    delivery_started = asyncio.Event()
+
+    async def slow_handler(request: httpx.Request) -> httpx.Response:
+        delivery_started.set()
+        await asyncio.sleep(6.0)  # > drain 5s 超时, < grace 30s
+        received.append(request.content)
+        return httpx.Response(200, text="ok")
+
+    transport = httpx.MockTransport(slow_handler)
+    # webhook_timeout_sec 拉到 30s, 让 deliver 不因 httpx timeout 中断 + grace 充裕
+    settings = _make_settings(webhook_timeout_sec=30)
+    async with httpx.AsyncClient(transport=transport, timeout=30.0) as client:
+        emitter = WebhookEmitter(settings, client=client)
+        emitter.start()
+        emitter.emit("task.failed", {"task_id": "t-slow"}, severity="warning")
+        # 等 worker 进 deliver, 确保 aclose 触发时事件已 in-flight
+        await asyncio.wait_for(delivery_started.wait(), timeout=2.0)
+        await emitter.aclose()
+
+    assert len(received) == 1, "in-flight event 应在 grace 内完成投递, 而非被 cancel 丢"
+    assert json.loads(received[0])["payload"] == {"task_id": "t-slow"}
+
+
 # -----------------------------------------------------------------------------
 # 失败重试 3 次后丢弃, 主流程不阻塞
 # -----------------------------------------------------------------------------
