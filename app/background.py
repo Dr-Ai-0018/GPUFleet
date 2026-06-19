@@ -393,6 +393,11 @@ def _refresh_status_gauges(db: Database) -> None:
             newly_offline = current_offline - _offline_node_cache
             for node_id in newly_offline:
                 _emit("node.offline", {"node_id": node_id}, severity="warning")
+            # D3 §4.1 node.online: 上一轮 offline 现在不在 offline 集合 → 恢复信号
+            # severity=info (恢复事件不该用 warning, 避免接收方误判为新故障)
+            recovered = _offline_node_cache - current_offline
+            for node_id in recovered:
+                _emit("node.online", {"node_id": node_id}, severity="info")
         _scanner_first_tick = False
         _offline_node_cache.clear()
         _offline_node_cache.update(current_offline)

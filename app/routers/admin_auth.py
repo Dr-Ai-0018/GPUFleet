@@ -18,6 +18,7 @@ from app.security import (
     decode_token,
     verify_password,
 )
+from app.webhook import emit_event
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-auth"])
 limiter = Limiter(key_func=get_remote_address)
@@ -38,6 +39,17 @@ def login(
         ).fetchone()
 
         if admin is None or not verify_password(payload.password, admin["password_hash"]):
+            # D3 §4.1 admin.login_failed: 接收方应自行做账号 + IP 维度的去重/聚合判暴破,
+            # 控制面这里只负责报事件, 不做频率分析 (避免内存状态 + 减少 false-positive 推送)
+            emit_event(
+                "admin.login_failed",
+                {
+                    "username": payload.username,
+                    "remote_addr": get_remote_address(request),
+                    "reason": "admin_not_found" if admin is None else "wrong_password",
+                },
+                severity="warning",
+            )
             raise ApiError(
                 code="ERR_AUTH_INVALID_CREDENTIALS",
                 message="Invalid username or password",

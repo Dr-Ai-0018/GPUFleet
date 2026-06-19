@@ -195,6 +195,30 @@ async def test_deliver_recovers_on_eventual_success(monkeypatch) -> None:
 # -----------------------------------------------------------------------------
 
 
+# -----------------------------------------------------------------------------
+# D3 §4.1 全部 8 个事件清单完整性 — 白名单全开时全能入队
+# -----------------------------------------------------------------------------
+
+
+def test_all_d3_events_pass_when_whitelisted() -> None:
+    """D3 §4.1 列出的 8 个事件 (字面冻结清单) 在白名单全开时都能 emit 入队."""
+    d3_events = [
+        "node.offline",
+        "node.online",
+        "task.failed",
+        "task.lost",
+        "review.escalated",
+        "review.expired",
+        "storage.quota_exceeded",
+        "admin.login_failed",
+    ]
+    settings = _make_settings(webhook_events=d3_events)
+    emitter = WebhookEmitter(settings)
+    for event in d3_events:
+        emitter.emit(event, {"test": True})
+    assert emitter._queue.qsize() == len(d3_events)
+
+
 @pytest.mark.asyncio
 async def test_control_plane_field_reflects_instance_name() -> None:
     received = {}

@@ -232,7 +232,15 @@ def test_http_metrics_middleware_overhead_within_five_percent(
     auth_headers: dict[str, str],
     monkeypatch,
 ) -> None:
-    """Compare 100 overview requests with Prometheus label ops no-op vs real collectors."""
+    """Compare 100 overview requests with Prometheus label ops no-op vs real collectors.
+
+    middleware 里有 http_request_completed structlog 调用, 全量批次跑时 stdout
+    抖动会让 5% 边界 flaky. 测试启动前临时拉高 root logger level (WARNING),
+    跳过 INFO 级 http log, 让计时只反映 metrics 中间件本身.
+    """
+    import logging
+    monkeypatch.setattr(logging.getLogger(), "level", logging.WARNING)
+
     from app import metrics as gm
 
     class _NoopChild:

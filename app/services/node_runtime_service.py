@@ -831,6 +831,20 @@ async def task_result(request: Request, db: Database, settings: Settings) -> dic
             exit_code=payload.exit_code,
             summary=payload.summary,
         )
+    # D3 §4.1 task.failed: 节点上报 final_status==failed → 真正的 task 执行失败入口.
+    # (background timeout 路径的 task.failed 已在 background.py 另行 emit)
+    if payload.final_status == "failed":
+        from app.webhook import emit_event
+        emit_event(
+            "task.failed",
+            {
+                "task_id": payload.task_id,
+                "node_id": node_id,
+                "exit_code": payload.exit_code,
+                "summary": payload.summary[:200] if payload.summary else None,
+            },
+            severity="warning",
+        )
     return {"ok": True, "task_id": payload.task_id, "status": payload.final_status}
 
 
