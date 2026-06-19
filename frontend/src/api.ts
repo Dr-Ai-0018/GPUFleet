@@ -3,6 +3,7 @@ import type {
   AdminTaskDetail,
   AdminTaskListItem,
   AdminTaskListPage,
+  AlertMessageView,
   AuditEventView,
   AuditEventPage,
   DashboardOverview,
@@ -198,6 +199,23 @@ export const api = {
 
   logout(token: string): Promise<{ ok: boolean }> {
     return request<{ ok: boolean }>(`${API_BASE}/admin/logout`, { method: "POST" }, token);
+  },
+
+  listAlerts(token: string, statusFilter?: "unread" | "read"): Promise<AlertMessageView[]> {
+    const query = statusFilter ? `?status=${statusFilter}&limit=50` : "?limit=50";
+    return request<AlertMessageView[]>(`${API_BASE}/admin/alerts${query}`, {}, token);
+  },
+
+  getAlertsUnreadCount(token: string): Promise<{ unread_count: number }> {
+    return request<{ unread_count: number }>(`${API_BASE}/admin/alerts/unread-count`, {}, token);
+  },
+
+  markAlertRead(token: string, alertId: number): Promise<AlertMessageView> {
+    return request<AlertMessageView>(
+      `${API_BASE}/admin/alerts/${alertId}/read`,
+      { method: "POST" },
+      token,
+    );
   },
 
   getMe(token: string): Promise<AdminProfile> {

@@ -16,7 +16,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import metrics as gm
 from app.background import lost_task_scanner
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db import Database, utc_now_iso
 from app.errors import install_error_handlers
 from app.routers import admin_alerts, admin_auth, admin_dashboard, admin_nodes, admin_observability, admin_tasks, node_api
@@ -86,7 +86,7 @@ app.state.limiter = admin_auth.limiter
 install_error_handlers(app)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().cors_allowed_origins,
+    allow_origins=Settings().cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[

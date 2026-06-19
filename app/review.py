@@ -106,7 +106,7 @@ class LLMReviewer:
 
                 gm.REVIEW_LLM_DURATION_SECONDS.observe(time.perf_counter() - started)
             except Exception:
-                pass
+                logger.exception("review_llm_duration_metric_failed")
 
     async def _stream_chat_completion(self, context: ReviewContext) -> str:
         url = f"{self.base_url}/chat/completions"

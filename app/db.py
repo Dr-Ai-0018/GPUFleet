@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from app.config import get_settings
+from app.logging_config import get_logger
 from app.security import encrypt_node_signing_key
+
+logger = get_logger(__name__)
 
 
 def utc_now_iso() -> str:
@@ -42,7 +45,7 @@ class Database:
                     from app import metrics as gm
                     gm.DB_BUSY_TOTAL.inc()
                 except Exception:
-                    pass  # metrics 失败不能阻挡业务异常传播
+                    logger.exception("db_busy_metric_failed")
             conn.rollback()
             raise
         except Exception:

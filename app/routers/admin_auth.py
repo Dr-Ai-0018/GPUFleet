@@ -69,7 +69,9 @@ def login(
 
 
 @router.post("/refresh", response_model=TokenPair)
+@limiter.limit("10/minute")
 def refresh(
+    request: Request,
     payload: RefreshRequest,
     db: Annotated[Database, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings_dep)],
@@ -112,7 +114,9 @@ def refresh(
 
 
 @router.post("/logout")
+@limiter.limit("10/minute")
 def logout(
+    request: Request,
     admin: Annotated[object, Depends(get_current_admin)],
     db: Annotated[Database, Depends(get_db)],
 ) -> dict[str, bool]:

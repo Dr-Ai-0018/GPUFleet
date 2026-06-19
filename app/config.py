@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = 60 * 24 * 7
-    node_key_encryption_secret: str = ""
+    node_key_encryption_secret: str = _SENTINEL
 
     default_admin_username: str = "admin"
     default_admin_password: str = _SENTINEL
@@ -104,6 +104,8 @@ def get_settings() -> Settings:
         missing.append("GPUFLEET_JWT_SECRET")
     if settings.default_admin_password == _SENTINEL:
         missing.append("GPUFLEET_DEFAULT_ADMIN_PASSWORD")
+    if settings.node_key_encryption_secret == _SENTINEL:
+        missing.append("GPUFLEET_NODE_KEY_ENCRYPTION_SECRET")
     if missing:
         print(
             f"[FATAL] Required environment variables not set: {', '.join(missing)}. "

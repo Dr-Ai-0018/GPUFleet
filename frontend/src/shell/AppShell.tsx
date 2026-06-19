@@ -3,6 +3,7 @@ import { buildHash, navigate, useRoute, type Route } from "../lib/routing";
 import { formatRelative } from "../lib/format";
 import { i18n, routeLabels } from "../lib/i18n";
 import { useConsoleStore } from "../state/ConsoleStore";
+import { AlertsBell } from "../features/alerts/AlertsBell";
 import { OnboardingView } from "../features/nodes/OnboardingView";
 import { FleetView } from "../features/nodes/FleetView";
 import { NodeDetailView } from "../features/nodes/NodeDetailView";
@@ -155,6 +156,7 @@ export function AppShell({ onLogout }: Props): JSX.Element {
                 {i18n.shell.online}
               </div>
             </div>
+            <AlertsBell />
             <button
               type="button"
               onClick={onLogout}

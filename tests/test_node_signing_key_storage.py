@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import sqlite3
 
@@ -14,6 +17,20 @@ from app.security import (
     decrypt_node_signing_key,
     derive_node_signing_key,
 )
+
+
+def _legacy_v1_encrypt(settings, signing_key: str) -> str:
+    key = hashlib.sha256(settings.node_key_encryption_secret.encode("utf-8")).digest()
+    nonce = b"legacy-nonce-000"
+    plaintext = signing_key.encode("utf-8")
+    output = bytearray()
+    counter = 0
+    while len(output) < len(plaintext):
+        output.extend(hmac.new(key, nonce + counter.to_bytes(4, "big"), hashlib.sha256).digest())
+        counter += 1
+    ciphertext = bytes(a ^ b for a, b in zip(plaintext, output[: len(plaintext)]))
+    tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
+    return "v1:" + base64.urlsafe_b64encode(nonce + ciphertext + tag).decode("ascii")
 
 
 def _create_node(client: TestClient, auth_headers: dict[str, str], node_id: str = "secure-node") -> dict[str, object]:
@@ -58,8 +75,16 @@ class TestNodeSigningKeyStorage:
         assert row is not None
         assert row["node_signing_key"] == ""
         assert row["encrypted_signing_key"]
+        assert row["encrypted_signing_key"].startswith("v2:")
         assert row["encrypted_signing_key"] != expected_signing_key
         assert decrypt_node_signing_key(settings, row["encrypted_signing_key"]) == expected_signing_key
+
+    def test_legacy_v1_encrypted_key_still_decrypts(self) -> None:
+        settings = get_settings()
+        signing_key = derive_node_signing_key("legacy-secret")
+        encrypted = _legacy_v1_encrypt(settings, signing_key)
+
+        assert decrypt_node_signing_key(settings, encrypted) == signing_key
 
     def test_heartbeat_still_works_with_returned_secret(
         self,

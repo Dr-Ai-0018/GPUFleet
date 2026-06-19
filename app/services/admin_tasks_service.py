@@ -9,6 +9,7 @@ from fastapi import Request, status
 from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
 from app.errors import ApiError
+from app.logging_config import get_logger
 from app.review import LLMReviewer, ReviewContext
 from app.schemas import (
     AdminTaskArtifactView,
@@ -32,6 +33,8 @@ from app.task_utils import (
     ensure_workdir_allowed,
     normalize_timeout,
 )
+
+logger = get_logger(__name__)
 
 MODAL_ONLY_TASK_TYPES = {"modal_command"}
 MODAL_RUNNER_ALLOWED_TASK_TYPES = {"modal_command", "health_check"}
@@ -199,7 +202,7 @@ def insert_review_audit(
         }.get(decision, "escalate")
         gm.REVIEW_DECISION_TOTAL.labels(stage=stage_label, decision=decision_label).inc()
     except Exception:
-        pass
+        logger.exception("review_decision_metric_failed")
 
 
 def create_review_alert(
@@ -476,7 +479,7 @@ async def create_task(
 
             gm.TASK_CREATED_TOTAL.labels(type=payload.type).inc()
         except Exception:
-            pass
+            logger.exception("task_created_metric_failed", task_id=task_id, task_type=payload.type)
         return task_row_to_detail(conn, row, include_logs=False, include_artifacts=False, include_result=False)
 
 

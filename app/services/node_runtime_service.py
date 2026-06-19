@@ -12,6 +12,7 @@ from fastapi import Request, status
 from app.config import Settings
 from app.db import Database, dumps_json, utc_now_iso
 from app.errors import ApiError
+from app.logging_config import get_logger
 from app.schemas import (
     HeartbeatRequest,
     HeartbeatResponse,
@@ -24,6 +25,8 @@ from app.schemas import (
 )
 from app.security import decrypt_node_signing_key, hash_request_body, verify_node_request_signature
 from app.services.task_state import TaskStateError, finalize_task_result, transition_task
+
+logger = get_logger(__name__)
 
 
 def parse_timestamp(raw_timestamp: str) -> datetime:
@@ -468,16 +471,29 @@ async def heartbeat(request: Request, db: Database, settings: Settings) -> Heart
     import time as _time
 
     started = _time.perf_counter()
-    metric_node_id = request.headers.get("x-node-id", "unknown")
     try:
         response = await _heartbeat_impl(request, db, settings)
-        gm.NODE_HEARTBEAT_TOTAL.labels(node_id=metric_node_id, result="ok").inc()
+        gm.NODE_HEARTBEAT_TOTAL.labels(node_id=response.node_id, result="ok").inc()
         return response
     except Exception:
-        gm.NODE_HEARTBEAT_TOTAL.labels(node_id=metric_node_id, result="reject").inc()
+        gm.NODE_HEARTBEAT_TOTAL.labels(node_id=_metric_node_id_for_reject(request, db), result="reject").inc()
         raise
     finally:
         gm.NODE_HEARTBEAT_DURATION_SECONDS.observe(_time.perf_counter() - started)
+
+
+def _metric_node_id_for_reject(request: Request, db: Database) -> str:
+    """Bound reject-label cardinality to known node IDs; random headers collapse to unknown."""
+    header_node_id = request.headers.get("x-node-id")
+    if not header_node_id:
+        return "unknown"
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT node_id FROM nodes WHERE node_id = ?", (header_node_id,)).fetchone()
+        return row["node_id"] if row else "unknown"
+    except Exception:
+        logger.exception("heartbeat_metric_node_lookup_failed")
+        return "unknown"
 
 
 async def _heartbeat_impl(request: Request, db: Database, settings: Settings) -> HeartbeatResponse:
@@ -835,13 +851,17 @@ async def task_result(request: Request, db: Database, settings: Settings) -> dic
     # (background timeout 路径的 task.failed 已在 background.py 另行 emit)
     if payload.final_status == "failed":
         from app.webhook import emit_event
+
+        summary_preview = payload.summary
+        if summary_preview is not None and not isinstance(summary_preview, str):
+            summary_preview = json.dumps(summary_preview, ensure_ascii=False)
         emit_event(
             "task.failed",
             {
                 "task_id": payload.task_id,
                 "node_id": node_id,
                 "exit_code": payload.exit_code,
-                "summary": payload.summary[:200] if payload.summary else None,
+                "summary": summary_preview[:200] if summary_preview else None,
             },
             severity="warning",
         )

@@ -4,7 +4,10 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 
+from app.logging_config import get_logger
 from app.task_utils import ACTIVE_TASK_STATUSES, RESULT_ACCEPTING_TASK_STATUSES, TASK_EVENT_TRANSITIONS, TERMINAL_TASK_STATUSES
+
+logger = get_logger(__name__)
 
 
 def _seconds_between(start: str | None, end: str | None) -> float | None:
@@ -44,7 +47,7 @@ def _record_task_transition_metrics(row: sqlite3.Row, target_status: str, *, obs
             if duration is not None:
                 gm.TASK_DURATION_SECONDS.labels(result=result).observe(duration)
     except Exception:
-        pass
+        logger.exception("task_transition_metric_failed", task_id=row["task_id"], target_status=target_status)
 
 
 @dataclass

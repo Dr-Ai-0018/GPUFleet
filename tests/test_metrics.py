@@ -199,6 +199,25 @@ def test_heartbeat_metrics_count_reject_on_bad_payload(
     assert f'gpufleet_node_heartbeat_total{{node_id="{node["node_id"]}",result="reject"}}' in text
 
 
+def test_heartbeat_reject_metrics_collapse_unknown_node_ids(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _enable_metrics_token(monkeypatch)
+    body = json.dumps({"boot_id": "boot-unknown"}).encode("utf-8")
+
+    for i in range(3):
+        attacker_node_id = f"attacker-controlled-{i}"
+        headers = build_signed_headers_for_test(attacker_node_id, "does-not-matter", body)
+        resp = client.post("/api/v1/node/heartbeat", content=body, headers=headers)
+        assert resp.status_code == 401
+
+    text = _scrape(client, token)
+
+    assert 'gpufleet_node_heartbeat_total{node_id="unknown",result="reject"}' in text
+    assert "attacker-controlled-" not in text
+
+
 def test_artifact_upload_metrics_record_success_and_reject_size(
     client: TestClient,
     auth_headers: dict[str, str],

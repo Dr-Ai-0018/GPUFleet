@@ -9,6 +9,7 @@ from typing import Any
 
 import jwt
 from passlib.context import CryptContext
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.config import Settings
 
@@ -63,7 +64,9 @@ def derive_node_signing_key(node_secret: str) -> str:
 
 
 def _node_encryption_key(settings: Settings) -> bytes:
-    secret = settings.node_key_encryption_secret or settings.jwt_secret
+    secret = settings.node_key_encryption_secret
+    if not secret or secret == "__NOT_SET__":
+        raise ValueError("GPUFLEET_NODE_KEY_ENCRYPTION_SECRET is required")
     return hashlib.sha256(secret.encode("utf-8")).digest()
 
 
@@ -83,15 +86,24 @@ def _xor_with_keystream(payload: bytes, key: bytes, nonce: bytes) -> bytes:
 
 def encrypt_node_signing_key(settings: Settings, signing_key: str) -> str:
     key = _node_encryption_key(settings)
-    nonce = secrets.token_bytes(16)
+    nonce = secrets.token_bytes(12)
     plaintext = signing_key.encode("utf-8")
-    ciphertext = _xor_with_keystream(plaintext, key, nonce)
-    tag = hmac.new(key, b"gpufleet-node-key-v1" + nonce + ciphertext, hashlib.sha256).digest()
-    envelope = nonce + ciphertext + tag
-    return "v1:" + base64.urlsafe_b64encode(envelope).decode("ascii")
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, b"gpufleet-node-key-v2")
+    envelope = nonce + ciphertext
+    return "v2:" + base64.urlsafe_b64encode(envelope).decode("ascii")
 
 
 def decrypt_node_signing_key(settings: Settings, encrypted_signing_key: str) -> str:
+    if encrypted_signing_key.startswith("v2:"):
+        raw = base64.urlsafe_b64decode(encrypted_signing_key[3:].encode("ascii"))
+        if len(raw) < 28:
+            raise ValueError("Encrypted signing key payload too short")
+        nonce = raw[:12]
+        ciphertext = raw[12:]
+        key = _node_encryption_key(settings)
+        plaintext = AESGCM(key).decrypt(nonce, ciphertext, b"gpufleet-node-key-v2")
+        return plaintext.decode("utf-8")
+
     if not encrypted_signing_key.startswith("v1:"):
         raise ValueError("Unsupported encrypted signing key format")
     raw = base64.urlsafe_b64decode(encrypted_signing_key[3:].encode("ascii"))

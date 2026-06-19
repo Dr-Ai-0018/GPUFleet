@@ -75,6 +75,24 @@ class TestRefresh:
         })
         assert resp.status_code == 401
 
+    def test_refresh_rate_limit(self, client: TestClient) -> None:
+        login_resp = client.post("/api/v1/admin/login", json={
+            "username": "admin",
+            "password": "test-admin-pass",
+        })
+        refresh_token = login_resp.json()["refresh_token"]
+
+        for i in range(10):
+            resp = client.post("/api/v1/admin/refresh", json={
+                "refresh_token": refresh_token,
+            })
+            assert resp.status_code == 200, f"Attempt {i + 1} failed: {resp.text}"
+
+        resp = client.post("/api/v1/admin/refresh", json={
+            "refresh_token": refresh_token,
+        })
+        assert resp.status_code == 429
+
     def test_refresh_token_invalidated_after_admin_invalidation(self, client: TestClient) -> None:
         login_resp = client.post("/api/v1/admin/login", json={
             "username": "admin",
@@ -158,3 +176,25 @@ class TestLogout:
         assert refresh_resp.status_code == 401
         assert refresh_resp.json()["code"] == "ERR_AUTH_REFRESH_REVOKED"
         assert refresh_resp.json()["message"] == "Refresh token has been invalidated"
+
+    def test_logout_rate_limit(self, client: TestClient) -> None:
+        login_resp = client.post("/api/v1/admin/login", json={
+            "username": "admin",
+            "password": "test-admin-pass",
+        })
+        assert login_resp.status_code == 200
+        headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+        settings = get_settings()
+        db = Database(settings.database_path)
+
+        for i in range(10):
+            resp = client.post("/api/v1/admin/logout", headers=headers)
+            assert resp.status_code == 200, f"Attempt {i + 1} failed: {resp.text}"
+            with db.connect() as conn:
+                conn.execute(
+                    "UPDATE admins SET tokens_invalidated_at = NULL, updated_at = updated_at WHERE username = ?",
+                    ("admin",),
+                )
+
+        resp = client.post("/api/v1/admin/logout", headers=headers)
+        assert resp.status_code == 429
