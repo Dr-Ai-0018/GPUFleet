@@ -326,6 +326,30 @@ export const api = {
     );
   },
 
+  escalateReview(token: string, taskId: string, note?: string): Promise<AdminTaskDetail> {
+    return request<AdminTaskDetail>(
+      `${API_BASE}/admin/tasks/${encodeURIComponent(taskId)}/review/escalate`,
+      { method: "POST", body: JSON.stringify({ note: note ?? null }) },
+      token,
+    );
+  },
+
+  approveReview(token: string, taskId: string, note?: string): Promise<AdminTaskDetail> {
+    return request<AdminTaskDetail>(
+      `${API_BASE}/admin/tasks/${encodeURIComponent(taskId)}/review/approve`,
+      { method: "POST", body: JSON.stringify({ note: note ?? null }) },
+      token,
+    );
+  },
+
+  rejectReview(token: string, taskId: string, note?: string): Promise<AdminTaskDetail> {
+    return request<AdminTaskDetail>(
+      `${API_BASE}/admin/tasks/${encodeURIComponent(taskId)}/review/reject`,
+      { method: "POST", body: JSON.stringify({ note: note ?? null }) },
+      token,
+    );
+  },
+
   createTask(token: string, payload: TaskCreatePayload): Promise<AdminTaskDetail> {
     return request<AdminTaskDetail>(
       `${API_BASE}/admin/tasks`,

@@ -27,6 +27,8 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
   const [loadState, setLoadState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewBusy, setReviewBusy] = useState<"" | "approve" | "reject" | "escalate">("");
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +70,30 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
       toast.push({ tone: "error", title: "取消失败", description: labelForError(err, "") });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleReview(action: "approve" | "reject" | "escalate") {
+    if (!detail) return;
+    setReviewBusy(action);
+    try {
+      const note = reviewNote.trim() || undefined;
+      const updated = await store.callApi((t) => {
+        if (action === "approve") return api.approveReview(t, detail.task_id, note);
+        if (action === "reject") return api.rejectReview(t, detail.task_id, note);
+        return api.escalateReview(t, detail.task_id, note);
+      });
+      setDetail(updated);
+      setReviewNote("");
+      toast.push({
+        tone: action === "reject" ? "warning" : "success",
+        title: action === "approve" ? "已通过" : action === "reject" ? "已拒绝" : "已升级人审",
+      });
+      void store.refresh({ silent: true });
+    } catch (err) {
+      toast.push({ tone: "error", title: "审核操作失败", description: labelForError(err, "") });
+    } finally {
+      setReviewBusy("");
     }
   }
 
@@ -220,6 +246,58 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
         </div>
       </div>
 
+      {/* Review (§1.5 Phase B 安全审核工作流) */}
+      {detail.review_stage != null ? (
+        <div className={cardCls}>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="font-mono text-[12px] font-bold text-gray-500 uppercase">安全审核</div>
+            <ReviewStatusBadge
+              stage={detail.review_stage}
+              decision={detail.review_decision ?? null}
+              status={detail.status}
+            />
+          </div>
+          {detail.status === "reviewing" ? (
+            <div className="space-y-3">
+              <textarea
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+                placeholder="审核备注（可选）"
+                className="h-20 w-full rounded-lg border border-[var(--card-border)] bg-[var(--surface-card)] px-3 py-2 font-mono text-xs text-white placeholder-gray-600 outline-none focus:border-cyan-500/40"
+                disabled={reviewBusy !== ""}
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="accent"
+                  onClick={() => void handleReview("approve")}
+                  disabled={reviewBusy !== ""}
+                >
+                  {reviewBusy === "approve" ? "处理中…" : "通过"}
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => void handleReview("reject")}
+                  disabled={reviewBusy !== ""}
+                >
+                  {reviewBusy === "reject" ? "处理中…" : "拒绝"}
+                </Button>
+                {detail.review_stage !== 3 ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => void handleReview("escalate")}
+                    disabled={reviewBusy !== ""}
+                  >
+                    {reviewBusy === "escalate" ? "处理中…" : "升级人审"}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="font-mono text-xs text-gray-500">审核已结束</div>
+          )}
+        </div>
+      ) : null}
+
       {/* Result */}
       <div className={cardCls}>
         <div className="mb-4 font-mono text-[12px] font-bold text-gray-500 uppercase">执行结果</div>
@@ -297,4 +375,28 @@ export function TaskDetailView({ taskId }: Props): JSX.Element {
       ) : null}
     </div>
   );
+}
+
+/**
+ * Review 状态徽章 - 把 review_stage (1=LLM / 3=human) 和 review_decision
+ * 翻译为可读的 StatusPill. 表展示由 task_state.py / admin_tasks_service.py 流转规则推导.
+ */
+function ReviewStatusBadge({
+  stage,
+  decision,
+  status,
+}: {
+  stage: number;
+  decision: string | null;
+  status: string;
+}): JSX.Element {
+  if (status === "reviewing") {
+    if (stage === 3) return <StatusPill tone="waiting" label="等待人审" />;
+    return <StatusPill tone="running" label="LLM 审核中" pulse />;
+  }
+  if (decision === "approve") return <StatusPill tone="online" label="审核通过" />;
+  if (decision === "reject") return <StatusPill tone="danger" label="审核拒绝" />;
+  if (decision === "escalate") return <StatusPill tone="waiting" label="已升级人审" />;
+  if (decision === "expired") return <StatusPill tone="muted" label="审核超时" />;
+  return <StatusPill tone="muted" label={`stage ${stage}`} />;
 }
