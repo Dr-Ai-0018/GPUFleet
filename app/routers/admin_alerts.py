@@ -4,14 +4,36 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
+from slowapi.util import get_remote_address
 
+from app.config import get_settings
 from app.db import Database, utc_now_iso
 from app.deps import get_current_admin, get_db
 from app.errors import ApiError
 from app.routers.admin_auth import limiter
 from app.schemas import AlertMessageView
+from app.security import decode_token
 
 router = APIRouter(prefix="/api/v1/admin/alerts", tags=["admin-alerts"])
+
+
+def _admin_rate_limit_key(request: Request) -> str:
+    """按 admin 身份计量, NAT 后多管理员不互饿. 解 Authorization Bearer 拿 sub.
+
+    decode 失败 (无 token / token 过期 / 签名错) 回退到 IP — 仍是合理桶, 不会
+    让未鉴权请求绕开限流.
+    """
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            payload = decode_token(get_settings(), token, "access")
+            sub = payload.get("sub")
+            if sub:
+                return f"admin:{sub}"
+        except Exception:
+            pass
+    return f"ip:{get_remote_address(request)}"
 
 
 def _row_to_alert(row: object) -> AlertMessageView:
@@ -33,7 +55,7 @@ def _row_to_alert(row: object) -> AlertMessageView:
 
 
 @router.get("", response_model=list[AlertMessageView])
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=_admin_rate_limit_key)
 def list_alerts(
     request: Request,
     _: Annotated[object, Depends(get_current_admin)],
@@ -59,7 +81,7 @@ def list_alerts(
 
 
 @router.get("/unread-count")
-@limiter.limit("30/minute")
+@limiter.limit("60/minute", key_func=_admin_rate_limit_key)
 def unread_count(
     request: Request,
     _: Annotated[object, Depends(get_current_admin)],
@@ -73,7 +95,7 @@ def unread_count(
 
 
 @router.post("/{alert_id}/read", response_model=AlertMessageView)
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=_admin_rate_limit_key)
 def mark_read(
     alert_id: int,
     request: Request,

@@ -160,7 +160,8 @@ class TestRateLimits:
         _assert_rate_limited(resp)
 
     def test_alerts_unread_count_rate_limit(self, client: TestClient, auth_headers: dict[str, str]) -> None:
-        for i in range(30):
+        # W2: unread-count 提到 60/min (前端 AlertsBell 10s 轮询 = 6/min/admin, 安全)
+        for i in range(60):
             resp = client.get("/api/v1/admin/alerts/unread-count", headers=auth_headers)
             assert resp.status_code == 200, f"Attempt {i + 1} failed: {resp.text}"
 
@@ -175,3 +176,37 @@ class TestRateLimits:
 
         resp = client.post(f"/api/v1/admin/alerts/{alert_id}/read", headers=auth_headers)
         _assert_rate_limited(resp)
+
+    def test_alerts_rate_limit_keyed_by_admin_not_ip(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """W2 守卫: 限流按 admin.sub 计量, 同 IP 不同 admin token 不互饿."""
+        from app.security import create_access_token, hash_password
+        from app.config import get_settings
+        from app.db import Database, utc_now_iso
+
+        # admin#1 把 60/min unread-count 桶打满
+        for _ in range(60):
+            resp = client.get("/api/v1/admin/alerts/unread-count", headers=auth_headers)
+            assert resp.status_code == 200
+
+        # 同 admin 第 61 次必 429
+        resp = client.get("/api/v1/admin/alerts/unread-count", headers=auth_headers)
+        _assert_rate_limited(resp)
+
+        # 创第二个 admin + 拿新 token, 同 client (= 同 IP) 调用应仍能通过 —
+        # 证明限流 key 是 admin 而非 IP
+        settings = get_settings()
+        now_iso = utc_now_iso()
+        db = Database(settings.database_path)
+        with db.connect() as conn:
+            conn.execute(
+                "INSERT INTO admins (username, password_hash, is_active, created_at, updated_at) VALUES (?, ?, 1, ?, ?)",
+                ("admin2_w2", hash_password("x"), now_iso, now_iso),
+            )
+        token2 = create_access_token(settings, "admin2_w2")
+        resp = client.get(
+            "/api/v1/admin/alerts/unread-count",
+            headers={"Authorization": f"Bearer {token2}"},
+        )
+        assert resp.status_code == 200, f"admin2 应不受 admin1 桶影响, 实际: {resp.text}"

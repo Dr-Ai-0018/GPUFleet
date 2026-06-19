@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "../../api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError, api } from "../../api";
 import { formatRelative } from "../../lib/format";
 import { labelForError } from "../../lib/labels";
 import { useConsoleStore } from "../../state/ConsoleStore";
@@ -11,6 +11,9 @@ import { useToast } from "../../ui/Toast";
 import type { AlertMessageView } from "../../types";
 
 const POLL_INTERVAL_MS = 10_000;
+// 收到 429 时退避到 30s, 避免后端按 admin.sub 的 60/min 桶满后前端继续硬撞,
+// 配合 W2 后端 key_func 改动一起减少误踢概率
+const RATE_LIMIT_BACKOFF_MS = 30_000;
 
 const SEVERITY_TONE: Record<string, StatusTone> = {
   info: "muted",
@@ -33,14 +36,19 @@ export function AlertsBell(): JSX.Element {
   const [unreadCount, setUnreadCount] = useState(0);
   const [alerts, setAlerts] = useState<AlertMessageView[]>([]);
   const [loading, setLoading] = useState(false);
+  const rateLimitedUntilRef = useRef(0);
 
   const refreshUnread = useCallback(async () => {
     if (!store.token) return;
+    if (Date.now() < rateLimitedUntilRef.current) return; // 退避期内跳过轮询
     try {
       const { unread_count } = await callApi((t) => api.getAlertsUnreadCount(t));
       setUnreadCount(unread_count);
-    } catch {
-      // 静默 — 顶栏轮询不打扰用户
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        rateLimitedUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+      }
+      // 静默其他错误 — 顶栏轮询不打扰用户
     }
   }, [callApi, store.token]);
 
