@@ -196,6 +196,10 @@ export const api = {
     });
   },
 
+  logout(token: string): Promise<{ ok: boolean }> {
+    return request<{ ok: boolean }>(`${API_BASE}/admin/logout`, { method: "POST" }, token);
+  },
+
   getMe(token: string): Promise<AdminProfile> {
     return request<AdminProfile>(`${API_BASE}/admin/me`, {}, token);
   },
