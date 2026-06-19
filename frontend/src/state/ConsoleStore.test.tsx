@@ -144,6 +144,51 @@ describe("ConsoleStore · callApi 401 refresh 链路", () => {
     expect(out).toEqual({ ok: true });
   });
 
+  it("多个并发 callApi 同时遇 401 → 只发一次 api.refresh (single-flight 合并)", async () => {
+    // 防 W4 副作用: 后端 /admin/refresh 加了 10/min 限流后, 多个轮询 / 多窗口
+    // 同时遇 401 会触多次 refresh → 撞 429 → 强制 logout. 必须合并为单次请求.
+    const { Wrapper, onAuthUpdate } = makeWrapper();
+    const op1 = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(401, "ERR_UNAUTHORIZED", "expired"))
+      .mockResolvedValueOnce({ from: "op1" });
+    const op2 = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(401, "ERR_UNAUTHORIZED", "expired"))
+      .mockResolvedValueOnce({ from: "op2" });
+    const op3 = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(401, "ERR_UNAUTHORIZED", "expired"))
+      .mockResolvedValueOnce({ from: "op3" });
+
+    // 让 refresh 慢一点, 三个 callApi 才能真正并发等同一个 inflight Promise
+    let releaseRefresh: ((value: TokenPair) => void) | undefined;
+    mockedApi.refresh.mockReturnValue(
+      new Promise<TokenPair>((resolve) => {
+        releaseRefresh = resolve;
+      }),
+    );
+
+    const { result } = await renderReadyStore(Wrapper);
+    let results: Array<{ from: string }> = [];
+    await act(async () => {
+      const p1 = result.current.callApi(op1);
+      const p2 = result.current.callApi(op2);
+      const p3 = result.current.callApi(op3);
+      // 三个 op 都已经各自抛了 401, 都在等同一个 inflight refresh
+      releaseRefresh?.(authB);
+      results = await Promise.all([p1, p2, p3]);
+    });
+
+    expect(mockedApi.refresh).toHaveBeenCalledTimes(1);
+    expect(onAuthUpdate).toHaveBeenCalledTimes(1);
+    expect(results.map((r) => r.from)).toEqual(["op1", "op2", "op3"]);
+    // 每个 op 用新 token 重试了一次
+    expect(op1).toHaveBeenNthCalledWith(2, "tok-B");
+    expect(op2).toHaveBeenNthCalledWith(2, "tok-B");
+    expect(op3).toHaveBeenNthCalledWith(2, "tok-B");
+  });
+
   it("refresh 失败 → 调用 onAuthFailure → 抛 refreshError(不是原 401)", async () => {
     const refreshError = new ApiError(401, "ERR_REFRESH_EXPIRED", "expired");
     const operation = vi

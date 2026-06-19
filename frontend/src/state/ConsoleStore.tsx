@@ -138,6 +138,10 @@ export function ConsoleStoreProvider({
 }: ProviderProps): JSX.Element {
   const [state, setState] = useState<ConsoleState>({ ...defaultState, token: auth.access_token });
   const aliveRef = useRef(true);
+  // single-flight: 多个并发 401 同时触发 refresh 会撞后端 /admin/refresh 10/min 限流
+  // (commit a364570 W4), 触 429 后强制 logout. 用一个 ref Promise 合并同一时刻
+  // 的 refresh 请求, 保证窗口内只发一次.
+  const inflightRefreshRef = useRef<Promise<string> | null>(null);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -150,14 +154,25 @@ export function ConsoleStoreProvider({
     onAuthFailure();
   }, [onAuthFailure]);
 
-  const refreshAccessToken = useCallback(async (): Promise<string> => {
-    const next = await api.refresh(auth.refresh_token);
-    if (!aliveRef.current) {
-      return next.access_token;
+  const refreshAccessToken = useCallback((): Promise<string> => {
+    if (inflightRefreshRef.current) {
+      return inflightRefreshRef.current;
     }
-    onAuthUpdate(next);
-    setState((prev) => ({ ...prev, token: next.access_token }));
-    return next.access_token;
+    const promise = (async () => {
+      try {
+        const next = await api.refresh(auth.refresh_token);
+        if (!aliveRef.current) {
+          return next.access_token;
+        }
+        onAuthUpdate(next);
+        setState((prev) => ({ ...prev, token: next.access_token }));
+        return next.access_token;
+      } finally {
+        inflightRefreshRef.current = null;
+      }
+    })();
+    inflightRefreshRef.current = promise;
+    return promise;
   }, [auth.refresh_token, onAuthUpdate]);
 
   const callApi = useCallback<ConsoleStore["callApi"]>(
